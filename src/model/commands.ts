@@ -64,7 +64,7 @@ export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
   }
   const after = n.text.slice(caret);
   setText({ doc, rows }, id, n.text.slice(0, caret));
-  if (n.children.length > 0 && rows.expanded(n)) {
+  if (rows.showsChildren(n)) {
     return { id: insertNew(doc, id, 0, after), caret: 0 };
   }
   return { id: insertNew(doc, parent, doc.index(id) + 1, after), caret: 0 };

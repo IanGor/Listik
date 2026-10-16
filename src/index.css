@@ -13,6 +13,7 @@
   --fg: #1f2328;
   --muted: #8b949e;
   --halo: #d0d7de;
+  --accent: #0969da;
   --bg: #ffffff;
   color-scheme: light dark;
 }
@@ -22,6 +23,7 @@
     --fg: #e6edf3;
     --muted: #7d8590;
     --halo: #30363d;
+    --accent: #4493f8;
     --bg: #0d1117;
   }
 }
@@ -41,8 +43,50 @@ body {
   line-height: var(--line-height);
 }
 
-.scroller {
+.outline {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+
+.filterbar {
+  display: flex;
+  gap: 2ch;
+  align-items: baseline;
+  width: 100%;
+  max-width: 100ch;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--halo);
+}
+
+.filterbar .clear {
+  margin-left: auto;
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.tag {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.tag:hover,
+.tag.active {
+  text-decoration: underline;
+}
+
+.scroller {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   /* Scroll anchoring is done by hand in Outline.tsx. */
   overflow-anchor: none;
@@ -74,17 +118,27 @@ body {
 }
 
 .bullet {
+  position: relative;
   flex: none;
   width: 1ch;
+  height: 1lh;
   color: var(--muted);
   cursor: pointer;
   user-select: none;
 }
 
-/* Collapsed with hidden children: a halo, as in Workflowy. */
-.bullet.collapsed {
+/* Hidden children: a round halo behind the bullet, as in Workflowy. */
+.bullet.collapsed::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.1em;
+  height: 1.1em;
   border-radius: 50%;
   background: var(--halo);
+  transform: translate(-50%, -50%);
+  z-index: -1;
 }
 
 .text {

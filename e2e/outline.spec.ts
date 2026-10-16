@@ -154,6 +154,41 @@ test('undo works in any keyboard layout and without an editing row', async ({ pa
   expect(await outline(page)).toEqual(DEMO);
 });
 
+test.describe('tag filter', () => {
+  test('clicking a tag shows only tagged bullets with their path; Esc clears', async ({ page }) => {
+    await expect(page.locator('.tag')).toHaveText(['#салон', '#шерер']);
+    await page.locator('.tag', { hasText: '#салон' }).click();
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
+    await expect(page.locator('.filterbar')).toContainText('#салон');
+    await expect(page.locator('.filterbar')).toContainText('1 bullet');
+    // "Часть первая" shows only the path: its other child is hidden, so its bullet is folded.
+    await expect(page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet')).toHaveClass(/collapsed/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.filterbar')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('a folded path bullet opens within the filter without touching the document', async ({ page }) => {
+    await page.locator('.tag', { hasText: '#салон' }).click();
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2], DEMO[3]]);
+    await page.locator('.filterbar .clear').click();
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('editing under a filter: new bullets stay, Esc returns to the full outline while editing', async ({ page }) => {
+    await page.locator('.tag', { hasText: '#шерер' }).click();
+    await edit(page, 'Анна Павловна');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('новая мысль');
+    expect((await outline(page)).slice(-2)).toEqual([DEMO[3], '    новая мысль']);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.filterbar')).toHaveCount(0);
+    await expect(editing(page)).toHaveText('новая мысль');
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '    новая мысль', ...DEMO.slice(4)]);
+  });
+});
+
 test.describe('persistence', () => {
   test('edits survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e');
@@ -180,6 +215,8 @@ test.describe('persistence', () => {
     await page.keyboard.type(' изменён');
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e');
+    // The stored document loads asynchronously.
+    await expect(page.locator('.row')).toHaveCount(1);
     expect(await outline(page)).toEqual(['']);
   });
 });
@@ -207,5 +244,27 @@ test.describe('at scale', () => {
     await page.keyboard.type('новый');
     await expect(editing(page)).toHaveText('новый');
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  test('200k bullets: filtering by a tag takes one frame', async ({ page }) => {
+    await page.goto('/?sample=200000');
+    const tag = page.locator('.tag').first();
+    await expect(tag).toBeVisible();
+    // From the click to the next painted frame, measured in the page.
+    const ms = await tag.evaluate(async (el) => {
+      const started = performance.now();
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+      return performance.now() - started;
+    });
+    await expect(page.locator('.filterbar')).toBeVisible();
+    const count = Number((await page.locator('.filterbar .muted').textContent())!.split(' ')[0]);
+    console.log(`filter: ${count} matches in ${Math.round(ms)} ms`);
+    expect(count).toBeGreaterThan(1000);
+    expect(ms).toBeLessThan(100);
+    // Every rendered bullet is a match or on the path to one.
+    expect(await page.locator('.row').count()).toBeGreaterThan(10);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.filterbar')).toHaveCount(0);
   });
 });

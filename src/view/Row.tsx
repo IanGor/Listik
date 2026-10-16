@@ -1,5 +1,6 @@
-import { Show, createEffect, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
+import { splitTags } from '../model/tags';
 import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown } from './keymap';
@@ -30,14 +31,18 @@ export function Row(props: RowProps) {
     return o.doc.nodes.get(id);
   };
   const editing = () => o.focus()?.id === id;
-  const collapsed = () => {
+  const folded = () => {
+    o.rowsVersion();
     const n = node();
-    return !!n && n.collapsed && n.children.length > 0;
+    return !!n && o.rows.hasHiddenChildren(n);
   };
+  const segments = createMemo(() => splitTags(node()?.text ?? ''));
 
   const onTextMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    const tag = (e.target as HTMLElement).dataset.tag;
+    if (tag) return o.filterByTag(tag);
     const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
     o.setFocus({ id, caret: caret ?? node()?.text.length ?? 0 });
   };
@@ -45,14 +50,24 @@ export function Row(props: RowProps) {
   const onBulletMouseDown = (e: MouseEvent) => {
     // Keep DOM focus in the row being edited.
     e.preventDefault();
-    const n = node();
-    if (n) o.run((ctx) => cmd.setCollapsed(ctx, id, !n.collapsed));
+    if (node()) o.fold(id);
   };
 
   return (
     <div ref={el} class="row" data-id={id} data-depth={props.depth} style={{ 'padding-left': `calc(var(--indent) * ${props.depth})` }}>
-      <span class="bullet" classList={{ collapsed: collapsed() }} onMouseDown={onBulletMouseDown}>•</span>
-      <Show when={editing()} fallback={<div class="text" onMouseDown={onTextMouseDown}>{node()?.text}</div>}>
+      <span class="bullet" classList={{ collapsed: folded() }} onMouseDown={onBulletMouseDown}>•</span>
+      <Show
+        when={editing()}
+        fallback={
+          <div class="text" onMouseDown={onTextMouseDown}>
+            <For each={segments()}>
+              {(s) => s.tag
+                ? <span class="tag" classList={{ active: o.filter()?.tag === s.tag }} data-tag={s.tag}>{s.text}</span>
+                : s.text}
+            </For>
+          </div>
+        }
+      >
         <Editable o={o} id={id} />
       </Show>
     </div>

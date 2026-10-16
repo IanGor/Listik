@@ -13,4 +13,4 @@ npm run test:e2e   # e2e в Chromium (Playwright); системный /usr/bin/c
 npm run typecheck
 ```
 
-Клавиши: Enter — новый bullet / разделить, Tab / Shift+Tab — вложить / вынести, Backspace в начале — склеить с предыдущим, Ctrl+Shift+Backspace — удалить с поддеревом, Alt+Shift+↑/↓ (или Ctrl+Shift+↑/↓) — подвинуть, Ctrl+↑/↓ — свернуть / развернуть, клик по bullet'у — свернуть / развернуть, Ctrl+Z / Ctrl+Shift+Z (или Ctrl+Y) — отменить / повторить, Esc — выйти из редактирования.
+Клавиши: Enter — новый bullet / разделить, Tab / Shift+Tab — вложить / вынести, Backspace в начале — склеить с предыдущим, Ctrl+Shift+Backspace — удалить с поддеревом, Alt+Shift+↑/↓ (или Ctrl+Shift+↑/↓) — подвинуть, Ctrl+↑/↓ — свернуть / развернуть, клик по bullet'у — свернуть / развернуть, Ctrl+Z / Ctrl+Shift+Z (или Ctrl+Y) — отменить / повторить, клик по `#тегу` — показать только bullet'ы с ним, Esc — сбросить фильтр / выйти из редактирования.

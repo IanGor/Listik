@@ -48,7 +48,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       if ((mod || e.altKey) && e.shiftKey) {
         return handle(() => o.run((ctx) => (up ? cmd.moveUp : cmd.moveDown)(ctx, id), here));
       }
-      if (mod) return handle(() => o.run((ctx) => cmd.setCollapsed(ctx, id, up), here));
+      if (mod) return handle(() => o.fold(id, up, here));
       if (e.shiftKey || e.altKey) return;
       if (up ? !caretOnFirstLine(el) : !caretOnLastLine(el)) return;
       const i = o.rows.indexOf(id) + (up ? -1 : 1);
@@ -56,8 +56,10 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       return handle(() => o.setFocus({ id: o.rows.ids[i], x: caretX(el), line: up ? 'last' : 'first' }));
     }
 
+    // First Esc clears the filter (editing goes on, now in context); the next one leaves editing.
     case 'Escape':
       return handle(() => {
+        if (o.filter()) return o.filterByTag(null);
         o.setFocus(null);
         el.blur();
       });

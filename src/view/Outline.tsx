@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { onUndoKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
@@ -98,9 +98,11 @@ export function Outline(props: { o: Outliner }) {
     resize.observe(scroller);
     onCleanup(() => resize.disconnect());
 
-    // Undo/redo also work when no row is being edited; the editing row handles its own keys.
+    // Undo/redo and Esc also work when no row is being edited; the editing row handles its own keys.
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.target as HTMLElement).isContentEditable) onUndoKeys(e, o);
+      if ((e.target as HTMLElement).isContentEditable) return;
+      if (e.key === 'Escape' && o.filter()) return o.filterByTag(null);
+      onUndoKeys(e, o);
     };
     window.addEventListener('keydown', onKeyDown);
     onCleanup(() => window.removeEventListener('keydown', onKeyDown));
@@ -119,6 +121,13 @@ export function Outline(props: { o: Outliner }) {
     setScrollTop(scroller.scrollTop);
   };
 
+  // A new filter shows its results from the top.
+  createEffect(on(o.filter, (f) => {
+    if (!f) return;
+    scroller.scrollTop = 0;
+    setScrollTop(0);
+  }, { defer: true }));
+
   createEffect(() => {
     const f = o.focus();
     if (!f) return;
@@ -135,15 +144,35 @@ export function Outline(props: { o: Outliner }) {
   };
 
   return (
-    <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-      <div class="spacer" style={{ height: `${total() + 2 * PAD}px` }}>
-        <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
-        <div ref={windowEl} class="window" style={{ transform: `translateY(${PAD + v.offsetOf(range()[0])}px)` }}>
-          <For each={ids()}>
-            {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} />}
-          </For>
+    <div class="outline">
+      <Show when={o.filter()}>
+        {(f) => (
+          <div class="filterbar">
+            <span class="tag active">#{f().tag}</span>
+            <span class="muted">{f().count} {plural(f().count, 'bullet', 'bullet’а', 'bullet’ов')}</span>
+            <button type="button" class="clear" onClick={() => o.filterByTag(null)}>× сбросить (Esc)</button>
+          </div>
+        )}
+      </Show>
+      <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
+        <div class="spacer" style={{ height: `${total() + 2 * PAD}px` }}>
+          <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
+          <div ref={windowEl} class="window" style={{ transform: `translateY(${PAD + v.offsetOf(range()[0])}px)` }}>
+            <For each={ids()}>
+              {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} />}
+            </For>
+          </div>
         </div>
       </div>
     </div>
   );
+}
+
+/** Russian plural: 1 bullet, 2 bullet’а, 5 bullet’ов. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return one;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return few;
+  return many;
 }
