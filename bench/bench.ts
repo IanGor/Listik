@@ -132,9 +132,9 @@ async function modelPass(page: Page, n: number) {
     const clearMs = time(() => rows.setFilter(null));
     const searches = ['наташа смотрел', 'бородино', '"тихо быстро"', `#${topTag} кутузов`, 'а'].map((q) => {
       let count = 0;
-      const findMs = time(() => { count = findMatches(parseQuery(q), tags, text).size; });
+      const findMs = time(() => { count = findMatches(parseQuery(q), tags, text, doc).size; });
       const ms = time(() => {
-        const m = findMatches(parseQuery(q), tags, text);
+        const m = findMatches(parseQuery(q), tags, text, doc);
         rows.setFilter({ keep: keepSet(doc, m), open: new Set() });
       });
       rows.setFilter(null);

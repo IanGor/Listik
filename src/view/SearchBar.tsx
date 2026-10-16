@@ -46,7 +46,7 @@ export function SearchBar(props: { o: Outliner }) {
         class="search"
         type="text"
         placeholder="Поиск по тексту и #тегам"
-        title="Слова через пробел, «фраза в кавычках», #тег"
+        title="Слова через пробел, «фраза в кавычках», #тег; -слово или -#тег исключает; OR — или; is:done — выполненные"
         spellcheck={false}
         value={o.query()}
         onInput={(e) => o.setQuery(e.currentTarget.value)}

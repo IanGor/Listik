@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as cmd from '../src/model/commands';
-import { TextIndex, decorate, findMatches, normalize, parseQuery } from '../src/model/search';
+import { TextIndex, decorate, findMatches, normalize, parseQuery, type Clause } from '../src/model/search';
 import { TagIndex } from '../src/model/tags';
 import { rng, setup } from './helpers';
 
@@ -13,19 +13,30 @@ describe('normalize', () => {
 });
 
 describe('parseQuery', () => {
+  const clause = (c: Partial<Clause>): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [], ...c });
+
   it('splits words, "phrases" and #tags', () => {
-    expect(parseQuery('Пьер "Анна Павловна" #Салон  #война-и-мир')).toEqual({
-      tags: ['салон', 'война-и-мир'],
-      terms: ['пьер', 'анна павловна'],
-    });
+    const q = parseQuery('Пьер "Анна Павловна" #Салон  #война-и-мир');
+    expect(q.clauses).toEqual([clause({ tags: ['салон', 'война-и-мир'], terms: ['пьер', 'анна павловна'] })]);
+    expect(q.tags).toEqual(['салон', 'война-и-мир']);
+    expect(q.terms).toEqual(['пьер', 'анна павловна']);
   });
 
   it('treats a bare # or a broken tag as text and drops stray quotes and duplicates', () => {
-    expect(parseQuery('# #- "" "незакрытая фраза пьер Пьер')).toEqual({
-      tags: [],
-      terms: ['#', '#-', 'незакрытая', 'фраза', 'пьер'],
-    });
-    expect(parseQuery('   ')).toEqual({ tags: [], terms: [] });
+    expect(parseQuery('# #- "" "незакрытая фраза пьер Пьер').clauses).toEqual([
+      clause({ terms: ['#', '#-', 'незакрытая', 'фраза', 'пьер'] }),
+    ]);
+    expect(parseQuery('   ').clauses).toEqual([]);
+  });
+
+  it('reads exclusions, is:done and OR', () => {
+    const q = parseQuery('пьер -бал -"князь андрей" -#война is:done OR #наташа -is:done ИЛИ | кутузов');
+    expect(q.clauses).toEqual([
+      clause({ terms: ['пьер'], notTerms: ['бал', 'князь андрей'], notTags: ['война'], done: true }),
+      clause({ tags: ['наташа'], done: false }),
+      clause({ terms: ['кутузов'] }),
+    ]);
+    expect(q.terms).toEqual(['пьер', 'кутузов']); // what is excluded is not highlighted
   });
 });
 
@@ -36,8 +47,9 @@ describe('findMatches', () => {
     return { ...e, tags: new TagIndex(e.doc), text: new TextIndex(e.doc) };
   };
   const find = (q: string) => {
-    const { tags, text } = env();
-    return [...findMatches(parseQuery(q), tags, text)].sort();
+    const { doc, tags, text } = env();
+    doc.apply({ t: 'setDone', id: 'Ёлка у Ростовых', from: false, to: true });
+    return [...findMatches(parseQuery(q), tags, text, doc)].sort();
   };
 
   it('needs every word in the same bullet, in any case and with ё = е', () => {
@@ -51,6 +63,15 @@ describe('findMatches', () => {
     expect(find('#бал #война')).toEqual(['Пьер и Андрей #война #бал']);
     expect(find('#война князь')).toEqual(['Князь Андрей #война']);
     expect(find('#нет')).toEqual([]);
+  });
+
+  it('excludes words, phrases and tags, filters by completion, and joins alternatives with OR', () => {
+    expect(find('пьер -балу')).toEqual(['Пьер и Андрей #война #бал']);
+    expect(find('андрей -#бал')).toEqual(['Князь Андрей #война']);
+    expect(find('-"пьер"')).toEqual(['Ёлка у Ростовых', 'Князь Андрей #война']);
+    expect(find('is:done')).toEqual(['Ёлка у Ростовых']);
+    expect(find('#война OR елка')).toEqual(['Князь Андрей #война', 'Пьер и Андрей #война #бал', 'Ёлка у Ростовых'].sort());
+    expect(find('-is:done -#война')).toEqual(['Пьер на балу #бал']);
   });
 
   it('follows edits and stays equal to a freshly built index', () => {

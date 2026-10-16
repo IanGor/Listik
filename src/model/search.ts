@@ -18,36 +18,81 @@ export function normalize(text: string): string {
   return lower.includes('ё') ? lower.replaceAll('ё', 'е') : lower;
 }
 
-export interface Query {
+/** One alternative of a query: everything in it must hold for a bullet. */
+export interface Clause {
   /** Lowercased tags, from `#tag` tokens. */
   tags: string[];
   /** Normalized words and "quoted phrases"; all must occur in the bullet. */
   terms: string[];
+  /** Excluded: `-#tag`. */
+  notTags: string[];
+  /** Excluded: `-word`, `-"phrase"`. */
+  notTerms: string[];
+  /** `is:done` (true) or `-is:done` (false): only completed, or only open bullets. */
+  done?: boolean;
 }
 
-const TOKEN = /"([^"]*)"|(\S+)/g;
+export interface Query {
+  /** Alternatives, joined by OR: a bullet matches if any one clause does. */
+  clauses: Clause[];
+  /** Every searched-for tag and term, across clauses: what gets highlighted. */
+  tags: string[];
+  terms: string[];
+}
+
+const TOKEN = /(-?)"([^"]*)"|(\S+)/g;
 const TAG_TOKEN = /^#([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)$/u;
+const OR = /^(OR|ИЛИ|\|)$/;
 
+const emptyClause = (): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [] });
+const isEmptyClause = (c: Clause) =>
+  !c.tags.length && !c.terms.length && !c.notTags.length && !c.notTerms.length && c.done === undefined;
+
+/**
+ * Words, "phrases" and #tags must all occur; `-` before any of them excludes
+ * it; `is:done` / `-is:done` keep only completed / open bullets; `OR` (or
+ * `ИЛИ`, `|`) separates alternatives.
+ */
 export function parseQuery(text: string): Query {
-  const tags = new Set<string>();
-  const terms = new Set<string>();
+  const clauses: Clause[] = [];
+  let clause = emptyClause();
+  const add = (list: string[], value: string) => {
+    if (value && !list.includes(value)) list.push(value);
+  };
   for (const m of text.matchAll(TOKEN)) {
-    if (m[1] !== undefined) {
-      if (m[1].trim()) terms.add(normalize(m[1]));
+    if (m[2] !== undefined) {
+      if (m[2].trim()) add(m[1] ? clause.notTerms : clause.terms, normalize(m[2]));
       continue;
     }
-    const tag = TAG_TOKEN.exec(m[2]);
+    const token = m[3];
+    if (OR.test(token)) {
+      if (!isEmptyClause(clause)) clauses.push(clause);
+      clause = emptyClause();
+      continue;
+    }
+    const negated = token.length > 1 && token.startsWith('-');
+    const body = negated ? token.slice(1) : token;
+    if (body.toLowerCase() === 'is:done') {
+      clause.done = !negated;
+      continue;
+    }
+    const tag = TAG_TOKEN.exec(body);
     if (tag) {
-      tags.add(tag[1].toLowerCase());
+      add(negated ? clause.notTags : clause.tags, tag[1].toLowerCase());
       continue;
     }
-    const word = m[2].replace(/^"+|"+$/g, ''); // a stray, unclosed quote
-    if (word) terms.add(normalize(word));
+    const word = body.replace(/^"+|"+$/g, ''); // a stray, unclosed quote
+    add(negated ? clause.notTerms : clause.terms, normalize(word));
   }
-  return { tags: [...tags], terms: [...terms] };
+  if (!isEmptyClause(clause)) clauses.push(clause);
+  return {
+    clauses,
+    tags: [...new Set(clauses.flatMap((c) => c.tags))],
+    terms: [...new Set(clauses.flatMap((c) => c.terms))],
+  };
 }
 
-export const isEmptyQuery = (q: Query) => !q.tags.length && !q.terms.length;
+export const isEmptyQuery = (q: Query) => !q.clauses.length;
 
 /**
  * Normalized text of every bullet, kept in sync by ops, so a search is a
@@ -113,6 +158,16 @@ export class TextIndex implements DocListener {
     if (!pending.length) this.pending = null;
   }
 
+  /** Every bullet. */
+  ids(): Iterable<NodeId> {
+    return this.warmUp().keys();
+  }
+
+  /** A bullet's normalized text and note. */
+  textOf(id: NodeId): string {
+    return this.warmUp().get(id) ?? '';
+  }
+
   /** Bullets containing every term; only those in `within`, if given. */
   find(terms: string[], within?: Iterable<NodeId>): Set<NodeId> {
     const texts = this.warmUp();
@@ -152,16 +207,35 @@ export class TextIndex implements DocListener {
   }
 }
 
-/** Bullets matching every tag and every term of the query. */
-export function findMatches(q: Query, tags: TagIndex, text: TextIndex): ReadonlySet<NodeId> {
-  let within: Set<NodeId> | undefined;
-  if (q.tags.length) {
-    const sets = q.tags.map((t) => tags.nodesWith(t)).sort((a, b) => a.size - b.size);
-    within = new Set();
-    for (const id of sets[0]) if (sets.every((s) => s.has(id))) within.add(id);
+/**
+ * Bullets matching the query: any clause, each with all its tags and terms,
+ * none of its exclusions. Tags narrow first (from the tag index), so words
+ * are only checked in tagged bullets; a clause of exclusions alone scans all.
+ */
+export function findMatches(q: Query, tags: TagIndex, text: TextIndex, doc: Doc): ReadonlySet<NodeId> {
+  const out = new Set<NodeId>();
+  for (const c of q.clauses) {
+    let candidates: Iterable<NodeId>;
+    if (c.tags.length) {
+      const sets = c.tags.map((t) => tags.nodesWith(t)).sort((a, b) => a.size - b.size);
+      const within = new Set<NodeId>();
+      for (const id of sets[0]) if (sets.every((s) => s.has(id))) within.add(id);
+      candidates = c.terms.length ? text.find(c.terms, within) : within;
+    } else {
+      candidates = c.terms.length ? text.find(c.terms) : text.ids();
+    }
+    const excluded = c.notTags.map((t) => tags.nodesWith(t));
+    for (const id of candidates) {
+      if (excluded.some((s) => s.has(id))) continue;
+      if (c.done !== undefined && doc.get(id).done !== c.done) continue;
+      if (c.notTerms.length) {
+        const t = text.textOf(id);
+        if (c.notTerms.some((term) => t.includes(term))) continue;
+      }
+      out.add(id);
+    }
   }
-  if (!q.terms.length) return within ?? new Set();
-  return text.find(q.terms, within);
+  return out;
 }
 
 export interface Piece {

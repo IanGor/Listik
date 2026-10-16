@@ -212,6 +212,19 @@ test.describe('search', () => {
     expect(await outline(page)).toHaveLength(DEMO.length);
   });
 
+  test('exclusions and OR: "-word", "-#tag", "a OR b"', async ({ page }) => {
+    await page.locator('.search').fill('часть -первая');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[4]]);
+    await page.locator('.search').fill('#салон OR #шерер');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
+    await page.locator('.search').fill('-#салон -#шерер том');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
+    // Excluded words are not highlighted.
+    await page.locator('.search').fill('том -первый');
+    await expect(page.locator('.row mark')).toHaveText(['Том']);
+  });
+
   test('a clicked tag goes into the search box and combines with words', async ({ page }) => {
     await page.locator('.tag', { hasText: '#салон' }).click();
     await expect(page.locator('.search')).toHaveValue('#салон');

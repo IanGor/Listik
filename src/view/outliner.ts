@@ -390,7 +390,7 @@ export class Outliner {
         const cur = this.focus();
         if (cur) this.setFocus(cur);
       } else {
-        let matches = findMatches(query, this.tags, this.text);
+        let matches = findMatches(query, this.tags, this.text, this.doc);
         // Zoomed in: search only inside the zoomed-in bullet.
         if (this.zoom()) matches = new Set([...matches].filter((id) => this.rows.contains(id)));
         this.rows.setFilter({ keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });
