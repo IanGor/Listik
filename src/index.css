@@ -770,3 +770,74 @@ body.is-dragging * {
   background: var(--primary);
 }
 
+/* --- Keyboard shortcuts panel ------------------------------------------------ */
+
+.shortcuts {
+  width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  padding: 0;
+  color: var(--text);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
+}
+
+.shortcuts::backdrop {
+  background: light-dark(rgb(31 30 28 / 0.28), rgb(0 0 0 / 0.55));
+}
+
+.shortcuts-body {
+  padding: 24px 28px 28px;
+  outline: none;
+}
+
+.shortcuts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.shortcuts h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.shortcuts-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 8px 32px;
+}
+
+.shortcuts h3 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.shortcuts dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  align-items: baseline;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.shortcuts dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.shortcuts dd {
+  margin: 0;
+  color: var(--muted);
+}
+

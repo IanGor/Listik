@@ -174,6 +174,9 @@ export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   if (e.code === 'KeyF') {
     e.preventDefault();
     o.requestSearch();
+  } else if (e.code === 'Slash') {
+    e.preventDefault();
+    o.showHelp();
   } else if (e.code === 'KeyO') {
     e.preventDefault();
     o.toggleShowDone();

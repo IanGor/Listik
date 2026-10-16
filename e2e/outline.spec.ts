@@ -553,6 +553,20 @@ test.describe('export and import', () => {
   });
 });
 
+test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({ page }) => {
+  await page.keyboard.press('?');
+  const panel = page.getByRole('dialog', { name: 'Горячие клавиши' });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('отметить выполненным');
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await edit(page, 'Том второй');
+  await page.keyboard.press('Control+/');
+  await expect(panel).toBeVisible();
+  await panel.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(panel).toBeHidden();
+});
+
 test.describe('theme', () => {
   const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const CREAM = 'rgb(250, 249, 245)';

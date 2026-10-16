@@ -1,0 +1,94 @@
+import { For, createEffect, on } from 'solid-js';
+import type { Outliner } from './outliner';
+
+const MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
+const MOD = MAC ? '⌘' : 'Ctrl';
+const ALT = MAC ? '⌥' : 'Alt';
+
+/** [keys, what they do]; keys separated by spaces render as separate keycaps. */
+const GROUPS: [title: string, rows: [keys: string, action: string][]][] = [
+  ['Правка', [
+    ['Enter', 'новый пункт / разделить строку'],
+    ['Backspace', 'в начале строки — склеить с предыдущей'],
+    [`${MOD}+Shift+Backspace`, 'удалить пункт с вложенными'],
+    ['Shift+Enter', 'заметка под пунктом'],
+    [`${MOD}+Enter`, 'отметить выполненным'],
+    [`${MOD}+Z ${MOD}+Shift+Z`, 'отменить / повторить'],
+  ]],
+  ['Структура', [
+    ['Tab Shift+Tab', 'вложить / вынести'],
+    [`${ALT}+Shift+↑ ${ALT}+Shift+↓`, 'переместить вверх / вниз'],
+    [`${MOD}+↑ ${MOD}+↓`, 'свернуть / развернуть'],
+    [`${MOD}+O`, 'скрыть / показать выполненные'],
+  ]],
+  ['Переходы', [
+    ['↑ ↓', 'к соседнему пункту'],
+    [`${ALT}+→ ${ALT}+←`, 'войти в пункт / выйти из него'],
+    ['Esc', 'сбросить поиск, затем выйти из редактирования'],
+  ]],
+  ['Поиск', [
+    [`${MOD}+F`, 'к строке поиска'],
+    ['Enter', 'к первому найденному'],
+    ['"фраза"', 'целиком'],
+    ['-слово -#тег', 'исключить'],
+    ['OR', 'или'],
+    ['is:done', 'только выполненные'],
+  ]],
+  ['Выделение', [
+    ['Shift+↑ Shift+↓', 'на краю строки — выделить пункты'],
+    ['Shift+клик', 'выделить диапазон'],
+    [`${MOD}+C ${MOD}+X`, 'скопировать / вырезать как Markdown'],
+    [`${MOD}+A`, 'выделить всё видимое'],
+  ]],
+];
+
+/** The keyboard shortcuts, grouped by task (`?`, Ctrl+/ or the menu). */
+export function Shortcuts(props: { o: Outliner }) {
+  let dialog!: HTMLDialogElement;
+  createEffect(on(props.o.helpRequests, () => {
+    if (!dialog.open) dialog.showModal();
+  }, { defer: true }));
+
+  return (
+    <dialog
+      ref={dialog}
+      class="shortcuts"
+      aria-label="Горячие клавиши"
+      // A click on the backdrop (the dialog element itself, outside its content) closes it.
+      onClick={(e) => e.target === dialog && dialog.close()}
+    >
+      {/* Focus lands on the panel itself, not on the close button. */}
+      <div class="shortcuts-body" tabIndex={-1} autofocus>
+        <div class="shortcuts-head">
+          <h2>Горячие клавиши</h2>
+          <button type="button" class="icon-button" aria-label="Закрыть" onClick={() => dialog.close()}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+              <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+            </svg>
+          </button>
+        </div>
+        <div class="shortcuts-groups">
+          <For each={GROUPS}>
+            {([title, rows]) => (
+              <section>
+                <h3>{title}</h3>
+                <dl>
+                  <For each={rows}>
+                    {([keys, action]) => (
+                      <>
+                        <dt>
+                          <For each={keys.split(' ')}>{(k) => <kbd>{k}</kbd>}</For>
+                        </dt>
+                        <dd>{action}</dd>
+                      </>
+                    )}
+                  </For>
+                </dl>
+              </section>
+            )}
+          </For>
+        </div>
+      </div>
+    </dialog>
+  );
+}

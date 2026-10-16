@@ -85,6 +85,9 @@ export function DocumentMenu(props: { o: Outliner }) {
           <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
             Скачать как OPML <span class="hint">для Workflowy</span>
           </button>
+          <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
+            Горячие клавиши <span class="hint">?</span>
+          </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.toggleShowDone(); }}>
             {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'} <span class="hint">Ctrl+O</span>
           </button>

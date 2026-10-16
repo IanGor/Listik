@@ -67,6 +67,9 @@ export class Outliner {
   readonly zoom: Accessor<NodeId | null>;
   /** Bumped to move the caret into the zoomed-in bullet's title. */
   readonly titleRequests: Accessor<number>;
+  /** Bumped to open the keyboard shortcuts panel. */
+  readonly helpRequests: Accessor<number>;
+  private setHelpRequests: Setter<number>;
   /** Bumped by `goHome`: the view scrolls back to the top. */
   readonly homeRequests: Accessor<number>;
   /** A short message at the bottom of the screen (import results, errors). */
@@ -111,6 +114,7 @@ export class Outliner {
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
+    [this.helpRequests, this.setHelpRequests] = createSignal(0);
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<NodeId>>(new Set());
@@ -299,6 +303,11 @@ export class Outliner {
     this.setToast(message);
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => this.setToast(null), 4000);
+  }
+
+  /** `?` or Ctrl+/: shows the keyboard shortcuts. */
+  showHelp(): void {
+    this.setHelpRequests((n) => n + 1);
   }
 
   /** Ctrl+F: put the caret into the search box. */
