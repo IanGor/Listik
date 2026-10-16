@@ -1,0 +1,173 @@
+import { createSignal, type Accessor } from 'solid-js';
+import { moveManyTo } from '../model/commands';
+import type { NodeId } from '../model/types';
+import type { Outliner } from './outliner';
+
+/** Where a drop would land, and the line that shows it (px, relative to the spacer). */
+export interface DropTarget {
+  parent: NodeId;
+  after: NodeId | null;
+  top: number;
+  left: number;
+}
+
+interface Elements {
+  scroller: HTMLElement;
+  spacer: HTMLElement;
+  windowEl: HTMLElement;
+  indentProbe: HTMLElement;
+}
+
+/** Pointer travel that turns a press on a bullet into a drag; less is a click (zoom in). */
+const THRESHOLD = 4;
+/** Distance from the scroller's edge where a drag scrolls the list, px. */
+const EDGE = 48;
+
+/**
+ * Dragging bullets by their dot. A press that does not move is a click and
+ * zooms in. A drag moves the bullet, or the whole selection if the bullet is
+ * part of it; the drop line shows the place and the level, which follows the
+ * pointer's x within what is allowed there.
+ */
+export function createDrag(o: Outliner, el: () => Elements) {
+  const [target, setTarget] = createSignal<DropTarget | null>(null);
+
+  function start(e: PointerEvent, id: NodeId): void {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let dragging = false;
+    let ids: NodeId[] = [];
+    /** Rows of the dragged subtrees, which cannot take a drop. */
+    let inside = new Set<NodeId>();
+    let pointer = { x: startX, y: startY };
+    let scrollFrame = 0;
+
+    const begin = () => {
+      dragging = true;
+      const selected = o.selectedSet();
+      ids = selected.has(id) ? o.selectionRoots() : [id];
+      inside = new Set();
+      for (const root of ids) {
+        const i = o.rows.indexOf(root);
+        if (i < 0) continue;
+        for (let j = i, end = o.rows.subtreeEnd(i); j < end; j++) inside.add(o.rows.ids[j]);
+      }
+      o.setDragged(inside);
+      document.body.classList.add('is-dragging');
+      autoScroll();
+    };
+
+    const locate = (): DropTarget | null => {
+      const { spacer, windowEl, indentProbe } = el();
+      const row = document.elementFromPoint(pointer.x, pointer.y)?.closest<HTMLElement>('.row') ?? null;
+      const rows = o.rows;
+      let prev: number;
+      let rowEl: HTMLElement | null = row;
+      if (row) {
+        const i = rows.indexOf(row.dataset.id!);
+        if (i < 0) return null;
+        const r = row.getBoundingClientRect();
+        prev = pointer.y < r.top + r.height / 2 ? i - 1 : i;
+      } else {
+        // Below the last row: after it.
+        const last = windowEl.lastElementChild as HTMLElement | null;
+        if (!last || pointer.y < last.getBoundingClientRect().bottom) return null;
+        prev = rows.length - 1;
+        rowEl = last;
+      }
+      const prevId = prev >= 0 ? rows.ids[prev] : null;
+      const nextId = prev + 1 < rows.length ? rows.ids[prev + 1] : null;
+      // Between two rows of a dragged subtree: nowhere to go.
+      if (prevId && nextId && inside.has(prevId) && inside.has(nextId)) return null;
+
+      // The level: from the pointer's x, between the next row's depth and one deeper than the previous row.
+      const indent = indentProbe.getBoundingClientRect().width || 20;
+      const base = windowEl.getBoundingClientRect().left;
+      const maxDepth = prevId ? rows.depths[prev] + 1 : 0;
+      const minDepth = nextId ? rows.depths[prev + 1] : 0;
+      const depth = Math.max(minDepth, Math.min(maxDepth, Math.round((pointer.x - base) / indent - 0.5)));
+
+      let parent: NodeId;
+      let after: NodeId | null;
+      if (!prevId) {
+        parent = rows.top;
+        after = null;
+      } else if (depth === rows.depths[prev] + 1) {
+        parent = prevId;
+        after = null;
+      } else {
+        let node = prevId;
+        for (let d = rows.depths[prev]; d > depth; d--) node = o.doc.get(node).parent!;
+        parent = o.doc.get(node).parent!;
+        after = node;
+      }
+      // Never into a dragged subtree.
+      for (let p: NodeId | null = parent; p !== null && p !== rows.top; p = o.doc.get(p).parent) {
+        if (inside.has(p)) return null;
+      }
+
+      const spacerRect = spacer.getBoundingClientRect();
+      const anchor = prevId ? (rowEl?.dataset.id === prevId ? rowEl : spacer.querySelector<HTMLElement>(`.row[data-id="${CSS.escape(prevId)}"]`)) : null;
+      const top = anchor
+        ? anchor.getBoundingClientRect().bottom - spacerRect.top
+        : (rowEl?.getBoundingClientRect().top ?? spacerRect.top) - spacerRect.top;
+      return { parent, after, top, left: base - spacerRect.left + depth * indent };
+    };
+
+    const autoScroll = () => {
+      const { scroller } = el();
+      const r = scroller.getBoundingClientRect();
+      const speed = pointer.y < r.top + EDGE ? -(r.top + EDGE - pointer.y) : pointer.y > r.bottom - EDGE ? pointer.y - (r.bottom - EDGE) : 0;
+      if (speed) {
+        scroller.scrollTop += speed / 3;
+        setTarget(locate());
+      }
+      scrollFrame = requestAnimationFrame(autoScroll);
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      pointer = { x: ev.clientX, y: ev.clientY };
+      if (!dragging) {
+        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < THRESHOLD) return;
+        begin();
+      }
+      setTarget(locate());
+    };
+
+    const finish = (drop: boolean) => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('keydown', onKey, true);
+      cancelAnimationFrame(scrollFrame);
+      const t = target();
+      setTarget(null);
+      o.setDragged(new Set<NodeId>());
+      document.body.classList.remove('is-dragging');
+      if (!dragging) {
+        if (drop) o.zoomTo(id);
+        return;
+      }
+      if (drop && t) o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));
+    };
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      finish(false);
+    };
+
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onKey, true);
+  }
+
+  return { start, target: target as Accessor<DropTarget | null> };
+}

@@ -239,3 +239,35 @@ describe('block commands (a selection)', () => {
   });
 });
 
+describe('moveManyTo (drag and drop)', () => {
+  it('moves within a parent, across parents and to the first place', () => {
+    const { doc, ctx, run } = setup(['a', 'b', '  b1', 'c', 'd']);
+    run(() => cmd.moveManyTo(ctx, ['a'], doc.root, 'c'));
+    expect(dump(doc)).toEqual(['b', '  b1', 'c', 'a', 'd']);
+    run(() => cmd.moveManyTo(ctx, ['d'], 'b', null));
+    expect(dump(doc)).toEqual(['b', '  d', '  b1', 'c', 'a']);
+    run(() => cmd.moveManyTo(ctx, ['a'], doc.root, null));
+    expect(dump(doc)).toEqual(['a', 'b', '  d', '  b1', 'c']);
+    checkInvariants(doc);
+  });
+
+  it('keeps a block in order, including when dropped right after itself or among its own keys', () => {
+    const { doc, ctx, run } = setup(['a', 'b', 'c', 'd', 'e']);
+    run(() => cmd.moveManyTo(ctx, ['b', 'c'], doc.root, 'c'));
+    expect(dump(doc)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    run(() => cmd.moveManyTo(ctx, ['b', 'd'], doc.root, 'a'));
+    expect(dump(doc)).toEqual(['a', 'b', 'd', 'c', 'e']);
+    run(() => cmd.moveManyTo(ctx, ['a', 'c', 'e'], doc.root, 'd'));
+    expect(dump(doc)).toEqual(['b', 'd', 'a', 'c', 'e']);
+    checkInvariants(doc);
+  });
+
+  it('refuses a drop inside a moved subtree, and expands a collapsed new parent', () => {
+    const { doc, ctx, run } = setup(['a', '  a1', 'b [+]', '  b1']);
+    run(() => cmd.moveManyTo(ctx, ['a'], 'a1', null));
+    expect(dump(doc)).toEqual(['a', '  a1', 'b [+]', '  b1']);
+    run(() => cmd.moveManyTo(ctx, ['a'], 'b', 'b1'));
+    expect(dump(doc)).toEqual(['b', '  b1', '  a', '    a1']);
+  });
+});
+

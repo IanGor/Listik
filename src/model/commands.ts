@@ -1,4 +1,4 @@
-import { generateKeyBetween } from 'fractional-indexing';
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { newId, type Doc } from './doc';
 import { countTrees, type Tree } from './outline-text';
 import type { VisibleRows } from './rows';
@@ -307,3 +307,28 @@ export function moveDownMany(ctx: Ctx, roots: NodeId[]): void {
   if (!roots.length || !canMoveDown(ctx, roots[roots.length - 1])) return;
   for (let k = roots.length - 1; k >= 0; k--) moveDown(ctx, roots[k]);
 }
+
+/**
+ * Drag and drop: moves the bullets, with their subtrees and in their order,
+ * under `parent` right after its child `after` (null: first). Refuses a drop
+ * inside one of the moved subtrees. The new order keys lie strictly between
+ * two neighbouring keys that exist now, so they can never clash with a key a
+ * moving bullet still holds.
+ */
+export function moveManyTo({ doc, rows }: Ctx, ids: NodeId[], parent: NodeId, after: NodeId | null): void {
+  const moving = new Set(ids);
+  for (let p: NodeId | null = parent; p !== null; p = doc.get(p).parent) if (moving.has(p)) return;
+  const children = doc.get(parent).children;
+  let k = after === null ? -1 : children.indexOf(after);
+  while (k >= 0 && moving.has(children[k])) k--; // dropped right after a moving bullet: after its predecessor
+  const a = k >= 0 ? doc.get(children[k]).order : null;
+  const b = k + 1 < children.length ? doc.get(children[k + 1]).order : null;
+  const keys = generateNKeysBetween(a, b, ids.length);
+  if (ids.length > 2) rows.expectMany();
+  if (parent !== doc.root) expand(doc, parent);
+  ids.forEach((id, i) => {
+    const n = doc.get(id);
+    doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent, order: keys[i] } });
+  });
+}
+

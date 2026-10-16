@@ -14,6 +14,8 @@ interface RowProps {
   depth: number;
   /** Starts measuring the row element; returns the stop function. */
   observe: (el: HTMLElement) => () => void;
+  /** A press on the bullet: a click zooms in, a drag moves (drag.ts). */
+  grab: (e: PointerEvent, id: NodeId) => void;
 }
 
 const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
@@ -82,12 +84,6 @@ export function Row(props: RowProps) {
     o.setFocus(note ? { id, caret: caret ?? length, note: true } : { id, caret: caret ?? length });
   };
 
-  // Mousedown, not click, and no default: DOM focus stays in the row being edited.
-  const onBulletMouseDown = (e: MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    if (node()) o.zoomTo(id);
-  };
 
   const onToggleMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -99,7 +95,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ done: !!node()?.done, selected: o.selectedSet().has(id) }}
+      classList={{ done: !!node()?.done, selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
       data-id={id}
       data-depth={props.depth}
       style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}
@@ -109,7 +105,13 @@ export function Row(props: RowProps) {
           <svg width="12" height="12" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
         </span>
       </Show>
-      <span class="bullet" classList={{ collapsed: folded() }} onMouseDown={onBulletMouseDown} />
+      <span
+        class="bullet"
+        classList={{ collapsed: folded() }}
+        // No default on mousedown: DOM focus stays in the row being edited.
+        onMouseDown={(e) => e.preventDefault()}
+        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && o.zoomTo(id)}
+      />
       <div class="body">
         <Show
           when={editingText()}

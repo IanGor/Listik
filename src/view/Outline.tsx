@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
+import { createDrag } from './drag';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
@@ -30,6 +31,7 @@ export function Outline(props: { o: Outliner }) {
   let windowEl!: HTMLDivElement;
   let probe!: HTMLSpanElement;
   let indentProbe!: HTMLSpanElement;
+  let spacer!: HTMLDivElement;
 
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewport, setViewport] = createSignal(0);
@@ -55,6 +57,7 @@ export function Outline(props: { o: Outliner }) {
   /** Zoomed in, as in Workflowy: a "+" under the list adds a bullet without the keyboard. */
   const showAdd = () => !!o.zoom() && !o.filter() && !o.readOnly;
   const addBullet = () => o.run((ctx) => appendChild(ctx, o.rows.top));
+  const drag = createDrag(o, () => ({ scroller, spacer, windowEl, indentProbe }));
 
   const rowObserver = new ResizeObserver((entries) => {
     const [start] = range();
@@ -197,14 +200,17 @@ export function Outline(props: { o: Outliner }) {
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
       <Show when={o.zoom()} keyed>{(id) => <ZoomHeader o={o} id={id} />}</Show>
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-        <div class="spacer" style={{ height: `${total() + 2 * PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+        <div ref={spacer} class="spacer" style={{ height: `${total() + 2 * PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
           <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
           <div ref={windowEl} class="window" style={{ transform: `translateY(${PAD + v.offsetOf(range()[0])}px)` }}>
             <For each={ids()}>
-              {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} />}
+              {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
             </For>
           </div>
+          <Show when={drag.target()}>
+            {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
+          </Show>
           <Show when={showAdd()}>
             {/* Sits right under the last row: the rows above it end at `total`. */}
             <button

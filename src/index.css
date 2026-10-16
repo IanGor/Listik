@@ -730,3 +730,43 @@ mark,
   flex: none;
   color: var(--link);
 }
+
+/* --- Drag and drop ----------------------------------------------------------- */
+
+.bullet {
+  touch-action: none;
+}
+
+body.is-dragging,
+body.is-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.row.dragged {
+  opacity: 0.4;
+}
+
+/* Where the drop lands: a coral line at the target level, with a dot at its start. */
+.drop-line {
+  position: absolute;
+  right: 2.5ch;
+  z-index: 10;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--primary);
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.drop-line::before {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+

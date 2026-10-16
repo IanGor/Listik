@@ -53,6 +53,9 @@ export class Outliner {
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
   readonly selection: Accessor<Selection | null>;
+  /** Rows being dragged (with their subtrees), shown dimmed. */
+  readonly dragged: Accessor<ReadonlySet<NodeId>>;
+  readonly setDragged: Setter<ReadonlySet<NodeId>>;
   /** Automatic copies into a folder; null for in-memory documents. */
   backup: Backup | null = null;
   /** Another tab holds the document: nothing here may change it. */
@@ -88,6 +91,7 @@ export class Outliner {
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
+    [this.dragged, this.setDragged] = createSignal<ReadonlySet<NodeId>>(new Set());
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {

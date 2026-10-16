@@ -438,6 +438,41 @@ test.describe('selecting several bullets', () => {
   });
 });
 
+test.describe('drag and drop', () => {
+  /** Drags a row's bullet onto the lower half of another row, `levels` deeper than that row's bullet. */
+  async function dragTo(page: Page, from: string, onto: string, levels: number, cancel = false) {
+    const bullet = page.locator('.row', { hasText: from }).locator('.bullet').first();
+    const target = page.locator('.row', { hasText: onto }).first();
+    const b = (await bullet.boundingBox())!;
+    const t = (await target.locator('.bullet').boundingBox())!;
+    const row = (await target.boundingBox())!;
+    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    const x = t.x + t.width / 2 + levels * indent;
+    const y = row.y + row.height * 0.75;
+    for (let i = 1; i <= 8; i++) await page.mouse.move(b.x + ((x - b.x) * i) / 8, b.y + ((y - b.y) * i) / 8);
+    await expect(page.locator('.drop-line')).toBeVisible();
+    if (cancel) await page.keyboard.press('Escape');
+    await page.mouse.up();
+  }
+
+  test('dragging a bullet moves it with its subtree to the place and level of the line', async ({ page }) => {
+    await dragTo(page, 'Часть первая', 'Том второй', 1);
+    expect(await outline(page)).toEqual(['Том первый', '  Часть вторая', 'Том второй', '  Часть первая', ...DEMO.slice(2, 4)]);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('Esc cancels a drag; a click without moving still zooms in', async ({ page }) => {
+    await dragTo(page, 'Часть вторая', 'Том второй', 0, true);
+    await expect(page.locator('.drop-line')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+  });
+});
+
 test.describe('export and import', () => {
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
   const item = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });
