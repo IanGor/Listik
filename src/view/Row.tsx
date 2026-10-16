@@ -36,6 +36,12 @@ export function Row(props: RowProps) {
     const n = node();
     return !!n && o.rows.hasHiddenChildren(n);
   };
+  const hasChildren = () => (node()?.children.length ?? 0) > 0;
+  const open = () => {
+    o.rowsVersion();
+    const n = node();
+    return !!n && o.rows.showsChildren(n);
+  };
   const pieces = createMemo(() => decorate(node()?.text ?? '', o.filter()?.query.terms ?? []));
 
   const onTextMouseDown = (e: MouseEvent) => {
@@ -54,8 +60,19 @@ export function Row(props: RowProps) {
   };
 
   return (
-    <div ref={el} class="row" data-id={id} data-depth={props.depth} style={{ 'padding-left': `calc(var(--indent) * ${props.depth})` }}>
-      <span class="bullet" classList={{ collapsed: folded() }} onMouseDown={onBulletMouseDown}>•</span>
+    <div
+      ref={el}
+      class="row"
+      data-id={id}
+      data-depth={props.depth}
+      style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}
+    >
+      <Show when={hasChildren()}>
+        <span class="toggle" classList={{ open: open() }} onMouseDown={onBulletMouseDown} aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
+        </span>
+      </Show>
+      <span class="bullet" classList={{ collapsed: folded() }} onMouseDown={onBulletMouseDown} />
       <Show
         when={editing()}
         fallback={

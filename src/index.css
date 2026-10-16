@@ -1,4 +1,28 @@
+/*
+ * Layout after Workflowy, colours from Claude's palette. Every colour token
+ * holds its light and dark value: `light-dark()` resolves them by
+ * `color-scheme`, which follows the system until a theme is picked
+ * (`data-theme`, see view/theme.ts).
+ */
 :root {
+  color-scheme: light dark;
+
+  --canvas: light-dark(#faf9f5, #1f1e1b);
+  /* Inputs and other raised surfaces. */
+  --surface: light-dark(#f5f0e8, #252320);
+  --text: light-dark(#252523, #f0ede6);
+  --muted: light-dark(#6c6a64, #a09d96);
+  --bullet: light-dark(#8e8b82, #8e8b82);
+  --hairline: light-dark(#e6dfd8, #36332e);
+  --guide: light-dark(#e6dfd8, #302d29);
+  --halo: light-dark(#e8e0d2, #3a3631);
+  /* Coral. Tag text is a step darker on cream and lighter on dark, for contrast. */
+  --primary: #cc785c;
+  --link: light-dark(#a9583e, #e0957a);
+  --hit: light-dark(rgb(232 165 90 / 0.38), rgb(232 165 90 / 0.3));
+  --ring: rgb(204 120 92 / 0.2);
+  --selection: rgb(204 120 92 / 0.25);
+
   /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
      otherwise whatever the OS/browser maps `monospace` to. */
   --font-text: ui-monospace, monospace;
@@ -9,25 +33,16 @@
   /* Indent per nesting level, in character cells. The height estimate in
      Outline.tsx assumes 2ch here and 2ch for bullet + gap. */
   --indent: 2ch;
-
-  --fg: #1f2328;
-  --muted: #8b949e;
-  --halo: #d0d7de;
-  --accent: #0969da;
-  --hit: #fff1a8;
-  --bg: #ffffff;
-  color-scheme: light dark;
+  /* Width of the text column, as in Workflowy. */
+  --column: 80ch;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #e6edf3;
-    --muted: #7d8590;
-    --halo: #30363d;
-    --accent: #4493f8;
-    --hit: #5c4b00;
-    --bg: #0d1117;
-  }
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 html,
@@ -38,11 +53,21 @@ body,
 }
 
 body {
-  background: var(--bg);
-  color: var(--fg);
+  background: var(--canvas);
+  color: var(--text);
   font-family: var(--font-text);
   font-size: var(--font-size);
   line-height: var(--line-height);
+  caret-color: var(--primary);
+}
+
+::selection {
+  background: var(--selection);
+}
+
+button {
+  font: inherit;
+  color: inherit;
 }
 
 .outline {
@@ -51,16 +76,56 @@ body {
   height: 100%;
 }
 
+/* --- Header ------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  flex: none;
+  gap: 16px;
+  align-items: center;
+  height: 52px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.brand {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.brand::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
 .searchbar {
   display: flex;
-  gap: 2ch;
+  flex: 1;
+  gap: 12px;
   align-items: center;
-  width: 100%;
-  max-width: 100ch;
+  max-width: var(--column);
+  height: 34px;
   margin: 0 auto;
-  padding: 0.75rem 1rem;
-  box-sizing: border-box;
-  border-bottom: 1px solid var(--halo);
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.searchbar:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.searchbar > svg {
+  flex: none;
+  color: var(--muted);
 }
 
 .search {
@@ -84,16 +149,156 @@ body {
 }
 
 .searchbar .clear {
-  margin-left: auto;
-  font: inherit;
+  padding: 0 2px;
   color: var(--muted);
   background: none;
   border: none;
   cursor: pointer;
 }
 
+.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: var(--canvas);
+  cursor: pointer;
+}
+
+.icon-button:active {
+  background: var(--surface);
+}
+
+/* --- Outline ------------------------------------------------------------ */
+
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Scroll anchoring is done by hand in Outline.tsx. */
+  overflow-anchor: none;
+  scrollbar-color: var(--halo) transparent;
+}
+
+.spacer {
+  position: relative;
+  max-width: calc(var(--column) + 5ch);
+  margin: 0 auto;
+}
+
+/* Left room for the fold arrows of top-level bullets. */
+.window {
+  position: absolute;
+  top: 0;
+  left: 3ch;
+  right: 2ch;
+}
+
+.probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+}
+
+/* Vertical padding must match ROW_PAD in Outline.tsx. */
+.row {
+  position: relative;
+  display: flex;
+  gap: 1ch;
+  padding: 3px 0;
+}
+
+/* Thin guide lines from each ancestor's bullet down through its children. */
+.row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--indent) * var(--depth));
+  background: linear-gradient(to right, var(--guide) 1px, transparent 1px) 0.5ch 0 / var(--indent) 100% repeat-x;
+  pointer-events: none;
+}
+
+.bullet {
+  position: relative;
+  flex: none;
+  width: 1ch;
+  height: 1lh;
+  cursor: pointer;
+}
+
+.bullet::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bullet);
+  transform: translate(-50%, -50%);
+}
+
+.row:hover .bullet::after {
+  background: var(--text);
+}
+
+/* Hidden children: a round halo behind the bullet, as in Workflowy. */
+.bullet.collapsed::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--halo);
+  transform: translate(-50%, -50%);
+}
+
+/* Fold arrow, left of the bullet; shown on hover for bullets with children. */
+.toggle {
+  position: absolute;
+  top: 3px;
+  left: calc(var(--indent) * var(--depth) - 2ch);
+  display: grid;
+  place-items: center;
+  width: 2ch;
+  height: 1lh;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.row:hover .toggle {
+  opacity: 1;
+}
+
+.toggle svg {
+  transition: transform 0.12s;
+}
+
+.toggle.open svg {
+  transform: rotate(90deg);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  min-height: 1lh;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
+
 .tag {
-  color: var(--accent);
+  color: var(--link);
   cursor: pointer;
 }
 
@@ -110,78 +315,11 @@ mark,
 }
 
 .tag.hit {
-  color: var(--accent);
-}
-
-.scroller {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  /* Scroll anchoring is done by hand in Outline.tsx. */
-  overflow-anchor: none;
-}
-
-.spacer {
-  position: relative;
-  max-width: 100ch;
-  margin: 0 auto;
-}
-
-.window {
-  position: absolute;
-  top: 0;
-  left: 1rem;
-  right: 1rem;
-}
-
-.probe {
-  position: absolute;
-  visibility: hidden;
-  white-space: pre;
-}
-
-.row {
-  display: flex;
-  gap: 1ch;
-  padding: 1px 0;
-}
-
-.bullet {
-  position: relative;
-  flex: none;
-  width: 1ch;
-  height: 1lh;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Hidden children: a round halo behind the bullet, as in Workflowy. */
-.bullet.collapsed::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 1.1em;
-  height: 1.1em;
-  border-radius: 50%;
-  background: var(--halo);
-  transform: translate(-50%, -50%);
-  z-index: -1;
-}
-
-.text {
-  flex: 1;
-  min-width: 0;
-  min-height: 1lh;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  outline: none;
-  cursor: text;
+  color: var(--link);
 }
 
 .message {
-  max-width: 100ch;
+  max-width: var(--column);
   margin: 2rem auto;
   padding: 0 1rem;
   color: var(--muted);

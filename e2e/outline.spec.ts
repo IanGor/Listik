@@ -226,6 +226,31 @@ test.describe('search', () => {
   });
 });
 
+test.describe('theme', () => {
+  const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  const CREAM = 'rgb(250, 249, 245)';
+  const DARK = 'rgb(31, 30, 27)';
+
+  test('follows the system until picked; the pick survives a reload', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/?demo');
+    expect(await background(page)).toBe(DARK);
+    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Дневная тема');
+
+    await page.locator('.theme-toggle').click();
+    expect(await background(page)).toBe(CREAM);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Ночная тема');
+
+    await page.reload();
+    expect(await background(page)).toBe(CREAM);
+    // A system change no longer overrides the pick.
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    expect(await background(page)).toBe(CREAM);
+  });
+});
+
 test.describe('persistence', () => {
   test('edits survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e');

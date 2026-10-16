@@ -2,7 +2,7 @@ import { For, createEffect, createMemo, createSignal, on, onCleanup, onMount } f
 import { onGlobalKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
-import { SearchBar } from './SearchBar';
+import { TopBar } from './TopBar';
 import { Virtualizer } from './virtualizer';
 
 /** Space above the first and below the last row, px. */
@@ -10,7 +10,7 @@ const PAD = 32;
 /** Rows rendered beyond the viewport on each side, px. */
 const OVERSCAN = 600;
 /** Vertical padding of `.row`, px. */
-const ROW_PAD = 2;
+const ROW_PAD = 6;
 
 /**
  * The scrollable outline. Only rows near the viewport are in the DOM; they
@@ -148,7 +148,7 @@ export function Outline(props: { o: Outliner }) {
 
   return (
     <div class="outline">
-      <SearchBar o={o} />
+      <TopBar o={o} />
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
         <div class="spacer" style={{ height: `${total() + 2 * PAD}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
