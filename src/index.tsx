@@ -6,3 +6,9 @@ import App from './App.tsx'
 const root = document.getElementById('root')
 
 render(() => <App />, root!)
+
+// Offline and installable: the built app caches itself (public/sw.js). Not in
+// development, where a cached build would shadow the dev server.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker.register('./sw.js');
+}

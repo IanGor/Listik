@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "test:e2e": "playwright test",
-    "bench": "node bench/bench.ts"
+    "bench": "node bench/bench.ts",
+    "app": "vite build && vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
     "fractional-indexing": "^4.0.0",

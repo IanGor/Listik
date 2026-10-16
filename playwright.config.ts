@@ -5,17 +5,30 @@ import { defineConfig } from '@playwright/test';
 // installed with `npx playwright install chromium`.
 const chromium = process.env.CHROMIUM_PATH ?? ['/usr/bin/chromium', '/usr/bin/chromium-browser'].find((p) => existsSync(p));
 // IPv4 explicitly: `localhost` resolves to ::1 first, which hangs on some setups.
-const origin = 'http://127.0.0.1:5180';
+const dev = 'http://127.0.0.1:5180';
+// The built app, for what only a production build does (service worker, offline).
+const built = 'http://127.0.0.1:5181';
 
 export default defineConfig({
   testDir: 'e2e',
   use: {
-    baseURL: origin,
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
-  webServer: {
-    command: 'npx vite --host 127.0.0.1 --port 5180 --strictPort',
-    url: origin,
-    reuseExistingServer: !process.env.CI,
-  },
+  projects: [
+    { name: 'app', testMatch: 'outline.spec.ts', use: { baseURL: dev } },
+    { name: 'pwa', testMatch: 'pwa.spec.ts', use: { baseURL: built } },
+  ],
+  webServer: [
+    {
+      command: 'npx vite --host 127.0.0.1 --port 5180 --strictPort',
+      url: dev,
+      reuseExistingServer: !process.env.CI,
+    },
+    {
+      command: 'npx vite build --outDir dist-e2e --emptyOutDir && npx vite preview --outDir dist-e2e --host 127.0.0.1 --port 5181 --strictPort',
+      url: built,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });
