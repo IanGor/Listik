@@ -1,5 +1,5 @@
-import type { Doc, DocListener } from './doc';
-import type { NodeId, NodeSnapshot, Op } from './types';
+import { walkSnapshot, type Doc, type DocListener } from './doc';
+import type { NodeId, Op } from './types';
 
 /**
  * `#tag` at the start of the text or after whitespace / "(". Letters, digits
@@ -72,10 +72,10 @@ export class TagIndex implements DocListener {
         this.set(op.id, op.to);
         break;
       case 'insert':
-        walk(op.node, (s) => this.set(s.id, s.text));
+        walkSnapshot(op.node, (s) => this.set(s.id, s.text));
         break;
       case 'remove':
-        walk(op.node, (s) => this.set(s.id, ''));
+        walkSnapshot(op.node, (s) => this.set(s.id, ''));
         break;
     }
   }
@@ -98,14 +98,5 @@ export class TagIndex implements DocListener {
     }
     if (next.length) this.byNode.set(id, next);
     else this.byNode.delete(id);
-  }
-}
-
-function walk(root: NodeSnapshot, fn: (s: NodeSnapshot) => void): void {
-  const stack = [root];
-  while (stack.length) {
-    const s = stack.pop()!;
-    fn(s);
-    for (const c of s.children) stack.push(c);
   }
 }

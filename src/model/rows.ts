@@ -21,9 +21,12 @@ export interface Filter {
   open: Set<NodeId>;
 }
 
-/** Matches plus all their ancestors, up to and including the root. */
+/**
+ * Matches plus all their ancestors. Always includes the root, so that no
+ * matches shows nothing rather than everything.
+ */
 export function keepSet(doc: Doc, matches: Iterable<NodeId>): Set<NodeId> {
-  const keep = new Set<NodeId>();
+  const keep = new Set<NodeId>([doc.root]);
   for (const id of matches) {
     for (let p: NodeId | null = id; p !== null && !keep.has(p); p = doc.get(p).parent) keep.add(p);
   }

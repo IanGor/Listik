@@ -11,6 +11,16 @@ export interface DocListener {
   commit?(ops: Op[], doc: Doc): void;
 }
 
+/** Visits every node of a snapshot subtree. */
+export function walkSnapshot(root: NodeSnapshot, fn: (s: NodeSnapshot) => void): void {
+  const stack = [root];
+  while (stack.length) {
+    const s = stack.pop()!;
+    fn(s);
+    for (const c of s.children) stack.push(c);
+  }
+}
+
 export function invert(op: Op): Op {
   switch (op.t) {
     case 'insert':

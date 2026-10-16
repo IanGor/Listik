@@ -3,6 +3,7 @@ import { setCollapsed, setText, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
+import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
 import { NodeSignals } from './node-signals';
@@ -10,9 +11,10 @@ import { NodeSignals } from './node-signals';
 /** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
 export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last' };
 
-export interface TagFilter {
-  tag: string;
-  /** Bullets carrying the tag when the filter was applied. */
+/** The active search: what was asked and what it found when applied. */
+export interface SearchFilter {
+  query: Query;
+  matches: ReadonlySet<NodeId>;
   count: number;
 }
 
@@ -21,6 +23,7 @@ export class Outliner {
   readonly doc: Doc;
   readonly rows: VisibleRows;
   readonly tags: TagIndex;
+  readonly text: TextIndex;
   readonly ctx: Ctx;
   readonly history = new History();
   readonly nodes = new NodeSignals();
@@ -28,21 +31,34 @@ export class Outliner {
   readonly rowsVersion: Accessor<number>;
   /** The row being edited; null when nothing is. A new object on every request, even for the same row. */
   readonly focus: Accessor<FocusRequest | null>;
-  readonly filter: Accessor<TagFilter | null>;
+  /** The text in the search box. */
+  readonly query: Accessor<string>;
+  /** The applied search; null shows the whole outline. */
+  readonly filter: Accessor<SearchFilter | null>;
+  /** Bumped to move the caret into the search box (Ctrl+F). */
+  readonly searchRequests: Accessor<number>;
   private setRowsVersion: Setter<number>;
   private setFocusSignal: Setter<FocusRequest | null>;
-  private setFilterSignal: Setter<TagFilter | null>;
+  private setQuerySignal: Setter<string>;
+  private setFilterSignal: Setter<SearchFilter | null>;
+  private setSearchRequests: Setter<number>;
+  private pendingSearch: number | null = null;
 
   constructor(doc: Doc) {
     this.doc = doc;
     this.rows = new VisibleRows(doc);
     this.tags = new TagIndex(doc);
+    this.text = new TextIndex(doc);
     this.ctx = { doc, rows: this.rows };
     [this.rowsVersion, this.setRowsVersion] = createSignal(this.rows.version);
     [this.focus, this.setFocusSignal] = createSignal<FocusRequest | null>(null, { equals: false });
-    [this.filter, this.setFilterSignal] = createSignal<TagFilter | null>(null);
+    [this.query, this.setQuerySignal] = createSignal('');
+    [this.filter, this.setFilterSignal] = createSignal<SearchFilter | null>(null);
+    [this.searchRequests, this.setSearchRequests] = createSignal(0);
     doc.subscribe(this.nodes);
     doc.subscribe({ commit: () => this.syncRows() });
+    // Ready before the first search in practice, without blocking input meanwhile.
+    this.text.warmUpInIdle();
   }
 
   setFocus(f: FocusRequest | null): void {
@@ -50,26 +66,35 @@ export class Outliner {
   }
 
   /**
-   * Shows only bullets tagged `tag`, with their ancestors; null shows
-   * everything again. Cost depends on the number of matches, not on the
-   * size of the document. Applying a filter leaves editing; clearing it
-   * keeps the edited row and scrolls back to it.
+   * Sets the search text. The search itself runs once per frame however fast
+   * the typing (or right away with `now`), and its cost depends on the
+   * number of bullets scanned, never on rendering them all.
    */
-  filterByTag(tag: string | null): void {
-    batch(() => {
-      if (tag) {
-        const matches = this.tags.nodesWith(tag);
-        this.rows.setFilter({ keep: keepSet(this.doc, matches), open: new Set() });
-        this.setFilterSignal({ tag: tag.toLowerCase(), count: matches.size });
-        this.setFocus(null);
-      } else {
-        this.rows.setFilter(null);
-        this.setFilterSignal(null);
-        const cur = this.focus();
-        if (cur) this.setFocus(cur);
-      }
-      this.syncRows();
+  setQuery(text: string, now = false): void {
+    this.setQuerySignal(text);
+    if (this.pendingSearch !== null) cancelAnimationFrame(this.pendingSearch);
+    this.pendingSearch = null;
+    if (now) this.applyQuery();
+    else this.pendingSearch = requestAnimationFrame(() => {
+      this.pendingSearch = null;
+      this.applyQuery();
     });
+  }
+
+  /** A click on a tag: search for it. */
+  filterByTag(tag: string): void {
+    this.setQuery(`#${tag}`, true);
+  }
+
+  /** Ctrl+F: put the caret into the search box. */
+  requestSearch(): void {
+    this.setSearchRequests((n) => n + 1);
+  }
+
+  /** The first visible row that matches the search. */
+  firstMatch(): NodeId | null {
+    const f = this.filter();
+    return (f && this.rows.ids.find((id) => f.matches.has(id))) ?? null;
   }
 
   /**
@@ -122,6 +147,30 @@ export class Outliner {
 
   redo(): void {
     this.replay((doc) => this.history.redo(doc), true);
+  }
+
+  /**
+   * Shows only matching bullets with their ancestors, or everything for an
+   * empty query. Applying a search leaves editing; clearing it keeps the
+   * edited row and scrolls back to it.
+   */
+  private applyQuery(): void {
+    const query = parseQuery(this.query());
+    batch(() => {
+      if (isEmptyQuery(query)) {
+        if (!this.filter()) return;
+        this.rows.setFilter(null);
+        this.setFilterSignal(null);
+        const cur = this.focus();
+        if (cur) this.setFocus(cur);
+      } else {
+        const matches = findMatches(query, this.tags, this.text);
+        this.rows.setFilter({ keep: keepSet(this.doc, matches), open: new Set() });
+        this.setFilterSignal({ query, matches, count: matches.size });
+        this.setFocus(null);
+      }
+      this.syncRows();
+    });
   }
 
   private replay(step: (doc: Doc) => HistoryEntry | null, forward: boolean): void {

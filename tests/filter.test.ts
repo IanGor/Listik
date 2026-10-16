@@ -35,6 +35,11 @@ describe('filter by tag', () => {
     expect([...doc.nodes.values()].some((n) => n.collapsed)).toBe(false);
   });
 
+  it('shows nothing when nothing matches', () => {
+    const { rows } = filtered(DOC, 'нет-такого');
+    expect(rows.length).toBe(0);
+  });
+
   it('shows everything again when cleared', () => {
     const { doc, rows } = filtered(DOC, 'x');
     rows.setFilter(null);

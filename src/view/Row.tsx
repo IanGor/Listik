@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
-import { splitTags } from '../model/tags';
+import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown } from './keymap';
@@ -36,7 +36,7 @@ export function Row(props: RowProps) {
     const n = node();
     return !!n && o.rows.hasHiddenChildren(n);
   };
-  const segments = createMemo(() => splitTags(node()?.text ?? ''));
+  const pieces = createMemo(() => decorate(node()?.text ?? '', o.filter()?.query.terms ?? []));
 
   const onTextMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -60,10 +60,10 @@ export function Row(props: RowProps) {
         when={editing()}
         fallback={
           <div class="text" onMouseDown={onTextMouseDown}>
-            <For each={segments()}>
-              {(s) => s.tag
-                ? <span class="tag" classList={{ active: o.filter()?.tag === s.tag }} data-tag={s.tag}>{s.text}</span>
-                : s.text}
+            <For each={pieces()}>
+              {(p) => p.tag
+                ? <span class="tag" classList={{ active: !!o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+                : p.hit ? <mark>{p.text}</mark> : p.text}
             </For>
           </div>
         }

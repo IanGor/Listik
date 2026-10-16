@@ -159,12 +159,12 @@ test.describe('tag filter', () => {
     await expect(page.locator('.tag')).toHaveText(['#салон', '#шерер']);
     await page.locator('.tag', { hasText: '#салон' }).click();
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
-    await expect(page.locator('.filterbar')).toContainText('#салон');
-    await expect(page.locator('.filterbar')).toContainText('1 bullet');
+    await expect(page.locator('.search')).toHaveValue('#салон');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
     // "Часть первая" shows only the path: its other child is hidden, so its bullet is folded.
     await expect(page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet')).toHaveClass(/collapsed/);
     await page.keyboard.press('Escape');
-    await expect(page.locator('.filterbar')).toHaveCount(0);
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     expect(await outline(page)).toEqual(DEMO);
   });
 
@@ -172,7 +172,7 @@ test.describe('tag filter', () => {
     await page.locator('.tag', { hasText: '#салон' }).click();
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2], DEMO[3]]);
-    await page.locator('.filterbar .clear').click();
+    await page.locator('.searchbar .clear').click();
     expect(await outline(page)).toEqual(DEMO);
   });
 
@@ -183,9 +183,46 @@ test.describe('tag filter', () => {
     await page.keyboard.type('новая мысль');
     expect((await outline(page)).slice(-2)).toEqual([DEMO[3], '    новая мысль']);
     await page.keyboard.press('Escape');
-    await expect(page.locator('.filterbar')).toHaveCount(0);
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     await expect(editing(page)).toHaveText('новая мысль');
     expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '    новая мысль', ...DEMO.slice(4)]);
+  });
+});
+
+test.describe('search', () => {
+  test('Ctrl+F, words in any case: matches with their path, hits highlighted', async ({ page }) => {
+    await page.keyboard.press('Control+f');
+    await expect(page.locator('.search')).toBeFocused();
+    await page.keyboard.type('ШЕРЕР анна');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
+    await expect(page.locator('.row mark')).toHaveText(['Анна', 'Шерер']);
+    await expect(page.locator('.row .tag.hit')).toHaveText(['шерер']);
+  });
+
+  test('Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
+    await page.locator('.search').fill('вторая');
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('Часть вторая');
+    await page.keyboard.type('!');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.search')).toHaveValue('');
+    await expect(editing(page)).toHaveText('!Часть вторая');
+    expect(await outline(page)).toHaveLength(DEMO.length);
+  });
+
+  test('a clicked tag goes into the search box and combines with words', async ({ page }) => {
+    await page.locator('.tag', { hasText: '#салон' }).click();
+    await expect(page.locator('.search')).toHaveValue('#салон');
+    await page.locator('.search').press('End');
+    await page.locator('.search').pressSequentially(' prince');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await page.locator('.search').pressSequentially(' нет-такого');
+    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await expect(page.locator('.row')).toHaveCount(0);
+    await page.locator('.search').press('Escape');
+    await expect(page.locator('.search')).not.toBeFocused();
+    expect(await outline(page)).toEqual(DEMO);
   });
 });
 
@@ -250,6 +287,8 @@ test.describe('at scale', () => {
     await page.goto('/?sample=200000');
     const tag = page.locator('.tag').first();
     await expect(tag).toBeVisible();
+    // Measure the steady state: let post-load work (GC, idle index build) settle first.
+    await page.waitForTimeout(1000);
     // From the click to the next painted frame, measured in the page.
     const ms = await tag.evaluate(async (el) => {
       const started = performance.now();
@@ -257,14 +296,36 @@ test.describe('at scale', () => {
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
       return performance.now() - started;
     });
-    await expect(page.locator('.filterbar')).toBeVisible();
-    const count = Number((await page.locator('.filterbar .muted').textContent())!.split(' ')[0]);
+    await expect(page.locator('.searchbar .count')).toBeVisible();
+    const count = Number((await page.locator('.searchbar .count').textContent())!.split(' ')[0]);
     console.log(`filter: ${count} matches in ${Math.round(ms)} ms`);
     expect(count).toBeGreaterThan(1000);
     expect(ms).toBeLessThan(100);
     // Every rendered bullet is a match or on the path to one.
     expect(await page.locator('.row').count()).toBeGreaterThan(10);
     await page.keyboard.press('Escape');
-    await expect(page.locator('.filterbar')).toHaveCount(0);
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
+  });
+  test('200k bullets: text search takes about a frame', async ({ page }) => {
+    await page.goto('/?sample=200000');
+    await expect(page.locator('.row').first()).toBeVisible();
+    // Measure the steady state: let post-load work (GC, idle index build) settle first.
+    await page.waitForTimeout(1000);
+    // From the keystroke to the painted result, measured in the page (the search runs on the next frame).
+    const ms = await page.locator('.search').evaluate(async (el) => {
+      const input = el as HTMLInputElement;
+      const started = performance.now();
+      input.value = 'наташа смотрел';
+      input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      const frame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+      await frame();
+      await frame();
+      return performance.now() - started;
+    });
+    const count = Number((await page.locator('.searchbar .count').textContent())!.split(' ')[0]);
+    console.log(`search: ${count} matches in ${Math.round(ms)} ms`);
+    expect(count).toBeGreaterThan(100);
+    expect(ms).toBeLessThan(100);
+    await expect(page.locator('.row mark').first()).toBeVisible();
   });
 });

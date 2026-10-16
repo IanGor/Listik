@@ -56,26 +56,31 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       return handle(() => o.setFocus({ id: o.rows.ids[i], x: caretX(el), line: up ? 'last' : 'first' }));
     }
 
-    // First Esc clears the filter (editing goes on, now in context); the next one leaves editing.
+    // First Esc clears the search (editing goes on, now in context); the next one leaves editing.
     case 'Escape':
       return handle(() => {
-        if (o.filter()) return o.filterByTag(null);
+        if (o.query() || o.filter()) return o.setQuery('', true);
         o.setFocus(null);
         el.blur();
       });
   }
 
-  onUndoKeys(e, o);
+  onGlobalKeys(e, o);
 }
 
 /**
- * Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y. Matched by physical key, so they
+ * Keys that work wherever the caret is in the outline: Ctrl/Cmd+Z,
+ * Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+F for search (the browser's
+ * own find cannot see virtualized rows). Matched by physical key, so they
  * work in any keyboard layout. The browser's own undo never runs: it would
  * desync the DOM from the model.
  */
-export function onUndoKeys(e: KeyboardEvent, o: Outliner): void {
+export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (e.code === 'KeyZ') {
+  if (e.code === 'KeyF') {
+    e.preventDefault();
+    o.requestSearch();
+  } else if (e.code === 'KeyZ') {
     e.preventDefault();
     if (e.shiftKey) o.redo();
     else o.undo();

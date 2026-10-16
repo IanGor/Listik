@@ -14,6 +14,7 @@
   --muted: #8b949e;
   --halo: #d0d7de;
   --accent: #0969da;
+  --hit: #fff1a8;
   --bg: #ffffff;
   color-scheme: light dark;
 }
@@ -24,6 +25,7 @@
     --muted: #7d8590;
     --halo: #30363d;
     --accent: #4493f8;
+    --hit: #5c4b00;
     --bg: #0d1117;
   }
 }
@@ -49,10 +51,10 @@ body {
   height: 100%;
 }
 
-.filterbar {
+.searchbar {
   display: flex;
   gap: 2ch;
-  align-items: baseline;
+  align-items: center;
   width: 100%;
   max-width: 100ch;
   margin: 0 auto;
@@ -61,17 +63,33 @@ body {
   border-bottom: 1px solid var(--halo);
 }
 
-.filterbar .clear {
+.search {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.search::placeholder {
+  color: var(--muted);
+}
+
+.count {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.searchbar .clear {
   margin-left: auto;
   font: inherit;
   color: var(--muted);
   background: none;
   border: none;
   cursor: pointer;
-}
-
-.muted {
-  color: var(--muted);
 }
 
 .tag {
@@ -82,6 +100,17 @@ body {
 .tag:hover,
 .tag.active {
   text-decoration: underline;
+}
+
+mark,
+.tag.hit {
+  color: inherit;
+  background: var(--hit);
+  border-radius: 2px;
+}
+
+.tag.hit {
+  color: var(--accent);
 }
 
 .scroller {
