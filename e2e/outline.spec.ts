@@ -395,6 +395,49 @@ test.describe('done and notes', () => {
   });
 });
 
+test.describe('selecting several bullets', () => {
+  const selected = (page: Page) => page.locator('.row.selected .text').allTextContents();
+
+  test('Shift+↓ selects; Tab, Ctrl+Enter, copy, Delete and undo act on the block', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Shift+ArrowDown');
+    expect(await selected(page)).toEqual(['Часть вторая', 'Том второй']);
+    await expect(editing(page)).toHaveCount(0);
+
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('.row.done')).toHaveCount(2);
+    await page.keyboard.press('Control+c');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('- [x] Часть вторая\n- [x] Том второй\n');
+
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await selected(page)).toEqual(['Часть вторая']);
+    await page.keyboard.press('Shift+ArrowUp');
+    await page.keyboard.press('Shift+ArrowUp');
+    // From "Часть вторая" up two rows: both quotes of the first part.
+    expect(await selected(page)).toEqual([DEMO[2].trim(), DEMO[3].trim(), 'Часть вторая']);
+
+    await page.keyboard.press('Delete');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[5]]);
+    await page.keyboard.press('Control+z');
+    expect((await outline(page)).length).toBe(DEMO.length);
+  });
+
+  test('Shift+click selects a range from the edited row; Esc clears it', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.locator('.row .text', { hasText: 'Том второй' }).click({ modifiers: ['Shift'] });
+    expect(await selected(page)).toEqual(DEMO.slice(1).map((l) => l.trim()));
+    // The first one has nowhere to go: Tab leaves the whole block as it is.
+    await page.keyboard.press('Tab');
+    expect(await outline(page)).toEqual(DEMO);
+    // Shift+Tab lifts it, keeping the order.
+    await page.keyboard.press('Shift+Tab');
+    expect(await outline(page)).toEqual(['Том первый', 'Часть первая', ...DEMO.slice(2, 4).map((l) => l.slice(2)), 'Часть вторая', 'Том второй']);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.row.selected')).toHaveCount(0);
+  });
+});
+
 test.describe('export and import', () => {
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
   const item = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });
@@ -641,6 +684,8 @@ test.describe('at scale', () => {
     console.log(`home: folded in ${Math.round(ms)} ms, ${rows} rows rendered`);
     await expect(page.locator('.row').first()).toHaveText('Глава 1');
     await expect(page.locator('.row[data-depth="1"]')).toHaveCount(0);
-    expect(ms).toBeLessThan(60);
+    // Wall clock on a shared machine, after the heaviest tests: a smoke check.
+    // (Without bulk rebuilds this took 124 ms; with them, ~20-45 ms.)
+    expect(ms).toBeLessThan(100);
   });
 });

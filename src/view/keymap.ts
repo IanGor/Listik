@@ -1,4 +1,5 @@
 import * as cmd from '../model/commands';
+import { markdownOf } from '../model/outline-text';
 import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, caretX, selectionIn } from './caret';
 import type { Outliner } from './outliner';
@@ -56,6 +57,14 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
         return handle(() => o.run((ctx) => (up ? cmd.moveUp : cmd.moveDown)(ctx, id), here));
       }
       if (mod) return handle(() => o.fold(id, up, here));
+      // Shift+↑/↓ past the text's edge starts selecting bullets: this one and the next.
+      if (e.shiftKey && !e.altKey && collapsed && (up ? caretOnFirstLine(el) : caretOnLastLine(el))) {
+        const next = o.rows.ids[o.rows.indexOf(id) + (up ? -1 : 1)];
+        return handle(() => {
+          el.blur();
+          o.select({ anchor: id, head: next ?? id });
+        });
+      }
       if (e.shiftKey || e.altKey) return;
       if (up ? !caretOnFirstLine(el) : !caretOnLastLine(el)) return;
       // Down from the text goes into its note first, if there is one.
@@ -78,6 +87,55 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
   }
 
   onGlobalKeys(e, o);
+}
+
+/**
+ * Keys while bullets are selected (no row is being edited). Returns whether
+ * the key was handled. Commands act on the selection's roots, each as one
+ * undo step.
+ */
+export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
+  const selection = o.selection();
+  if (!selection) return false;
+  const mod = e.ctrlKey || e.metaKey;
+  const roots = () => o.selectionRoots();
+  const handle = (fn: () => void) => {
+    e.preventDefault();
+    fn();
+    return true;
+  };
+  const copy = () => navigator.clipboard?.writeText(markdownOf(o.doc, roots())).catch(() => o.notify('Не удалось скопировать'));
+
+  switch (e.key) {
+    case 'Escape':
+      return handle(() => o.select(null));
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      const up = e.key === 'ArrowUp';
+      if ((mod || e.altKey) && e.shiftKey) return handle(() => o.run((ctx) => (up ? cmd.moveUpMany : cmd.moveDownMany)(ctx, roots())));
+      if (e.shiftKey) return handle(() => o.extendSelection(up ? -1 : 1));
+      return handle(() => o.setFocus({ id: selection.head, caret: 0 }));
+    }
+    case 'Tab':
+      return handle(() => o.run((ctx) => (e.shiftKey ? cmd.outdentMany : cmd.indentMany)(ctx, roots())));
+    case 'Backspace':
+    case 'Delete':
+      return handle(() => o.run((ctx) => cmd.deleteMany(ctx, roots())));
+    case 'Enter':
+      if (mod) return handle(() => o.run((ctx) => cmd.toggleDone(ctx, roots())));
+      return handle(() => o.setFocus({ id: selection.head, caret: o.doc.get(selection.head).text.length }));
+  }
+  if (mod && e.code === 'KeyC') return handle(() => void copy());
+  if (mod && e.code === 'KeyX') {
+    return handle(() => {
+      void copy();
+      o.run((ctx) => cmd.deleteMany(ctx, roots()));
+    });
+  }
+  if (mod && e.code === 'KeyA') {
+    return handle(() => o.select({ anchor: o.rows.ids[0], head: o.rows.ids[o.rows.length - 1] }));
+  }
+  return false;
 }
 
 /** Keyboard handling in a bullet's note: Enter makes a new line; the rest leads back out. */

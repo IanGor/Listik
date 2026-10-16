@@ -12,6 +12,12 @@ import { NodeSignals } from './node-signals';
 /** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
 export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last'; note?: true };
 
+/** Several bullets selected: from `anchor` (where it started) to `head` (the moving end). */
+export interface Selection {
+  anchor: NodeId;
+  head: NodeId;
+}
+
 /** The active search: what was asked and what it found when applied. */
 export interface SearchFilter {
   query: Query;
@@ -46,6 +52,7 @@ export class Outliner {
   readonly homeRequests: Accessor<number>;
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
+  readonly selection: Accessor<Selection | null>;
   /** Automatic copies into a folder; null for in-memory documents. */
   backup: Backup | null = null;
   /** Another tab holds the document: nothing here may change it. */
@@ -59,6 +66,8 @@ export class Outliner {
   private setTitleRequests: Setter<number>;
   private setHomeRequests: Setter<number>;
   private setToast: Setter<string | null>;
+  private setSelectionSignal: Setter<Selection | null>;
+  private selectionCache: { selection: Selection; version: number; set: Set<NodeId>; roots: NodeId[] } | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSearch: number | null = null;
 
@@ -78,6 +87,7 @@ export class Outliner {
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.toast, this.setToast] = createSignal<string | null>(null);
+    [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
@@ -91,8 +101,62 @@ export class Outliner {
     this.text.warmUpInIdle();
   }
 
+  /** Moves the caret; editing a row ends a selection. */
   setFocus(f: FocusRequest | null): void {
-    this.setFocusSignal(f);
+    batch(() => {
+      if (f && this.selection()) this.setSelectionSignal(null);
+      this.setFocusSignal(f);
+    });
+  }
+
+  /** Selects rows from `anchor` to `head` (null clears); leaves editing. */
+  select(selection: Selection | null): void {
+    batch(() => {
+      this.setSelectionSignal(selection);
+      if (selection) this.setFocusSignal(null);
+    });
+  }
+
+  /** Shift+↑/↓ in a selection: moves its head one row. */
+  extendSelection(step: -1 | 1): void {
+    const s = this.selection();
+    if (!s) return;
+    const i = this.rows.indexOf(s.head) + step;
+    if (i >= 0 && i < this.rows.length) this.select({ anchor: s.anchor, head: this.rows.ids[i] });
+  }
+
+  /** The selected rows: from anchor to head, widened to whole subtrees. Reactive. */
+  selectedSet(): ReadonlySet<NodeId> {
+    return this.selectionInfo().set;
+  }
+
+  /** Selected bullets not inside another selected one, in order: what block commands act on. */
+  selectionRoots(): NodeId[] {
+    return this.selectionInfo().roots;
+  }
+
+  private selectionInfo(): { set: Set<NodeId>; roots: NodeId[] } {
+    const selection = this.selection();
+    const version = this.rowsVersion();
+    if (!selection) return { set: new Set(), roots: [] };
+    const cache = this.selectionCache;
+    if (cache && cache.selection === selection && cache.version === version) return cache;
+    const a = this.rows.indexOf(selection.anchor);
+    const h = this.rows.indexOf(selection.head);
+    const set = new Set<NodeId>();
+    const roots: NodeId[] = [];
+    if (a >= 0 && h >= 0) {
+      const start = Math.min(a, h);
+      let end = Math.max(a, h) + 1;
+      for (let i = start; i < end; i++) {
+        end = Math.max(end, this.rows.subtreeEnd(i));
+        const id = this.rows.ids[i];
+        set.add(id);
+        if (!set.has(this.doc.get(id).parent!)) roots.push(id);
+      }
+    }
+    this.selectionCache = { selection, version, set, roots };
+    return this.selectionCache;
   }
 
   /**

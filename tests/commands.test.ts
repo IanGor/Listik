@@ -3,7 +3,9 @@ import {
   collapseChildren, deleteNode, indent, insertText, mergeUp, moveDown, moveUp, outdent, setCollapsed, setNote, split,
   toggleDone,
 } from '../src/model/commands';
+import * as cmd from '../src/model/commands';
 import { checkInvariants } from '../src/model/invariants';
+import { markdownOf } from '../src/model/outline-text';
 import { dump, dumpRows, setup } from './helpers';
 
 describe('split (Enter)', () => {
@@ -199,3 +201,41 @@ describe('toggleDone and notes', () => {
     expect(doc.get('b').note).toBe('не потерять');
   });
 });
+
+describe('block commands (a selection)', () => {
+  it('indents and outdents consecutive bullets together, keeping their order', () => {
+    const { doc, ctx, run } = setup(['a', 'b', 'c', 'd']);
+    run(() => cmd.indentMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['a', '  b', '  c', 'd']);
+    run(() => cmd.outdentMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['a', 'b', 'c', 'd']);
+    // A first bullet with no previous sibling holds the whole block.
+    run(() => cmd.indentMany(ctx, ['a', 'b']));
+    expect(dump(doc)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('moves a block up and down whole, and not past the edges', () => {
+    const { doc, ctx, run } = setup(['a', 'b', '  b1', 'c', 'd']);
+    run(() => cmd.moveUpMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['b', '  b1', 'c', 'a', 'd']);
+    run(() => cmd.moveUpMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['b', '  b1', 'c', 'a', 'd']);
+    run(() => cmd.moveDownMany(ctx, ['b', 'c']));
+    run(() => cmd.moveDownMany(ctx, ['b', 'c']));
+    run(() => cmd.moveDownMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['a', 'd', 'b', '  b1', 'c']);
+  });
+
+  it('deletes bullets with their subtrees and focuses the row above', () => {
+    const { doc, ctx, run } = setup(['a', 'b', '  b1', 'c', 'd']);
+    const focus = run(() => cmd.deleteMany(ctx, ['b', 'c']));
+    expect(dump(doc)).toEqual(['a', 'd']);
+    expect(focus).toEqual({ id: 'a', caret: 1 });
+  });
+
+  it('copies the bullets with their subtrees as Markdown', () => {
+    const { doc } = setup(['a', 'b', '  b1', 'c']);
+    expect(markdownOf(doc, ['b', 'c'])).toBe('- b\n  - b1\n- c\n');
+  });
+});
+

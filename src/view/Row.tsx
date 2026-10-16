@@ -70,6 +70,12 @@ export function Row(props: RowProps) {
     e.preventDefault();
     const tag = (e.target as HTMLElement).dataset.tag;
     if (tag) return o.filterByTag(tag);
+    // Shift+click selects the rows from the edited (or already selected) one to here.
+    const anchor = o.selection()?.anchor ?? o.focus()?.id;
+    if (e.shiftKey && anchor) {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return o.select({ anchor, head: id });
+    }
     if (o.readOnly) return;
     const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
     const length = (note ? node()?.note : node()?.text)?.length ?? 0;
@@ -93,7 +99,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ done: !!node()?.done }}
+      classList={{ done: !!node()?.done, selected: o.selectedSet().has(id) }}
       data-id={id}
       data-depth={props.depth}
       style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}

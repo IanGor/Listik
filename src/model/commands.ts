@@ -247,3 +247,63 @@ export function moveDown({ doc, rows }: Ctx, id: NodeId): void {
   expand(doc, target);
   moveTo(doc, id, target, 0);
 }
+
+// --- Several bullets at once (a selection) -----------------------------------
+// `roots` are the selected bullets that are not inside another selected one,
+// in document order; each one moves with its subtree.
+
+/** Can `moveUp` move this bullet (inside the zoom)? */
+function canMoveUp({ doc, rows }: Ctx, id: NodeId): boolean {
+  const parent = doc.get(id).parent!;
+  if (doc.index(id) > 0) return true;
+  return parent !== doc.root && parent !== rows.top && doc.index(parent) > 0;
+}
+
+function canMoveDown({ doc, rows }: Ctx, id: NodeId): boolean {
+  const parent = doc.get(doc.get(id).parent!);
+  if (doc.index(id) < parent.children.length - 1) return true;
+  if (parent.id === doc.root || parent.id === rows.top) return false;
+  return doc.index(parent.id) < doc.get(parent.parent!).children.length - 1;
+}
+
+/** Deletes the bullets with their subtrees; focuses the row above them, or below. */
+export function deleteMany(ctx: Ctx, roots: NodeId[]): Focus | void {
+  const { doc, rows } = ctx;
+  if (!roots.length) return;
+  const first = rows.indexOf(roots[0]);
+  const lastRow = rows.indexOf(roots[roots.length - 1]);
+  const prev = first > 0 ? rows.ids[first - 1] : null;
+  const end = lastRow >= 0 ? rows.subtreeEnd(lastRow) : -1;
+  const next = end >= 0 && end < rows.length ? rows.ids[end] : null;
+  if (roots.length > 1) rows.expectMany();
+  for (const id of roots) remove(doc, id);
+  if (doc.get(doc.root).children.length === 0) return { id: insertNew(doc, doc.root, 0, ''), caret: 0 };
+  if (prev) return { id: prev, caret: doc.get(prev).text.length };
+  if (next) return { id: next, caret: 0 };
+}
+
+/**
+ * Tab on a block: each bullet goes under its previous sibling, so consecutive
+ * ones stay together. If the first one cannot be indented, the block stays:
+ * indenting only its tail would tear it apart.
+ */
+export function indentMany(ctx: Ctx, roots: NodeId[]): void {
+  if (!roots.length || ctx.doc.index(roots[0]) === 0) return;
+  for (const id of roots) indent(ctx, id);
+}
+
+/** Shift+Tab on a block: from the last bullet up, so their order is kept. */
+export function outdentMany(ctx: Ctx, roots: NodeId[]): void {
+  for (let k = roots.length - 1; k >= 0; k--) outdent(ctx, roots[k]);
+}
+
+/** Moves the block up by one place, whole; nothing if its first bullet cannot move. */
+export function moveUpMany(ctx: Ctx, roots: NodeId[]): void {
+  if (!roots.length || !canMoveUp(ctx, roots[0])) return;
+  for (const id of roots) moveUp(ctx, id);
+}
+
+export function moveDownMany(ctx: Ctx, roots: NodeId[]): void {
+  if (!roots.length || !canMoveDown(ctx, roots[roots.length - 1])) return;
+  for (let k = roots.length - 1; k >= 0; k--) moveDown(ctx, roots[k]);
+}

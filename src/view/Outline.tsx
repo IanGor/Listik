@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
-import { onGlobalKeys } from './keymap';
+import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { TopBar } from './TopBar';
@@ -121,6 +121,7 @@ export function Outline(props: { o: Outliner }) {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
+      if (onSelectionKeys(e, o)) return;
       if (e.key === 'Escape' && (o.query() || o.filter())) return o.setQuery('', true);
       if (e.key === 'ArrowLeft' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();

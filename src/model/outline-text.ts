@@ -64,13 +64,13 @@ export function parseIndented(text: string): Tree[] {
   return roots;
 }
 
-/** Visits the subtree under `root` (not `root` itself) in pre-order. */
-function walk(doc: Doc, root: NodeId, fn: (id: NodeId, depth: number) => void): void {
+/** Visits `starts` and their subtrees in pre-order; the starts are at depth 0. */
+function walk(doc: Doc, starts: NodeId[], fn: (id: NodeId, depth: number) => void): void {
   const stack: [NodeId, number][] = [];
   const push = (ids: NodeId[], depth: number) => {
     for (let k = ids.length - 1; k >= 0; k--) stack.push([ids[k], depth]);
   };
-  push(doc.get(root).children, 0);
+  push(starts, 0);
   while (stack.length) {
     const [id, depth] = stack.pop()!;
     fn(id, depth);
@@ -83,8 +83,13 @@ function walk(doc: Doc, root: NodeId, fn: (id: NodeId, depth: number) => void): 
  * lines under their item at the text's indent. Reads back with `parseIndented`.
  */
 export function toMarkdown(doc: Doc, root: NodeId = doc.root): string {
+  return markdownOf(doc, doc.get(root).children);
+}
+
+/** The given bullets with their subtrees, as a Markdown list (copying a selection). */
+export function markdownOf(doc: Doc, ids: NodeId[]): string {
   const out: string[] = [];
-  walk(doc, root, (id, depth) => {
+  walk(doc, ids, (id, depth) => {
     const n = doc.get(id);
     const pad = '  '.repeat(depth);
     out.push(`${pad}- ${n.done ? '[x] ' : ''}${n.text}`);

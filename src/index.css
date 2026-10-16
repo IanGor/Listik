@@ -416,6 +416,20 @@ kbd {
   cursor: text;
 }
 
+/* Selected bullets: one soft band from the bullet on, behind the row. */
+.row.selected::after {
+  content: '';
+  position: absolute;
+  inset: 0 -8px 0 calc(var(--indent) * var(--depth) - 8px);
+  z-index: -1;
+  background: var(--chip);
+}
+
+.row.selected .text,
+.row.selected .note {
+  user-select: none;
+}
+
 /* Completed: struck through and quiet. */
 .row.done .text {
   color: var(--faint);
