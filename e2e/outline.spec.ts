@@ -246,6 +246,34 @@ test.describe('persistence', () => {
     expect(await outline(page)).toEqual(['Запись', '  вложенная', '  ещё одна']);
   });
 
+  test('compaction runs in a worker and keeps every edit', async ({ page }) => {
+    await page.goto('/?demo');
+    const result = await page.evaluate(async () => {
+      // App modules, as Vite serves them to the page.
+      const load = (path: string) => import(/* @vite-ignore */ path);
+      const { Persistence } = (await load('/src/persist/idb.ts')) as typeof import('../src/persist/idb.ts');
+      const { VisibleRows } = (await load('/src/model/rows.ts')) as typeof import('../src/model/rows.ts');
+      const cmd = (await load('/src/model/commands.ts')) as typeof import('../src/model/commands.ts');
+      const { doc, persistence } = await Persistence.open('e2e-compact');
+      const ctx = { doc, rows: new VisibleRows(doc) };
+      const first = ctx.rows.ids[0];
+      doc.transact(() => cmd.setText(ctx, first, 'до пересборки'));
+      await persistence.flush();
+      const compacting = persistence.compact();
+      // Edits made while the worker compacts must survive it.
+      doc.transact(() => { cmd.split(ctx, first, 13); });
+      doc.transact(() => cmd.setText(ctx, ctx.rows.ids[1], 'во время пересборки'));
+      await compacting;
+      await persistence.flush();
+      persistence.close();
+      const reopened = await Persistence.open('e2e-compact');
+      reopened.persistence.close();
+      const texts = [...reopened.doc.get(reopened.doc.root).children].map((id) => reopened.doc.get(id).text);
+      return { texts, error: String(persistence.error) };
+    });
+    expect(result).toEqual({ texts: ['до пересборки', 'во время пересборки'], error: 'null' });
+  });
+
   test('demo and sample documents never touch stored data', async ({ page }) => {
     await page.goto('/?demo&db=e2e');
     await edit(page, 'Том второй');

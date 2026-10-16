@@ -45,6 +45,8 @@ export class VisibleRows implements DocListener {
   version = 0;
   private doc: Doc;
   private filter: Filter | null = null;
+  /** Where the last `indexOf` found its row. */
+  private hint = 0;
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
 
@@ -111,8 +113,21 @@ export class VisibleRows implements DocListener {
     return n.children.length > this.shownChildren(n).length;
   }
 
-  indexOf(id: NodeId, from = 0): number {
-    return this.ids.indexOf(id, from);
+  /**
+   * Row of `id`, or -1. Without `from`, searches outward from the last row
+   * found: commands touch rows next to each other, so on a 200k-row list
+   * this is usually a few steps instead of a scan.
+   */
+  indexOf(id: NodeId, from?: number): number {
+    if (from !== undefined) return this.ids.indexOf(id, from);
+    const ids = this.ids;
+    const n = ids.length;
+    const h = Math.min(this.hint, n - 1);
+    for (let d = 0; d <= h || h + d < n; d++) {
+      if (h + d < n && ids[h + d] === id) return (this.hint = h + d);
+      if (d > 0 && d <= h && ids[h - d] === id) return (this.hint = h - d);
+    }
+    return -1;
   }
 
   /** First row index after the subtree that starts at row `i`. */

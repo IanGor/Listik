@@ -91,7 +91,7 @@ describe('Persistence', () => {
     expect(dump(await reopen(name))).toEqual(['сжато']);
   });
 
-  it('reloads exactly what was edited, whatever the interleaving of writes and compactions', async () => {
+  it('reloads exactly what was edited, whatever the interleaving of writes and compactions', { timeout: 30_000 }, async () => {
     for (let seed = 1; seed <= 10; seed++) {
       const rand = rng(seed);
       const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
@@ -122,10 +122,13 @@ describe('Persistence', () => {
           const ops = doc.transact(() => { action(); });
           history.record({ ops, before: null, after: null }, { typing: ops[0]?.t === 'setText' });
         }
-        // Writes and compactions are deliberately not awaited, so they overlap.
+        // Writes and compactions are deliberately not awaited, and editing
+        // yields now and then, so compactions run while the log keeps growing.
         if (rand() < 0.2) void persistence.flush();
         if (rand() < 0.03) void persistence.compact();
+        if (rand() < 0.1) await new Promise((resolve) => setTimeout(resolve, 0));
       }
+      await persistence.compact();
       await persistence.flush();
       persistence.close();
       expect(dump(await reopen(name)), `seed ${seed}`).toEqual(dump(doc));

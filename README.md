@@ -11,6 +11,7 @@ npm run dev        # dev-сервер; документ хранится в Inde
 npm test           # unit-тесты (Vitest)
 npm run test:e2e   # e2e в Chromium (Playwright); системный /usr/bin/chromium или CHROMIUM_PATH
 npm run typecheck
+npm run bench      # бенчмарк на 67 тыс. и 200 тыс. bullet'ов → bench/RESULTS.md
 ```
 
 Клавиши: Enter — новый bullet / разделить, Tab / Shift+Tab — вложить / вынести, Backspace в начале — склеить с предыдущим, Ctrl+Shift+Backspace — удалить с поддеревом, Alt+Shift+↑/↓ (или Ctrl+Shift+↑/↓) — подвинуть, Ctrl+↑/↓ — свернуть / развернуть, клик по bullet'у — свернуть / развернуть, Ctrl+Z / Ctrl+Shift+Z (или Ctrl+Y) — отменить / повторить, Ctrl+F — поиск (слова, «фраза в кавычках», `#тег`; Enter — к первому совпадению), клик по `#тегу` — искать этот тег, Esc — сбросить поиск / выйти из редактирования.
