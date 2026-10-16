@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { collapseChildren, setCollapsed, setNote, setText, type Ctx } from '../model/commands';
+import { collapseChildren, setCollapsed, setNote, setText, toggleDone, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
@@ -8,6 +8,25 @@ import { TagIndex } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
 import { NodeSignals } from './node-signals';
+
+const HIDE_DONE = 'listik-hide-done';
+
+function readSetting(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSetting(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable: the setting lasts for this page.
+  }
+}
 
 /** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
 export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last'; note?: true };
@@ -53,6 +72,9 @@ export class Outliner {
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
   readonly selection: Accessor<Selection | null>;
+  /** Completed bullets are shown (Ctrl+O hides them); remembered per browser. */
+  readonly showDone: Accessor<boolean>;
+  private setShowDone: Setter<boolean>;
   /** Rows being dragged (with their subtrees), shown dimmed. */
   readonly dragged: Accessor<ReadonlySet<NodeId>>;
   readonly setDragged: Setter<ReadonlySet<NodeId>>;
@@ -92,6 +114,9 @@ export class Outliner {
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<NodeId>>(new Set());
+    const hideDone = readSetting(HIDE_DONE) === '1';
+    [this.showDone, this.setShowDone] = createSignal(!hideDone);
+    if (hideDone) this.rows.setHideDone(true);
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
@@ -234,6 +259,38 @@ export class Outliner {
     batch(() => {
       this.zoomTo(this.doc.get(z).parent);
       this.setFocus({ id: z, caret: 0 });
+    });
+  }
+
+  /** Ctrl+O: hides completed bullets, or shows them again. */
+  toggleShowDone(): void {
+    const show = !this.showDone();
+    batch(() => {
+      this.rows.setHideDone(!show);
+      this.setShowDone(show);
+      writeSetting(HIDE_DONE, show ? null : '1');
+      this.syncRows();
+      const cur = this.focus();
+      if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
+    });
+    this.notify(show ? 'Выполненные показаны' : 'Выполненные скрыты — Ctrl+O, чтобы показать');
+  }
+
+  /**
+   * Ctrl+Enter: completes the bullets, or un-completes them. When completed
+   * bullets are hidden they leave the list, and the caret moves on to the
+   * row that took their place.
+   */
+  toggleDone(ids: NodeId[], keep?: Focus): void {
+    if (!ids.length) return;
+    const first = this.rows.indexOf(ids[0]);
+    const last = this.rows.indexOf(ids[ids.length - 1]);
+    const end = last >= 0 ? this.rows.subtreeEnd(last) : -1;
+    const next = (end >= 0 ? this.rows.ids[end] : undefined) ?? (first > 0 ? this.rows.ids[first - 1] : undefined);
+    batch(() => {
+      this.run((ctx) => toggleDone(ctx, ids), keep);
+      if (keep && this.rows.indexOf(keep.id) < 0 && next) this.setFocus({ id: next, caret: 0 });
+      if (this.selection() && !this.selectedSet().size) this.select(null);
     });
   }
 

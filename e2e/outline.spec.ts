@@ -380,6 +380,22 @@ test.describe('done and notes', () => {
     expect(await outline(page)).toEqual(['Том второй']);
   });
 
+  test('Ctrl+O hides completed bullets: completing one moves the caret on; the choice is remembered', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+o');
+    await expect(page.locator('.toast')).toContainText('Выполненные скрыты');
+    await page.keyboard.press('Control+Enter');
+    expect(await outline(page)).toEqual(DEMO.filter((l) => !l.includes('Часть вторая')));
+    await expect(editing(page)).toHaveText('Том второй');
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length); // ?demo starts fresh, nothing is completed
+    await page.locator('.row .text', { hasText: 'Том второй' }).click();
+    await page.keyboard.press('Control+Enter');
+    expect(await outline(page)).toEqual(DEMO.slice(0, 5)); // still hidden after the reload
+    await page.keyboard.press('Control+o');
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
   test('notes and completion survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e-notes');
     await page.locator('.row .text').click();

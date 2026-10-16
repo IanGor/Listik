@@ -59,6 +59,8 @@ export class VisibleRows implements DocListener {
   private filter: Filter | null = null;
   /** Where the last `indexOf` found its row. */
   private hint = 0;
+  /** Completed bullets hidden (Ctrl+O). */
+  private hideDone = false;
   /** Ops patched in the current transaction, and whether patching gave up. */
   private patched = 0;
   private stale = false;
@@ -131,9 +133,22 @@ export class VisibleRows implements DocListener {
   /** Children of `n` shown below it, assuming `n` itself is shown. */
   shownChildren(n: OutlineNode): NodeId[] {
     const f = this.filter;
-    if (f?.keep.has(n.id)) return f.open.has(n.id) ? n.children : n.children.filter((c) => f.keep.has(c));
+    let shown: NodeId[];
+    if (f?.keep.has(n.id)) shown = f.open.has(n.id) ? n.children : n.children.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
-    return n.collapsed && n.id !== this.top ? [] : n.children;
+    else shown = n.collapsed && n.id !== this.top ? [] : n.children;
+    return this.hideDone && shown.length ? shown.filter((c) => !this.doc.get(c).done) : shown;
+  }
+
+  get hidesDone(): boolean {
+    return this.hideDone;
+  }
+
+  /** Leaves completed bullets (with their subtrees) out of the rows, or shows them again. */
+  setHideDone(hide: boolean): void {
+    if (this.hideDone === hide) return;
+    this.hideDone = hide;
+    this.rebuild();
   }
 
   showsChildren(n: OutlineNode): boolean {
@@ -179,7 +194,9 @@ export class VisibleRows implements DocListener {
   }
 
   op(op: Op): void {
-    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setDone') return;
+    if (op.t === 'setText' || op.t === 'setNote') return;
+    // Completion changes rows only while completed bullets are hidden.
+    if (op.t === 'setDone' && !this.hideDone) return;
     // Under a filter, edited bullets must stay visible (admit), which needs
     // the in-place patches; there, every op is patched.
     if (!this.filter && (this.stale || ++this.patched > PATCH_LIMIT)) {
@@ -200,6 +217,10 @@ export class VisibleRows implements DocListener {
         break;
       case 'setCollapsed':
         this.refreshChildren(op.id);
+        break;
+      case 'setDone':
+        if (op.to) this.hide(op.id);
+        else this.show(op.id);
         break;
     }
     this.version++;
