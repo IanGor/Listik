@@ -63,6 +63,22 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       });
   }
 
-  // Native undo would desync the DOM from the model; app-level undo comes with history (M2).
-  if (mod && (e.code === 'KeyZ' || e.code === 'KeyY')) e.preventDefault();
+  onUndoKeys(e, o);
+}
+
+/**
+ * Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y. Matched by physical key, so they
+ * work in any keyboard layout. The browser's own undo never runs: it would
+ * desync the DOM from the model.
+ */
+export function onUndoKeys(e: KeyboardEvent, o: Outliner): void {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (e.code === 'KeyZ') {
+    e.preventDefault();
+    if (e.shiftKey) o.redo();
+    else o.undo();
+  } else if (e.code === 'KeyY') {
+    e.preventDefault();
+    o.redo();
+  }
 }

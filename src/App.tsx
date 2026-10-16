@@ -1,16 +1,38 @@
+import { Match, Switch, createResource } from 'solid-js';
 import { demoDoc, sampleDoc } from './dev/sample';
+import { Persistence } from './persist/idb';
 import { Outline } from './view/Outline';
 import { Outliner } from './view/outliner';
 
-// Until persistence lands (M2) the outline lives in memory: a small demo,
-// or `?sample=200000` for a synthetic document at "War and Peace" scale.
-const sample = Number(new URLSearchParams(location.search).get('sample'));
-const started = performance.now();
-const outliner = new Outliner(sample > 0 ? sampleDoc(sample) : demoDoc());
-if (sample > 0) {
-  console.info(`sample: ${outliner.rows.length} rows in ${Math.round(performance.now() - started)} ms`);
+/**
+ * The outline is stored in IndexedDB (`?db=name` picks the database).
+ * `?demo` and `?sample=200000` open in-memory documents instead and never
+ * touch stored data.
+ */
+async function load(): Promise<Outliner> {
+  const params = new URLSearchParams(location.search);
+  const sample = Number(params.get('sample'));
+  if (sample > 0) {
+    const started = performance.now();
+    const outliner = new Outliner(sampleDoc(sample));
+    console.info(`sample: ${outliner.rows.length} rows in ${Math.round(performance.now() - started)} ms`);
+    return outliner;
+  }
+  if (params.has('demo')) return new Outliner(demoDoc());
+  const started = performance.now();
+  const { doc } = await Persistence.open(params.get('db') ?? 'listik');
+  console.info(`loaded ${doc.nodes.size - 1} bullets in ${Math.round(performance.now() - started)} ms`);
+  return new Outliner(doc);
 }
 
 export default function App() {
-  return <Outline o={outliner} />;
+  const [outliner] = createResource(load);
+  return (
+    <Switch>
+      <Match when={outliner.error}>
+        <p class="message">Не удалось загрузить документ: {String(outliner.error)}</p>
+      </Match>
+      <Match when={outliner()}>{(o) => <Outline o={o()} />}</Match>
+    </Switch>
+  );
 }

@@ -104,7 +104,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       el.textContent = t.replace(/\n/g, ' ');
       setCaret(el, caret);
     }
-    o.run((ctx) => cmd.setText(ctx, id, el.textContent ?? ''));
+    o.type(id, el.textContent ?? '');
   };
 
   const onPaste = (e: ClipboardEvent) => {
@@ -117,8 +117,15 @@ function Editable(props: { o: Outliner; id: NodeId }) {
     o.run((ctx) => cmd.insertText(ctx, id, start, end, lines));
   };
 
+  // Undo/redo from the browser's menu bypasses keydown.
   const onBeforeInput = (e: InputEvent) => {
-    if (e.inputType === 'historyUndo' || e.inputType === 'historyRedo') e.preventDefault();
+    if (e.inputType === 'historyUndo') {
+      e.preventDefault();
+      o.undo();
+    } else if (e.inputType === 'historyRedo') {
+      e.preventDefault();
+      o.redo();
+    }
   };
 
   return (

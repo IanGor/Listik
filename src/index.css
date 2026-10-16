@@ -96,3 +96,10 @@ body {
   outline: none;
   cursor: text;
 }
+
+.message {
+  max-width: 100ch;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: var(--muted);
+}

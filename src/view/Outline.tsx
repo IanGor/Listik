@@ -1,4 +1,5 @@
 import { For, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { onUndoKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Virtualizer } from './virtualizer';
@@ -96,6 +97,13 @@ export function Outline(props: { o: Outliner }) {
     });
     resize.observe(scroller);
     onCleanup(() => resize.disconnect());
+
+    // Undo/redo also work when no row is being edited; the editing row handles its own keys.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.target as HTMLElement).isContentEditable) onUndoKeys(e, o);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
   });
 
   const ensureVisible = (i: number) => {

@@ -25,7 +25,7 @@ const DEMO = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?demo');
   await expect(page.locator('.row')).toHaveCount(DEMO.length);
 });
 
@@ -122,6 +122,66 @@ test('pasting several lines creates bullets', async ({ page }) => {
   });
   expect((await outline(page)).slice(-4)).toEqual(['Том второй', 'один', 'два', 'три']);
   await expect(editing(page)).toHaveText('три');
+});
+
+test('Ctrl+Z undoes a typed word and a structural change; Ctrl+Shift+Z redoes', async ({ page }) => {
+  await edit(page, 'Том второй');
+  await page.keyboard.type(' конец');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
+  expect((await outline(page)).slice(-2)).toEqual(['Том второй конец', '  ']);
+
+  await page.keyboard.press('Control+z'); // Tab
+  await page.keyboard.press('Control+z'); // Enter
+  expect((await outline(page)).slice(-1)).toEqual(['Том второй конец']);
+  await page.keyboard.press('Control+z'); // "конец"
+  await page.keyboard.press('Control+z'); // " "
+  expect(await outline(page)).toEqual(DEMO);
+  // The caret is back where typing started.
+  await page.keyboard.type('!');
+  await expect(editing(page)).toHaveText('Том второй!');
+
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+Shift+z');
+  await expect(editing(page)).toHaveText('Том второй!');
+});
+
+test('undo works in any keyboard layout and without an editing row', async ({ page }) => {
+  await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
+  expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
+  // Physical Z key; with a Russian layout the character would be "я".
+  await page.keyboard.press('Control+KeyZ');
+  expect(await outline(page)).toEqual(DEMO);
+});
+
+test.describe('persistence', () => {
+  test('edits survive a reload', async ({ page }) => {
+    await page.goto('/?db=e2e');
+    await expect(page.locator('.row')).toHaveCount(1);
+    await page.locator('.row .text').click();
+    await page.keyboard.type('Запись');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('вложенная');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('ещё одна');
+    await page.locator('.row', { hasText: 'Запись' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Запись' }).locator('.bullet').click();
+    // Writes are batched for 300 ms.
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(3);
+    expect(await outline(page)).toEqual(['Запись', '  вложенная', '  ещё одна']);
+  });
+
+  test('demo and sample documents never touch stored data', async ({ page }) => {
+    await page.goto('/?demo&db=e2e');
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' изменён');
+    await page.waitForTimeout(500);
+    await page.goto('/?db=e2e');
+    expect(await outline(page)).toEqual(['']);
+  });
 });
 
 test.describe('at scale', () => {

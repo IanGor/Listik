@@ -37,7 +37,8 @@ export interface Position {
 export type Op =
   | { t: 'insert'; parent: NodeId; node: NodeSnapshot }
   | { t: 'remove'; parent: NodeId; node: NodeSnapshot }
-  | { t: 'setText'; id: NodeId; from: string; to: string }
+  /** `at`: edit time, so replaying the op log reproduces `updated`. */
+  | { t: 'setText'; id: NodeId; from: string; to: string; at?: number }
   | { t: 'move'; id: NodeId; from: Position; to: Position }
   | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean };
 

@@ -44,7 +44,7 @@ function expand(doc: Doc, id: NodeId): void {
 
 export function setText({ doc }: Ctx, id: NodeId, text: string): void {
   const n = doc.get(id);
-  if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text });
+  if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text, at: Date.now() });
 }
 
 export function setCollapsed({ doc }: Ctx, id: NodeId, value: boolean): void {

@@ -18,7 +18,7 @@ export function invert(op: Op): Op {
     case 'remove':
       return { t: 'insert', parent: op.parent, node: op.node };
     case 'setText':
-      return { t: 'setText', id: op.id, from: op.to, to: op.from };
+      return { t: 'setText', id: op.id, from: op.to, to: op.from, at: op.at };
     case 'move':
       return { t: 'move', id: op.id, from: op.to, to: op.from };
     case 'setCollapsed':
@@ -133,7 +133,7 @@ export class Doc {
         const n = this.get(op.id);
         if (n.text !== op.from) throw new Error(`setText: stale text for ${op.id}`);
         n.text = op.to;
-        n.updated = Date.now();
+        if (op.at !== undefined) n.updated = op.at;
         break;
       }
       case 'move': {
