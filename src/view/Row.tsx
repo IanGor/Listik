@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
+import { parseIndented } from '../model/outline-text';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, selectionIn, setCaret } from './caret';
@@ -151,10 +152,10 @@ function Editable(props: { o: Outliner; id: NodeId }) {
     const pasted = e.clipboardData?.getData('text/plain');
     if (pasted == null) return;
     e.preventDefault();
-    const lines = pasted.replace(/\r\n?/g, '\n').split('\n');
-    if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
     const [start, end] = selectionIn(el) ?? [0, 0];
-    o.run((ctx) => cmd.insertText(ctx, id, start, end, lines));
+    // Several lines: an indented list (Markdown, Workflowy, plain) becomes a tree.
+    if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));
+    else o.run((ctx) => cmd.insertText(ctx, id, start, end, [pasted]));
   };
 
   // Undo/redo from the browser's menu bypasses keydown.

@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
 /** Rendered rows in the `build` format of the unit tests: 2 spaces per level. */
@@ -342,6 +343,57 @@ test('the logo goes home: out of zoom and search, top level folded, one undo ste
   await expect(page.locator('.row', { hasText: 'Том первый' }).locator('.bullet')).toHaveClass(/collapsed/);
   await page.keyboard.press('Control+z');
   expect(await outline(page)).toEqual(DEMO);
+});
+
+test.describe('export and import', () => {
+  const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
+  const item = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });
+
+  test('downloads the outline as Markdown and as OPML', async ({ page }) => {
+    await menu(page).click();
+    const [md] = await Promise.all([page.waitForEvent('download'), item(page, 'Скачать как Markdown').click()]);
+    expect(md.suggestedFilename()).toMatch(/^listik-\d{4}-\d{2}-\d{2}\.md$/);
+    const text = await readFile((await md.path())!, 'utf8');
+    expect(text.split('\n').slice(0, 2)).toEqual(['- Том первый', '  - Часть первая']);
+    expect(text).toContain('    - Так говорила в июле 1805 года');
+
+    await menu(page).click();
+    const [opml] = await Promise.all([page.waitForEvent('download'), item(page, /OPML/).click()]);
+    expect(opml.suggestedFilename()).toMatch(/\.opml$/);
+    expect(await readFile((await opml.path())!, 'utf8')).toContain('<outline text="Том первый">');
+  });
+
+  test('imports an OPML file into the current zoom, as one undo step', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await menu(page).click();
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), item(page, 'Импорт из файла…').click()]);
+    const opml = '<?xml version="1.0"?><opml version="2.0"><body><outline text="Глава I"><outline text="Москва &amp; Петербург" /></outline><outline text="Глава II" /></body></opml>';
+    await chooser.setFiles({ name: 'workflowy.opml', mimeType: 'text/xml', buffer: Buffer.from(opml) });
+    await expect(page.locator('.toast')).toContainText('Импортировано 3 пункта');
+    expect(await outline(page)).toEqual(['Глава I', '  Москва & Петербург', 'Глава II']);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual([]);
+  });
+
+  test('pasting an indented list builds a tree', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await editing(page).evaluate((el) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', '- план\n  - шаг 1\n  - шаг 2\n    - деталь\n- итог');
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    expect((await outline(page)).slice(-5)).toEqual(['план', '  шаг 1', '  шаг 2', '    деталь', 'итог']);
+  });
+
+  test('a stored document offers automatic copies into a folder', async ({ page }) => {
+    await page.goto('/?db=e2e-backup');
+    await expect(page.locator('.row')).toHaveCount(1);
+    await menu(page).click();
+    await expect(item(page, 'Автокопия в папку…')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.menu')).toHaveCount(0);
+  });
 });
 
 test.describe('theme', () => {

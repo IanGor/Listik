@@ -1,6 +1,8 @@
+import { generateKeyBetween } from 'fractional-indexing';
 import { newId, type Doc } from './doc';
+import { countTrees, type Tree } from './outline-text';
 import type { VisibleRows } from './rows';
-import type { Focus, NodeId } from './types';
+import type { Focus, NodeId, NodeSnapshot } from './types';
 
 /**
  * User-level editing actions. Each applies ops to the doc (the caller wraps
@@ -90,27 +92,64 @@ export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
   return { id: insertNew(doc, parent, doc.index(id) + 1, after), caret: 0 };
 }
 
+/** Snapshot of a tree as new nodes: fresh ids, sequential order keys. */
+function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
+  let prev: string | null = null;
+  return {
+    id: newId(), order, text: tree.text, collapsed: false, created: now, updated: now,
+    children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now)),
+  };
+}
+
 /**
- * Paste: replace [start, end) of the bullet with `lines`. Extra lines become
- * new bullets below it; the text after the selection moves to the last one.
+ * Paste: replace [start, end) of the bullet with `trees`. The first tree's
+ * text goes in at the caret and its children become the bullet's first
+ * children; the other trees become bullets below it, with their subtrees.
+ * The text after the selection moves to the end of the last tree.
  */
-export function insertText(ctx: Ctx, id: NodeId, start: number, end: number, lines: string[]): Focus {
-  const { doc } = ctx;
+export function insertTrees(ctx: Ctx, id: NodeId, start: number, end: number, trees: Tree[]): Focus {
+  const { doc, rows } = ctx;
   const n = doc.get(id);
   const before = n.text.slice(0, start);
   const after = n.text.slice(end);
-  const last = lines.length - 1;
-  if (last === 0) {
-    setText(ctx, id, before + lines[0] + after);
-    return { id, caret: start + lines[0].length };
+  if (!trees.length) {
+    setText(ctx, id, before + after);
+    return { id, caret: start };
   }
-  setText(ctx, id, before + lines[0]);
-  if (last > 1) ctx.rows.expectMany();
+  if (countTrees(trees) > 2) rows.expectMany();
+  const now = Date.now();
+  const last = trees.length - 1;
+  const [first] = trees;
+  setText(ctx, id, before + first.text + (last === 0 ? after : ''));
+  first.children.forEach((c, k) => doc.apply({ t: 'insert', parent: id, node: snapshotOf(c, doc.orderAt(id, k), now) }));
+  let focus: Focus = { id, caret: before.length + first.text.length };
   const parent = n.parent!;
   let index = doc.index(id) + 1;
-  let cur = id;
-  for (let k = 1; k <= last; k++) cur = insertNew(doc, parent, index++, k === last ? lines[k] + after : lines[k]);
-  return { id: cur, caret: lines[last].length };
+  for (let k = 1; k <= last; k++) {
+    const tree = k === last ? { ...trees[k], text: trees[k].text + after } : trees[k];
+    const node = snapshotOf(tree, doc.orderAt(parent, index++), now);
+    doc.apply({ t: 'insert', parent, node });
+    focus = { id: node.id, caret: trees[k].text.length };
+  }
+  return focus;
+}
+
+/** Paste of plain lines: each extra line becomes a bullet below. */
+export function insertText(ctx: Ctx, id: NodeId, start: number, end: number, lines: string[]): Focus {
+  return insertTrees(ctx, id, start, end, lines.map((text) => ({ text, children: [] })));
+}
+
+/** Import: the trees become the last children of `parent`. Focuses the first one. */
+export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): Focus | void {
+  if (countTrees(trees) > 2) rows.expectMany();
+  const now = Date.now();
+  let first: NodeId | undefined;
+  for (const tree of trees) {
+    const node = snapshotOf(tree, doc.orderAt(parent, doc.get(parent).children.length), now);
+    doc.apply({ t: 'insert', parent, node });
+    first ??= node.id;
+  }
+  if (first) return { id: first, caret: 0 };
 }
 
 /**

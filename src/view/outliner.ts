@@ -6,6 +6,7 @@ import { VisibleRows, keepSet } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
+import type { Backup } from '../persist/backup';
 import { NodeSignals } from './node-signals';
 
 /** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
@@ -43,6 +44,10 @@ export class Outliner {
   readonly titleRequests: Accessor<number>;
   /** Bumped by `goHome`: the view scrolls back to the top. */
   readonly homeRequests: Accessor<number>;
+  /** A short message at the bottom of the screen (import results, errors). */
+  readonly toast: Accessor<string | null>;
+  /** Automatic copies into a folder; null for in-memory documents. */
+  backup: Backup | null = null;
   private setRowsVersion: Setter<number>;
   private setFocusSignal: Setter<FocusRequest | null>;
   private setQuerySignal: Setter<string>;
@@ -51,6 +56,8 @@ export class Outliner {
   private setZoomSignal: Setter<NodeId | null>;
   private setTitleRequests: Setter<number>;
   private setHomeRequests: Setter<number>;
+  private setToast: Setter<string | null>;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSearch: number | null = null;
 
   constructor(doc: Doc) {
@@ -67,6 +74,7 @@ export class Outliner {
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
+    [this.toast, this.setToast] = createSignal<string | null>(null);
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
@@ -156,6 +164,13 @@ export class Outliner {
       this.zoomTo(this.doc.get(z).parent);
       this.setFocus({ id: z, caret: 0 });
     });
+  }
+
+  /** Shows a message for a few seconds. */
+  notify(message: string): void {
+    this.setToast(message);
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.setToast(null), 4000);
   }
 
   /** Ctrl+F: put the caret into the search box. */

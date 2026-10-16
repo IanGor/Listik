@@ -29,6 +29,7 @@
   --ring: rgb(204 120 92 / 0.22);
   --selection: rgb(204 120 92 / 0.24);
   --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
+  --shadow-pop: light-dark(0 12px 32px rgb(31 30 28 / 0.12), 0 12px 32px rgb(0 0 0 / 0.5));
 
   /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
      otherwise whatever the OS/browser maps `monospace` to. */
@@ -569,5 +570,101 @@ mark,
   *::before,
   *::after {
     transition-duration: 0ms !important;
+  }
+}
+
+/* --- Menu and toast --------------------------------------------------------- */
+
+.topbar-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.menu-anchor {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 300px;
+  padding: 6px;
+  font-size: 14px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+
+.menu button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px;
+  text-align: left;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.menu button:hover {
+  background: var(--surface);
+}
+
+.menu button.attention {
+  color: var(--link);
+}
+
+.menu .hint {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--hairline);
+}
+
+.menu-note {
+  margin: 6px 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.menu-note b {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 30;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 12px 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--canvas);
+  background: var(--text);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  transform: translateX(-50%);
+  animation: toast-in 240ms var(--ease-out);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
   }
 }

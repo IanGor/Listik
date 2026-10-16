@@ -1,4 +1,5 @@
 import { Show } from 'solid-js';
+import { DocumentMenu } from './Menu';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
 import { setTheme, theme } from './theme';
@@ -17,7 +18,10 @@ export function TopBar(props: { o: Outliner }) {
         Listik
       </button>
       <SearchBar o={props.o} />
-      <ThemeToggle />
+      <div class="topbar-actions">
+        <DocumentMenu o={props.o} />
+        <ThemeToggle />
+      </div>
     </header>
   );
 }

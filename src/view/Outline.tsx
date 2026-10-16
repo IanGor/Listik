@@ -178,6 +178,7 @@ export function Outline(props: { o: Outliner }) {
   return (
     <div class="outline">
       <TopBar o={o} />
+      <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
       <Show when={o.zoom()} keyed>{(id) => <ZoomHeader o={o} id={id} />}</Show>
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
         <div class="spacer" style={{ height: `${total() + 2 * PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
