@@ -1,0 +1,98 @@
+:root {
+  /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
+     otherwise whatever the OS/browser maps `monospace` to. */
+  --font-text: ui-monospace, monospace;
+  /* Must stay explicit: a bare `monospace` family otherwise falls back to
+     the browser's 13px default. */
+  --font-size: 15px;
+  --line-height: 1.5;
+  /* Indent per nesting level, in character cells. The height estimate in
+     Outline.tsx assumes 2ch here and 2ch for bullet + gap. */
+  --indent: 2ch;
+
+  --fg: #1f2328;
+  --muted: #8b949e;
+  --halo: #d0d7de;
+  --bg: #ffffff;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e6edf3;
+    --muted: #7d8590;
+    --halo: #30363d;
+    --bg: #0d1117;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-text);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+}
+
+.scroller {
+  height: 100%;
+  overflow-y: auto;
+  /* Scroll anchoring is done by hand in Outline.tsx. */
+  overflow-anchor: none;
+}
+
+.spacer {
+  position: relative;
+  max-width: 100ch;
+  margin: 0 auto;
+}
+
+.window {
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 1rem;
+}
+
+.probe {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre;
+}
+
+.row {
+  display: flex;
+  gap: 1ch;
+  padding: 1px 0;
+}
+
+.bullet {
+  flex: none;
+  width: 1ch;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Collapsed with hidden children: a halo, as in Workflowy. */
+.bullet.collapsed {
+  border-radius: 50%;
+  background: var(--halo);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  min-height: 1lh;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
