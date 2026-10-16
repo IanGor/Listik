@@ -1,5 +1,6 @@
 import { Doc } from '../model/doc';
 import type { NodeId, Op } from '../model/types';
+import { own } from '../util/own';
 
 /**
  * One node; `parent` is the index of the parent's row, -1 for the root.
@@ -39,17 +40,24 @@ export function serialize(doc: Doc): string {
   return JSON.stringify(snapshot);
 }
 
-/** Bulk load: fills the node map directly, bypassing ops (nothing is subscribed yet). */
+
+/**
+ * Bulk load: fills the node map directly, bypassing ops (nothing is subscribed
+ * yet). Strings are copied out of the snapshot (`own`): on 200k bullets the
+ * doc takes 63 MB instead of 113 MB, for ~70 ms more loading.
+ */
 export function deserialize(json: string): Doc {
   const s = JSON.parse(json) as Snapshot;
   if (s.v !== 1 && s.v !== 2) throw new Error(`Unsupported snapshot version ${s.v}`);
   const doc = new Doc(s.root);
   const ids = new Array<NodeId>(s.rows.length);
-  s.rows.forEach(([id, p, order, text, collapsed, created, updated, done, note], i) => {
+  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note], i) => {
     const parent = p < 0 ? s.root : ids[p];
+    const id = own(rawId);
     ids[i] = id;
     doc.nodes.set(id, {
-      id, parent, children: [], order, text, note: note ?? '', collapsed: collapsed === 1, done: done === 1, created, updated,
+      id, parent, children: [], order: own(order), text: own(text), note: note ? own(note) : '',
+      collapsed: collapsed === 1, done: done === 1, created, updated,
     });
     doc.get(parent).children.push(id);
   });

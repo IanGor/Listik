@@ -1,4 +1,5 @@
 import type { Doc } from './doc';
+import { own } from '../util/own';
 import type { NodeId } from './types';
 
 /** A bullet with its children, outside any document: what import, export and paste exchange. */
@@ -47,14 +48,14 @@ export function parseIndented(text: string): Tree[] {
     const marker = MARKER.exec(body);
     const last = stack[stack.length - 1];
     if (!marker && last?.listed && indent > last.indent && !HEADING.test(body)) {
-      last.node.note = last.node.note ? `${last.node.note}\n${body}` : body;
+      last.node.note = last.node.note ? `${last.node.note}\n${body}` : own(body);
       continue;
     }
     body = marker ? body.slice(marker[0].length) : body.replace(HEADING, '');
-    const node: Tree = { text: body, children: [] };
+    const node: Tree = { text: own(body), children: [] };
     const box = marker && CHECKBOX.exec(body);
     if (box) {
-      node.text = body.slice(box[0].length);
+      node.text = own(body.slice(box[0].length));
       if (box[1] !== ' ') node.done = true;
     }
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();

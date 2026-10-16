@@ -57,6 +57,8 @@ async function modelPass(page: Page, n: number) {
     };
     const gc = (globalThis as { gc?: () => void }).gc;
     const heap = () => {
+      // Twice: one pass can leave large strings and their slices for the next.
+      gc?.();
       gc?.();
       return (performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? 0;
     };
@@ -64,12 +66,13 @@ async function modelPass(page: Page, n: number) {
     const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
 
     // Seed the database with a snapshot of a synthetic document.
-    const heapBefore = heap();
-    const generated = sampleDoc(n);
+    let generated: ReturnType<typeof sampleDoc> | null = sampleDoc(n);
+    const nodes = generated.nodes.size - 1;
     let chars = 0;
     for (const node of generated.nodes.values()) chars += node.text.length;
     let json = '';
-    const serializeMs = time(() => { json = serialize(generated); });
+    const serializeMs = time(() => { json = serialize(generated!); });
+    generated = null;
     const snapshotChars = json.length;
     const seedDb = await openDb(db);
     await writeSnapshot(seedDb, json);
@@ -78,19 +81,30 @@ async function modelPass(page: Page, n: number) {
     await done(clear);
     seedDb.close();
     json = '';
+    // Memory is measured from here: the generated doc and the snapshot string are gone.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const heapBefore = heap();
 
     // Load, then build what the app builds on top of the doc.
     let s = now();
     const { doc, persistence } = await Persistence.open(db);
     const openMs = now() - s;
+    const heapDoc = heap();
     let rows!: InstanceType<typeof VisibleRows>;
     let tags!: InstanceType<typeof TagIndex>;
     let text!: InstanceType<typeof TextIndex>;
     const rowsMs = time(() => { rows = new VisibleRows(doc); });
     const tagsMs = time(() => { tags = new TagIndex(doc); });
+    const heapIndexes = heap();
     text = new TextIndex(doc);
     const textMs = time(() => text.warmUp());
-    const heapMb = (heap() - heapBefore) / 1e6;
+    const heapAll = heap();
+    const memory = {
+      doc: (heapDoc - heapBefore) / 1e6,
+      rowsAndTags: (heapIndexes - heapDoc) / 1e6,
+      search: (heapAll - heapIndexes) / 1e6,
+      total: (heapAll - heapBefore) / 1e6,
+    };
     const ctx = { doc, rows };
     const pick = () => rows.ids[Math.floor(rand() * rows.length)];
 
@@ -178,8 +192,8 @@ async function modelPass(page: Page, n: number) {
     reopened.persistence.close();
 
     return {
-      nodes: generated.nodes.size - 1, chars, snapshotChars, serializeMs, openMs, openWithLogMs,
-      rowsMs, tagsMs, textMs, heapMb, typing: stats(typing), enter: stats(enter), indent: stats(indent),
+      nodes, chars, snapshotChars, serializeMs, openMs, openWithLogMs,
+      rowsMs, tagsMs, textMs, memory, typing: stats(typing), enter: stats(enter), indent: stats(indent),
       flushMs, topTag, topCount, filterMs, filterRows, clearMs, searches,
       workerCompactMs, workerStallMs, mainCompactMs, mainStallMs,
     };
@@ -307,7 +321,8 @@ try {
       ['Загрузка из IndexedDB (снимок)', ms(m.openMs)],
       ['Загрузка из IndexedDB (снимок + журнал 10 тыс. ops)', ms(m.openWithLogMs)],
       ['Видимые строки / индекс тегов / индекс текста (в простое)', `${ms(m.rowsMs)} / ${ms(m.tagsMs)} / ${ms(m.textMs)}`],
-      ['Память: документ + индексы (куча JS)', `${Math.round(m.heapMb)} МБ`, '< 200 МБ'],
+      ['Память: всё вместе (куча JS после сборки мусора)', `${Math.round(m.memory.total)} МБ`, '< 200 МБ'],
+      ['— документ / строки и теги / копия текстов для поиска', `${Math.round(m.memory.doc)} / ${Math.round(m.memory.rowsAndTags)} / ${Math.round(m.memory.search)} МБ`],
       ['**Правка** (p50 / p95)', ''],
       ['Символ: работа (обработчик + вёрстка) / до кадра (UI)', `${pct(ui.keystroke.work)}; ${pct(ui.keystroke.frame)}`, 'работа < 16 мс'],
       ['Enter: работа / до кадра (UI)', `${pct(ui.enter.work)}; ${pct(ui.enter.frame)}`, 'работа < 16 мс'],
