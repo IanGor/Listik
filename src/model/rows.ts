@@ -22,11 +22,21 @@ export interface Filter {
 }
 
 /**
- * Matches plus all their ancestors. Always includes the root, so that no
- * matches shows nothing rather than everything.
+ * Ops one transaction may patch in place. Past this (collapse all, a long
+ * paste, their undo), rows stop patching and are rebuilt once on commit,
+ * which beats hundreds of splices on a 200k-row list. Commands read rows
+ * mid-transaction only before their first few ops, so they never see the
+ * stale list.
  */
-export function keepSet(doc: Doc, matches: Iterable<NodeId>): Set<NodeId> {
-  const keep = new Set<NodeId>([doc.root]);
+const PATCH_LIMIT = 16;
+
+/**
+ * Matches plus their ancestors up to `top` (the root, or the zoomed-in
+ * bullet). Always includes `top`, so that no matches shows nothing rather
+ * than everything.
+ */
+export function keepSet(doc: Doc, matches: Iterable<NodeId>, top: NodeId = doc.root): Set<NodeId> {
+  const keep = new Set<NodeId>([top]);
   for (const id of matches) {
     for (let p: NodeId | null = id; p !== null && !keep.has(p); p = doc.get(p).parent) keep.add(p);
   }
@@ -43,15 +53,21 @@ export class VisibleRows implements DocListener {
   depths: number[] = [];
   /** Bumped on every change; the view subscribes to this. */
   version = 0;
+  /** Whose children are the top-level rows: the root, or the zoomed-in bullet. */
+  top: NodeId;
   private doc: Doc;
   private filter: Filter | null = null;
   /** Where the last `indexOf` found its row. */
   private hint = 0;
+  /** Ops patched in the current transaction, and whether patching gave up. */
+  private patched = 0;
+  private stale = false;
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
 
   constructor(doc: Doc) {
     this.doc = doc;
+    this.top = doc.root;
     this.rebuild();
     this.unsubscribe = doc.subscribe(this);
   }
@@ -78,6 +94,21 @@ export class VisibleRows implements DocListener {
     this.rebuild();
   }
 
+  /** Zoom: show the subtree of `top` (its children at depth 0). */
+  setTop(top: NodeId): void {
+    this.top = top;
+    this.hint = 0;
+    this.rebuild();
+  }
+
+  /** Is `id` strictly inside the subtree shown (below `top`)? */
+  contains(id: NodeId): boolean {
+    for (let p = this.doc.get(id).parent; p !== null; p = this.doc.get(p).parent) {
+      if (p === this.top) return true;
+    }
+    return false;
+  }
+
   /** Under a filter: is the node shown as part of a match's path (folding then is filter-only)? */
   onPath(id: NodeId): boolean {
     return !!this.filter?.keep.has(id);
@@ -101,7 +132,8 @@ export class VisibleRows implements DocListener {
   shownChildren(n: OutlineNode): NodeId[] {
     const f = this.filter;
     if (f?.keep.has(n.id)) return f.open.has(n.id) ? n.children : n.children.filter((c) => f.keep.has(c));
-    return n.collapsed ? [] : n.children;
+    // The zoomed-in bullet always shows its children, whatever its own collapsed state.
+    return n.collapsed && n.id !== this.top ? [] : n.children;
   }
 
   showsChildren(n: OutlineNode): boolean {
@@ -141,15 +173,21 @@ export class VisibleRows implements DocListener {
   rebuild(): void {
     this.ids = [];
     this.depths = [];
-    for (const c of this.shownChildren(this.doc.get(this.doc.root))) this.collect(c, 0, this.ids, this.depths);
+    for (const c of this.shownChildren(this.doc.get(this.top))) this.collect(c, 0, this.ids, this.depths);
     this.version++;
     for (const l of this.listeners) l.reset?.();
   }
 
   op(op: Op): void {
+    if (op.t === 'setText') return;
+    // Under a filter, edited bullets must stay visible (admit), which needs
+    // the in-place patches; there, every op is patched.
+    if (!this.filter && (this.stale || ++this.patched > PATCH_LIMIT)) {
+      this.stale = true;
+      this.version++;
+      return;
+    }
     switch (op.t) {
-      case 'setText':
-        return;
       case 'insert':
         this.show(op.node.id);
         break;
@@ -165,6 +203,31 @@ export class VisibleRows implements DocListener {
         break;
     }
     this.version++;
+  }
+
+  /**
+   * A command about to apply many ops says so up front: rows skip patching
+   * for the rest of the transaction and rebuild once on commit. (Without the
+   * hint they switch over after PATCH_LIMIT ops anyway.)
+   */
+  expectMany(): void {
+    if (!this.filter) this.stale = true;
+  }
+
+  commit(): void {
+    this.settle();
+  }
+
+  rollback(): void {
+    this.settle();
+  }
+
+  /** End of a transaction: rebuild if patching gave up. */
+  private settle(): void {
+    this.patched = 0;
+    if (!this.stale) return;
+    this.stale = false;
+    this.rebuild();
   }
 
   /** Appends rows for `id` and its shown descendants, in pre-order. */
@@ -193,13 +256,14 @@ export class VisibleRows implements DocListener {
   /** Inserts rows for a node that is already in its final place in the doc. */
   private show(id: NodeId): void {
     const n = this.doc.get(id);
+    if (!this.contains(id)) return;
     if (this.filter) {
       const anchor = this.admit(n);
       if (anchor !== n.parent) return this.refreshChildren(anchor);
     }
     const parent = this.doc.get(n.parent!);
     let parentRow = -1;
-    if (parent.id !== this.doc.root) {
+    if (parent.id !== this.top) {
       parentRow = this.indexOf(parent.id);
       if (parentRow < 0) return;
     }
@@ -216,12 +280,12 @@ export class VisibleRows implements DocListener {
   /**
    * Under a filter, a node that is inserted or moved stays visible: its
    * hidden ancestors join the path, and so does the node if its parent shows
-   * only the path. Returns the nearest ancestor that is on screen (or the root).
+   * only the path. Returns the nearest ancestor that is on screen (or `top`).
    */
   private admit(n: OutlineNode): NodeId {
     const f = this.filter!;
     let anchor = n.parent!;
-    while (anchor !== this.doc.root && this.indexOf(anchor) < 0) {
+    while (anchor !== this.top && this.indexOf(anchor) < 0) {
       f.keep.add(anchor);
       anchor = this.doc.get(anchor).parent!;
     }
@@ -234,7 +298,7 @@ export class VisibleRows implements DocListener {
   }
 
   private refreshChildren(id: NodeId): void {
-    if (id === this.doc.root) return this.rebuild();
+    if (id === this.top) return this.rebuild();
     const i = this.indexOf(id);
     if (i < 0) return;
     this.removeRows(i + 1, this.subtreeEnd(i));

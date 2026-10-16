@@ -1,8 +1,11 @@
-import { For, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { appendChild } from '../model/commands';
 import { onGlobalKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { TopBar } from './TopBar';
+import { ZoomHeader } from './ZoomHeader';
+import { syncZoomWithHash } from './zoom-hash';
 import { Virtualizer } from './virtualizer';
 
 /** Space above the first and below the last row, px. */
@@ -10,7 +13,9 @@ const PAD = 32;
 /** Rows rendered beyond the viewport on each side, px. */
 const OVERSCAN = 600;
 /** Vertical padding of `.row`, px. */
-const ROW_PAD = 6;
+const ROW_PAD = 10;
+/** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
+const ADD_HEIGHT = 44;
 
 /**
  * The scrollable outline. Only rows near the viewport are in the DOM; they
@@ -22,6 +27,7 @@ export function Outline(props: { o: Outliner }) {
   let scroller!: HTMLDivElement;
   let windowEl!: HTMLDivElement;
   let probe!: HTMLSpanElement;
+  let indentProbe!: HTMLSpanElement;
 
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewport, setViewport] = createSignal(0);
@@ -44,6 +50,9 @@ export function Outline(props: { o: Outliner }) {
     layout();
     return v.total;
   });
+  /** Zoomed in, as in Workflowy: a "+" under the list adds a bullet without the keyboard. */
+  const showAdd = () => !!o.zoom() && !o.filter();
+  const addBullet = () => o.run((ctx) => appendChild(ctx, o.rows.top));
 
   const rowObserver = new ResizeObserver((entries) => {
     const [start] = range();
@@ -76,9 +85,11 @@ export function Outline(props: { o: Outliner }) {
     const ch = probe.getBoundingClientRect().width / 10;
     const lh = parseFloat(getComputedStyle(windowEl).lineHeight) || 20;
     const cols = Math.max(20, Math.floor(windowEl.clientWidth / ch));
+    // --indent changes with the viewport (index.css), so it is measured, not assumed.
+    const indent = indentProbe.getBoundingClientRect().width / ch;
     v.setEstimate((id, depth) => {
       const len = o.doc.nodes.get(id)?.text.length ?? 0;
-      const perLine = Math.max(10, cols - 2 * depth - 2); // --indent is 2ch; bullet + gap is 2ch
+      const perLine = Math.max(10, Math.floor(cols - indent * depth - 2)); // bullet + gap is 2ch
       return Math.max(1, Math.ceil(len / perLine)) * lh + ROW_PAD;
     });
     const [start] = range();
@@ -105,6 +116,10 @@ export function Outline(props: { o: Outliner }) {
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
       if (e.key === 'Escape' && (o.query() || o.filter())) return o.setQuery('', true);
+      if (e.key === 'ArrowLeft' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        return o.zoomOut();
+      }
       onGlobalKeys(e, o);
     };
     window.addEventListener('keydown', onKeyDown);
@@ -123,6 +138,20 @@ export function Outline(props: { o: Outliner }) {
     scroller.scrollTop = next;
     setScrollTop(scroller.scrollTop);
   };
+
+  // Zooming starts at the top of the new level (zooming out then scrolls to the
+  // bullet we left, through the focus effect below).
+  createEffect(on(o.zoom, () => {
+    scroller.scrollTop = 0;
+    setScrollTop(0);
+  }, { defer: true }));
+
+  syncZoomWithHash(o);
+
+  createEffect(on(o.homeRequests, () => {
+    scroller.scrollTop = 0;
+    setScrollTop(0);
+  }, { defer: true }));
 
   // A new search shows its results from the top.
   createEffect(on(o.filter, (f) => {
@@ -149,14 +178,31 @@ export function Outline(props: { o: Outliner }) {
   return (
     <div class="outline">
       <TopBar o={o} />
+      <Show when={o.zoom()} keyed>{(id) => <ZoomHeader o={o} id={id} />}</Show>
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-        <div class="spacer" style={{ height: `${total() + 2 * PAD}px` }}>
+        <div class="spacer" style={{ height: `${total() + 2 * PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
+          <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
           <div ref={windowEl} class="window" style={{ transform: `translateY(${PAD + v.offsetOf(range()[0])}px)` }}>
             <For each={ids()}>
               {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} />}
             </For>
           </div>
+          <Show when={showAdd()}>
+            {/* Sits right under the last row: the rows above it end at `total`. */}
+            <button
+              type="button"
+              class="add"
+              style={{ top: `${PAD + total()}px` }}
+              title="Новый пункт"
+              aria-label="Новый пункт"
+              onClick={addBullet}
+            >
+              <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+                <path d="M6 1.5v9M1.5 6h9" />
+              </svg>
+            </button>
+          </Show>
         </div>
       </div>
     </div>

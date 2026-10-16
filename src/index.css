@@ -1,40 +1,48 @@
 /*
- * Layout after Workflowy, colours from Claude's palette. Every colour token
- * holds its light and dark value: `light-dark()` resolves them by
- * `color-scheme`, which follows the system until a theme is picked
+ * Layout after Workflowy, colours from Claude's palette, a writing column
+ * after iA Writer. Structure is felt, not seen (Linear): hairlines are soft,
+ * depth comes from small lightness steps, coral marks state only.
+ *
+ * Every colour token holds its light and dark value: `light-dark()` resolves
+ * them by `color-scheme`, which follows the system until a theme is picked
  * (`data-theme`, see view/theme.ts).
  */
 :root {
   color-scheme: light dark;
 
-  --canvas: light-dark(#faf9f5, #1f1e1b);
-  /* Inputs and other raised surfaces. */
-  --surface: light-dark(#f5f0e8, #252320);
-  --text: light-dark(#252523, #f0ede6);
+  --canvas: light-dark(#faf9f5, #1c1b18);
+  /* Raised surfaces, one step up: inputs, the edited row, chips. */
+  --surface: light-dark(#f2ede4, #262420);
+  /* Pressed / hovered surfaces, one more step. */
+  --surface-2: light-dark(#e9e2d6, #2f2c27);
+  --text: light-dark(#1f1e1c, #f0ede6);
   --muted: light-dark(#6c6a64, #a09d96);
-  --bullet: light-dark(#8e8b82, #8e8b82);
-  --hairline: light-dark(#e6dfd8, #36332e);
-  --guide: light-dark(#e6dfd8, #302d29);
-  --halo: light-dark(#e8e0d2, #3a3631);
+  --faint: light-dark(#8e8b82, #7d7a73);
+  --hairline: light-dark(#e6dfd8, #33302b);
+  --guide: light-dark(#e3dcd2, #2f2c28);
+  --halo: light-dark(#e6ddcf, #3a3631);
   /* Coral. Tag text is a step darker on cream and lighter on dark, for contrast. */
   --primary: #cc785c;
-  --link: light-dark(#a9583e, #e0957a);
-  --hit: light-dark(rgb(232 165 90 / 0.38), rgb(232 165 90 / 0.3));
-  --ring: rgb(204 120 92 / 0.2);
-  --selection: rgb(204 120 92 / 0.25);
+  --link: light-dark(#a9583e, #e3997e);
+  --chip: light-dark(rgb(204 120 92 / 0.1), rgb(204 120 92 / 0.16));
+  --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
+  --ring: rgb(204 120 92 / 0.22);
+  --selection: rgb(204 120 92 / 0.24);
+  --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
 
   /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
      otherwise whatever the OS/browser maps `monospace` to. */
   --font-text: ui-monospace, monospace;
   /* Must stay explicit: a bare `monospace` family otherwise falls back to
      the browser's 13px default. */
-  --font-size: 15px;
-  --line-height: 1.5;
-  /* Indent per nesting level, in character cells. The height estimate in
-     Outline.tsx assumes 2ch here and 2ch for bullet + gap. */
-  --indent: 2ch;
-  /* Width of the text column, as in Workflowy. */
-  --column: 80ch;
+  --font-size: 17px;
+  --line-height: 1.6;
+  /* Indent per nesting level and the text column, in character cells. The
+     height estimate in Outline.tsx reads --indent and assumes 2ch for
+     bullet + gap. */
+  --indent: 2.5ch;
+  --column: 72ch;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root[data-theme='light'] {
@@ -59,6 +67,7 @@ body {
   font-size: var(--font-size);
   line-height: var(--line-height);
   caret-color: var(--primary);
+  -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
@@ -68,6 +77,11 @@ body {
 button {
   font: inherit;
   color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .outline {
@@ -81,27 +95,51 @@ button {
 .topbar {
   display: flex;
   flex: none;
-  gap: 16px;
+  gap: 20px;
   align-items: center;
-  height: 52px;
-  padding: 0 16px;
+  height: 64px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--hairline);
 }
 
 .brand {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+  height: 40px;
+  padding: 0 12px;
+  margin-left: -12px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 160ms var(--ease-out);
 }
 
+.brand:hover {
+  background: var(--surface);
+}
+
+.brand:active {
+  background: var(--surface-2);
+}
+
+/* The mark: one coral pixel. */
 .brand::before {
   content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
   background: var(--primary);
+  transition: transform 200ms var(--ease-out);
+}
+
+.brand:hover::before {
+  transform: rotate(45deg);
 }
 
 .searchbar {
@@ -110,17 +148,24 @@ button {
   gap: 12px;
   align-items: center;
   max-width: var(--column);
-  height: 34px;
+  height: 44px;
   margin: 0 auto;
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--surface);
+  font-size: 15px;
+  transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out), background 160ms var(--ease-out);
+}
+
+.searchbar:hover {
+  background: var(--surface-2);
 }
 
 .searchbar:focus-within {
+  background: var(--canvas);
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--ring);
+  box-shadow: 0 0 0 4px var(--ring);
 }
 
 .searchbar > svg {
@@ -140,7 +185,7 @@ button {
 }
 
 .search::placeholder {
-  color: var(--muted);
+  color: var(--faint);
 }
 
 .count {
@@ -148,29 +193,71 @@ button {
   white-space: nowrap;
 }
 
+/* A keycap hint. */
+kbd {
+  flex: none;
+  padding: 1px 7px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+}
+
+.searchbar:focus-within kbd {
+  display: none;
+}
+
 .searchbar .clear {
-  padding: 0 2px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   color: var(--muted);
   background: none;
   border: none;
+  border-radius: 50%;
   cursor: pointer;
+}
+
+.searchbar .clear:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .icon-button {
   display: grid;
   flex: none;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   padding: 0;
+  color: var(--muted);
   border: 1px solid var(--hairline);
   border-radius: 50%;
   background: var(--canvas);
   cursor: pointer;
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out);
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .icon-button:active {
-  background: var(--surface);
+  background: var(--surface-2);
+}
+
+/* Theme switch: the new theme opens as a circle from the button (TopBar.tsx). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 /* --- Outline ------------------------------------------------------------ */
@@ -186,7 +273,7 @@ button {
 
 .spacer {
   position: relative;
-  max-width: calc(var(--column) + 5ch);
+  max-width: calc(var(--column) + 6ch);
   margin: 0 auto;
 }
 
@@ -194,8 +281,8 @@ button {
 .window {
   position: absolute;
   top: 0;
-  left: 3ch;
-  right: 2ch;
+  left: 3.5ch;
+  right: 2.5ch;
 }
 
 .probe {
@@ -204,12 +291,16 @@ button {
   white-space: pre;
 }
 
+.indent-probe {
+  width: var(--indent);
+}
+
 /* Vertical padding must match ROW_PAD in Outline.tsx. */
 .row {
   position: relative;
   display: flex;
   gap: 1ch;
-  padding: 3px 0;
+  padding: 5px 0;
 }
 
 /* Thin guide lines from each ancestor's bullet down through its children. */
@@ -237,15 +328,21 @@ button {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--bullet);
+  background: var(--faint);
   transform: translate(-50%, -50%);
+  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out);
 }
 
+/* The bullet is the way in (zoom): it answers the pointer. */
 .row:hover .bullet::after {
   background: var(--text);
+}
+
+.bullet:hover::after {
+  transform: translate(-50%, -50%) scale(1.45);
 }
 
 /* Hidden children: a round halo behind the bullet, as in Workflowy. */
@@ -264,23 +361,28 @@ button {
 /* Fold arrow, left of the bullet; shown on hover for bullets with children. */
 .toggle {
   position: absolute;
-  top: 3px;
-  left: calc(var(--indent) * var(--depth) - 2ch);
+  top: 5px;
+  left: calc(var(--indent) * var(--depth) - 2.5ch);
   display: grid;
   place-items: center;
-  width: 2ch;
+  width: 2.5ch;
   height: 1lh;
-  color: var(--muted);
+  color: var(--faint);
   cursor: pointer;
   opacity: 0;
+  transition: opacity 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
 .row:hover .toggle {
   opacity: 1;
 }
 
+.toggle:hover {
+  color: var(--text);
+}
+
 .toggle svg {
-  transition: transform 0.12s;
+  transition: transform 200ms var(--ease-out);
 }
 
 .toggle.open svg {
@@ -297,14 +399,27 @@ button {
   cursor: text;
 }
 
+/* The edited row sits on a soft raised surface. Drawn with a spread shadow
+   so the text does not move by a pixel when editing starts. */
+.text[contenteditable] {
+  background: var(--surface);
+  border-radius: 2px;
+  box-shadow: 0 0 0 7px var(--surface);
+}
+
+/* Tags and hits are chips, also drawn outside the text box: no reflow. */
 .tag {
   color: var(--link);
+  background: var(--chip);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--chip);
   cursor: pointer;
+  transition: background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
 
 .tag:hover,
 .tag.active {
-  text-decoration: underline;
+  --chip: light-dark(rgb(204 120 92 / 0.2), rgb(204 120 92 / 0.28));
 }
 
 mark,
@@ -312,6 +427,7 @@ mark,
   color: inherit;
   background: var(--hit);
   border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--hit);
 }
 
 .tag.hit {
@@ -323,4 +439,135 @@ mark,
   margin: 2rem auto;
   padding: 0 1rem;
   color: var(--muted);
+}
+
+/* --- Zoom ----------------------------------------------------------------- */
+
+.zoomhead {
+  flex: none;
+  width: 100%;
+  max-width: calc(var(--column) + 6ch);
+  margin: 0 auto;
+  padding: 36px 2.5ch 0 3.5ch;
+  box-sizing: border-box;
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.crumb {
+  max-width: 28ch;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+
+.crumb:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.crumbs .sep {
+  flex: none;
+  margin: 0 4px;
+  color: var(--faint);
+}
+
+.zoom-title {
+  min-height: 1lh;
+  margin-top: 14px;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+
+.zoom-title:empty::before {
+  content: 'Без названия';
+  color: var(--faint);
+}
+
+/* "+" under a zoomed-in list: a circle centred on the bullet column. */
+.add {
+  position: absolute;
+  left: calc(3.5ch + 0.5ch - 14px);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 6px;
+  padding: 0;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
+.add:hover {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+  transform: scale(1.08);
+}
+
+.add:active {
+  transform: scale(0.96);
+}
+
+/* --- Narrow screens -------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  :root {
+    --font-size: 16px;
+    --indent: 2ch;
+  }
+
+  .topbar {
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .brand {
+    font-size: 0;
+    gap: 0;
+    padding: 0 10px;
+    margin-left: -6px;
+  }
+
+  .searchbar kbd {
+    display: none;
+  }
+
+  .zoom-title {
+    font-size: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+  }
 }

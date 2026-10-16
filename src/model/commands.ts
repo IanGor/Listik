@@ -54,6 +54,26 @@ export function setCollapsed({ doc }: Ctx, id: NodeId, value: boolean): void {
   }
 }
 
+/** Collapses every child of `parent` that has children of its own (the logo: home, all folded). */
+export function collapseChildren({ doc, rows }: Ctx, parent: NodeId): void {
+  const targets = doc.get(parent).children.filter((id) => {
+    const n = doc.get(id);
+    return n.children.length > 0 && !n.collapsed;
+  });
+  if (targets.length > 1) rows.expectMany();
+  for (const id of targets) doc.apply({ t: 'setCollapsed', id, from: false, to: true });
+}
+
+/** A new empty first child: Enter in the title of a zoomed-in bullet. */
+export function prependChild({ doc }: Ctx, parent: NodeId): Focus {
+  return { id: insertNew(doc, parent, 0, ''), caret: 0 };
+}
+
+/** A new empty last child: the "+" under a zoomed-in bullet's list. */
+export function appendChild({ doc }: Ctx, parent: NodeId): Focus {
+  return { id: insertNew(doc, parent, doc.get(parent).children.length, ''), caret: 0 };
+}
+
 /** Enter: split the bullet at the caret. */
 export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
   const n = doc.get(id);
@@ -85,6 +105,7 @@ export function insertText(ctx: Ctx, id: NodeId, start: number, end: number, lin
     return { id, caret: start + lines[0].length };
   }
   setText(ctx, id, before + lines[0]);
+  if (last > 1) ctx.rows.expectMany();
   const parent = n.parent!;
   let index = doc.index(id) + 1;
   let cur = id;
@@ -131,19 +152,22 @@ export function indent({ doc }: Ctx, id: NodeId): void {
   moveTo(doc, id, prevId, doc.get(prevId).children.length);
 }
 
-/** Shift+Tab: become the next sibling of the parent. Later siblings stay where they are. */
-export function outdent({ doc }: Ctx, id: NodeId): void {
+/**
+ * Shift+Tab: become the next sibling of the parent. Later siblings stay
+ * where they are. Never leaves the zoomed-in bullet.
+ */
+export function outdent({ doc, rows }: Ctx, id: NodeId): void {
   const parent = doc.get(doc.get(id).parent!);
-  if (parent.id === doc.root) return;
+  if (parent.id === doc.root || parent.id === rows.top) return;
   moveTo(doc, id, parent.parent!, doc.index(parent.id) + 1);
 }
 
 /** Swap with the previous sibling; the first child moves to the end of the parent's previous sibling. */
-export function moveUp({ doc }: Ctx, id: NodeId): void {
+export function moveUp({ doc, rows }: Ctx, id: NodeId): void {
   const parent = doc.get(doc.get(id).parent!);
   const i = parent.children.indexOf(id);
   if (i > 0) return moveTo(doc, id, parent.id, i - 1);
-  if (parent.id === doc.root) return;
+  if (parent.id === doc.root || parent.id === rows.top) return;
   const pi = doc.index(parent.id);
   if (pi === 0) return;
   const target = doc.get(parent.parent!).children[pi - 1];
@@ -152,11 +176,11 @@ export function moveUp({ doc }: Ctx, id: NodeId): void {
 }
 
 /** Swap with the next sibling; the last child moves to the start of the parent's next sibling. */
-export function moveDown({ doc }: Ctx, id: NodeId): void {
+export function moveDown({ doc, rows }: Ctx, id: NodeId): void {
   const parent = doc.get(doc.get(id).parent!);
   const i = parent.children.indexOf(id);
   if (i < parent.children.length - 1) return moveTo(doc, id, parent.id, i + 2);
-  if (parent.id === doc.root) return;
+  if (parent.id === doc.root || parent.id === rows.top) return;
   const uncles = doc.get(parent.parent!).children;
   const pi = uncles.indexOf(parent.id);
   if (pi === uncles.length - 1) return;

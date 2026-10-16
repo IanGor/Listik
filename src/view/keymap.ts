@@ -42,6 +42,12 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       return;
     }
 
+    // Alt+→ / Alt+←: zoom into this bullet / out of the current one.
+    case 'ArrowRight':
+    case 'ArrowLeft':
+      if (!e.altKey || e.shiftKey || mod) return;
+      return handle(() => (e.key === 'ArrowRight' ? o.zoomIn(id) : o.zoomOut()));
+
     case 'ArrowUp':
     case 'ArrowDown': {
       const up = e.key === 'ArrowUp';

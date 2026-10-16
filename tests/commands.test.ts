@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  deleteNode, indent, insertText, mergeUp, moveDown, moveUp, outdent, setCollapsed, split,
+  collapseChildren, deleteNode, indent, insertText, mergeUp, moveDown, moveUp, outdent, setCollapsed, split,
 } from '../src/model/commands';
 import { checkInvariants } from '../src/model/invariants';
 import { dump, dumpRows, setup } from './helpers';
@@ -169,5 +169,14 @@ describe('setCollapsed', () => {
     const { doc, ctx, run } = setup(['a']);
     run(() => setCollapsed(ctx, 'a', true));
     expect(dump(doc)).toEqual(['a']);
+  });
+});
+
+describe('collapseChildren (the logo)', () => {
+  it('folds the top-level bullets that have children, and nothing deeper', () => {
+    const { doc, rows, ctx, run } = setup(['a', '  b', '    c', 'd', 'e [+]', '  f']);
+    run(() => collapseChildren(ctx, doc.root));
+    expect(dumpRows(rows, doc)).toEqual(['a [+]', 'd', 'e [+]']);
+    expect(doc.get('b').collapsed).toBe(false);
   });
 });

@@ -69,4 +69,37 @@ describe('VisibleRows', () => {
       expect(dumpRows(rows, doc)).toEqual(initial);
     }
   });
+
+  it('rebuilds once instead of patching for big transactions (> PATCH_LIMIT ops), with the same result', () => {
+    const lines = Array.from({ length: 150 }, (_, i) => [`top${i}`, `  kid${i}`]).flat();
+    const { doc, rows, ctx } = setup(lines);
+    const v = new Virtualizer(rows, () => 20);
+    const resets: number[] = [];
+    rows.subscribe({ reset: () => resets.push(rows.length) });
+    const check = () => {
+      const fresh = new VisibleRows(doc);
+      fresh.dispose();
+      expect(rows.ids).toEqual(fresh.ids);
+      expect(rows.depths).toEqual(fresh.depths);
+      expect(v.total).toBe(rows.length * 20);
+    };
+
+    const ops = doc.transact(() => cmd.collapseChildren(ctx, doc.root));
+    expect(ops).toHaveLength(150);
+    expect(rows.length).toBe(150);
+    expect(resets).toEqual([150]);
+    check();
+
+    doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(rows.length).toBe(300);
+    check();
+
+    // A failed big transaction is rolled back, and the rows follow.
+    expect(() => doc.transact(() => {
+      cmd.collapseChildren(ctx, doc.root);
+      throw new Error('boom');
+    })).toThrow('boom');
+    expect(rows.length).toBe(300);
+    check();
+  });
 });

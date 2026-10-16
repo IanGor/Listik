@@ -9,6 +9,8 @@ export interface DocListener {
   op?(op: Op, doc: Doc): void;
   /** Called once per transaction (or per standalone op) after all its ops. */
   commit?(ops: Op[], doc: Doc): void;
+  /** Called after a failed transaction was rolled back (no commit follows). */
+  rollback?(doc: Doc): void;
 }
 
 /** Visits every node of a snapshot subtree. */
@@ -115,6 +117,7 @@ export class Doc {
     } catch (e) {
       this.pending = null;
       for (let i = ops.length - 1; i >= 0; i--) this.applyOne(invert(ops[i]));
+      for (const l of this.listeners) l.rollback?.(this);
       throw e;
     }
     this.pending = null;

@@ -2,28 +2,35 @@ import { batch, createSignal, type Setter } from 'solid-js';
 import type { DocListener } from '../model/doc';
 import type { NodeId, Op } from '../model/types';
 
+interface Entry {
+  read: () => number;
+  write: Setter<number>;
+  /** Components holding this node (rows, the zoom title, breadcrumbs). */
+  refs: number;
+}
+
 /**
- * Per-node change signals, created only for mounted rows, so an edit
- * re-renders just the rows it touches. Changes made during a transaction
+ * Per-node change signals, kept only for nodes on screen, so an edit
+ * re-renders just what shows that node. Components `acquire` a node while
+ * mounted and `release` it on cleanup. Changes made during a transaction
  * fire together on commit, when the doc is consistent again.
  */
 export class NodeSignals implements DocListener {
-  private signals = new Map<NodeId, { read: () => number; write: Setter<number> }>();
+  private signals = new Map<NodeId, Entry>();
   private dirty = new Set<NodeId>();
 
-  /** Subscribes the current computation to changes of `id`. */
-  track(id: NodeId): void {
-    let s = this.signals.get(id);
-    if (!s) {
-      const [read, write] = createSignal(0);
-      s = { read, write };
-      this.signals.set(id, s);
-    }
-    s.read();
+  acquire(id: NodeId): void {
+    this.entry(id).refs++;
   }
 
   release(id: NodeId): void {
-    this.signals.delete(id);
+    const e = this.signals.get(id);
+    if (e && --e.refs <= 0) this.signals.delete(id);
+  }
+
+  /** Subscribes the current computation to changes of `id`. */
+  track(id: NodeId): void {
+    this.entry(id).read();
   }
 
   op(op: Op): void {
@@ -49,5 +56,15 @@ export class NodeSignals implements DocListener {
       for (const id of this.dirty) this.signals.get(id)?.write((v) => v + 1);
     });
     this.dirty.clear();
+  }
+
+  private entry(id: NodeId): Entry {
+    let e = this.signals.get(id);
+    if (!e) {
+      const [read, write] = createSignal(0);
+      e = { read, write, refs: 0 };
+      this.signals.set(id, e);
+    }
+    return e;
   }
 }

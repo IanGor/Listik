@@ -24,6 +24,7 @@ export function Row(props: RowProps) {
   const id = props.id;
   let el!: HTMLDivElement;
   onMount(() => onCleanup(props.observe(el)));
+  o.nodes.acquire(id);
   onCleanup(() => o.nodes.release(id));
 
   const node = () => {
@@ -53,8 +54,15 @@ export function Row(props: RowProps) {
     o.setFocus({ id, caret: caret ?? node()?.text.length ?? 0 });
   };
 
+  // Mousedown, not click, and no default: DOM focus stays in the row being edited.
   const onBulletMouseDown = (e: MouseEvent) => {
-    // Keep DOM focus in the row being edited.
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (node()) o.zoomTo(id);
+  };
+
+  const onToggleMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     if (node()) o.fold(id);
   };
@@ -68,8 +76,8 @@ export function Row(props: RowProps) {
       style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}
     >
       <Show when={hasChildren()}>
-        <span class="toggle" classList={{ open: open() }} onMouseDown={onBulletMouseDown} aria-hidden="true">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
+        <span class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
         </span>
       </Show>
       <span class="bullet" classList={{ collapsed: folded() }} onMouseDown={onBulletMouseDown} />

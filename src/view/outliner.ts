@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { setCollapsed, setText, type Ctx } from '../model/commands';
+import { collapseChildren, setCollapsed, setText, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
@@ -37,11 +37,20 @@ export class Outliner {
   readonly filter: Accessor<SearchFilter | null>;
   /** Bumped to move the caret into the search box (Ctrl+F). */
   readonly searchRequests: Accessor<number>;
+  /** The zoomed-in bullet, whose children are the top level; null for the whole outline. */
+  readonly zoom: Accessor<NodeId | null>;
+  /** Bumped to move the caret into the zoomed-in bullet's title. */
+  readonly titleRequests: Accessor<number>;
+  /** Bumped by `goHome`: the view scrolls back to the top. */
+  readonly homeRequests: Accessor<number>;
   private setRowsVersion: Setter<number>;
   private setFocusSignal: Setter<FocusRequest | null>;
   private setQuerySignal: Setter<string>;
   private setFilterSignal: Setter<SearchFilter | null>;
   private setSearchRequests: Setter<number>;
+  private setZoomSignal: Setter<NodeId | null>;
+  private setTitleRequests: Setter<number>;
+  private setHomeRequests: Setter<number>;
   private pendingSearch: number | null = null;
 
   constructor(doc: Doc) {
@@ -55,8 +64,18 @@ export class Outliner {
     [this.query, this.setQuerySignal] = createSignal('');
     [this.filter, this.setFilterSignal] = createSignal<SearchFilter | null>(null);
     [this.searchRequests, this.setSearchRequests] = createSignal(0);
+    [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
+    [this.titleRequests, this.setTitleRequests] = createSignal(0);
+    [this.homeRequests, this.setHomeRequests] = createSignal(0);
     doc.subscribe(this.nodes);
-    doc.subscribe({ commit: () => this.syncRows() });
+    doc.subscribe({
+      commit: () => {
+        // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
+        const z = this.zoom();
+        if (z && !doc.has(z)) this.zoomTo(null);
+        this.syncRows();
+      },
+    });
     // Ready before the first search in practice, without blocking input meanwhile.
     this.text.warmUpInIdle();
   }
@@ -84,6 +103,59 @@ export class Outliner {
   /** A click on a tag: search for it. */
   filterByTag(tag: string): void {
     this.setQuery(`#${tag}`, true);
+  }
+
+  /**
+   * Zoom into a bullet: it becomes the title, its children the top level.
+   * A search in progress is re-run within the new scope.
+   */
+  zoomTo(id: NodeId | null): void {
+    const target = id && id !== this.doc.root && this.doc.has(id) ? id : null;
+    if (target === this.zoom()) return;
+    batch(() => {
+      this.rows.setTop(target ?? this.doc.root);
+      this.setZoomSignal(target);
+      if (this.filter()) this.applyQuery();
+      this.syncRows();
+      const cur = this.focus();
+      if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
+    });
+  }
+
+  /**
+   * The logo: back to the top of the whole outline with every top-level
+   * bullet folded, an overview at a glance. Search and zoom are left; the
+   * folding is one undo step.
+   */
+  goHome(): void {
+    batch(() => {
+      this.setQuery('', true);
+      this.zoomTo(null);
+      this.run((ctx) => collapseChildren(ctx, this.doc.root));
+      this.setFocus(null);
+      this.setHomeRequests((n) => n + 1);
+    });
+  }
+
+  /** Alt+→: zoom into a bullet and edit its first child, or its title if it has none. */
+  zoomIn(id: NodeId): void {
+    batch(() => {
+      this.zoomTo(id);
+      const first = this.rows.ids[0];
+      if (first) this.setFocus({ id: first, caret: 0 });
+      // The title mounts with the new zoom: ask once it exists.
+      else queueMicrotask(() => this.setTitleRequests((n) => n + 1));
+    });
+  }
+
+  /** Alt+←: zoom out one level and edit the bullet we were in. */
+  zoomOut(): void {
+    const z = this.zoom();
+    if (!z) return;
+    batch(() => {
+      this.zoomTo(this.doc.get(z).parent);
+      this.setFocus({ id: z, caret: 0 });
+    });
   }
 
   /** Ctrl+F: put the caret into the search box. */
@@ -164,8 +236,10 @@ export class Outliner {
         const cur = this.focus();
         if (cur) this.setFocus(cur);
       } else {
-        const matches = findMatches(query, this.tags, this.text);
-        this.rows.setFilter({ keep: keepSet(this.doc, matches), open: new Set() });
+        let matches = findMatches(query, this.tags, this.text);
+        // Zoomed in: search only inside the zoomed-in bullet.
+        if (this.zoom()) matches = new Set([...matches].filter((id) => this.rows.contains(id)));
+        this.rows.setFilter({ keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });
         this.setFilterSignal({ query, matches, count: matches.size });
         this.setFocus(null);
       }
