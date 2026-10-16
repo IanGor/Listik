@@ -345,6 +345,56 @@ test('the logo goes home: out of zoom and search, top level folded, one undo ste
   expect(await outline(page)).toEqual(DEMO);
 });
 
+test.describe('done and notes', () => {
+  test('Ctrl+Enter completes a bullet and undoes like any change', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('.row', { hasText: 'Часть вторая' })).toHaveClass(/done/);
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('.row', { hasText: 'Часть вторая' })).not.toHaveClass(/done/);
+    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.row', { hasText: 'Часть вторая' })).not.toHaveClass(/done/);
+  });
+
+  test('Shift+Enter writes a note under the bullet; Esc and arrows move between text and note', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Enter');
+    const note = page.locator('.note[contenteditable]');
+    await expect(note).toBeFocused();
+    await page.keyboard.type('первая строка');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('вторая #важно');
+    await page.keyboard.press('Escape');
+    await expect(editing(page)).toHaveText('Том второй');
+    await expect(page.locator('.row', { hasText: 'Том второй' }).locator('.note')).toHaveText('первая строка\nвторая #важно');
+    await expect(page.locator('.note .tag')).toHaveText('#важно');
+    // Down from the text goes into its note.
+    await page.keyboard.press('ArrowDown');
+    await expect(note).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(editing(page)).toBeFocused();
+    // A tag in a note filters to its bullet.
+    await page.keyboard.press('Escape');
+    await page.locator('.note .tag').click();
+    expect(await outline(page)).toEqual(['Том второй']);
+  });
+
+  test('notes and completion survive a reload', async ({ page }) => {
+    await page.goto('/?db=e2e-notes');
+    await page.locator('.row .text').click();
+    await page.keyboard.type('пункт');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('заметка');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.row')).toHaveClass(/done/);
+    await expect(page.locator('.row .note')).toHaveText('заметка');
+  });
+});
+
 test.describe('export and import', () => {
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
   const item = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });

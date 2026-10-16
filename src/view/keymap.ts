@@ -16,10 +16,11 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
   };
 
   switch (e.key) {
+    // Enter splits; Ctrl/Cmd+Enter completes; Shift+Enter goes to the note.
     case 'Enter':
-      // Shift+Enter would insert a newline; bullets are single-line for now.
       return handle(() => {
-        if (e.shiftKey) return;
+        if (mod) return o.run((ctx) => cmd.toggleDone(ctx, [id]), here);
+        if (e.shiftKey) return o.setFocus({ id, caret: o.doc.get(id).note.length, note: true });
         o.run((ctx) => {
           const text = ctx.doc.get(id).text;
           if (!collapsed) cmd.setText(ctx, id, text.slice(0, start) + text.slice(end));
@@ -57,9 +58,14 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       if (mod) return handle(() => o.fold(id, up, here));
       if (e.shiftKey || e.altKey) return;
       if (up ? !caretOnFirstLine(el) : !caretOnLastLine(el)) return;
+      // Down from the text goes into its note first, if there is one.
+      if (!up && o.doc.get(id).note) return handle(() => o.setFocus({ id, x: caretX(el), line: 'first', note: true }));
       const i = o.rows.indexOf(id) + (up ? -1 : 1);
       if (i < 0 || i >= o.rows.length) return;
-      return handle(() => o.setFocus({ id: o.rows.ids[i], x: caretX(el), line: up ? 'last' : 'first' }));
+      const target = o.rows.ids[i];
+      // Up into a row with a note lands on the note's last line.
+      const note = up && o.doc.get(target).note ? ({ note: true } as const) : {};
+      return handle(() => o.setFocus({ id: target, x: caretX(el), line: up ? 'last' : 'first', ...note }));
     }
 
     // First Esc clears the search (editing goes on, now in context); the next one leaves editing.
@@ -71,6 +77,30 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
       });
   }
 
+  onGlobalKeys(e, o);
+}
+
+/** Keyboard handling in a bullet's note: Enter makes a new line; the rest leads back out. */
+export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTMLElement): void {
+  if (e.isComposing) return;
+  const mod = e.ctrlKey || e.metaKey;
+  const [start, end] = selectionIn(el) ?? [0, 0];
+  const toText = () => o.setFocus({ id, caret: o.doc.get(id).text.length });
+  const handle = (fn: () => void) => {
+    e.preventDefault();
+    fn();
+  };
+  if (e.key === 'Enter' && mod) return handle(() => o.run((ctx) => cmd.toggleDone(ctx, [id]), { id, caret: start, note: true }));
+  if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
+  if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);
+  if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !mod && caretOnFirstLine(el)) {
+    return handle(() => o.setFocus({ id, x: caretX(el), line: 'last' }));
+  }
+  if (e.key === 'ArrowDown' && !e.shiftKey && !e.altKey && !mod && caretOnLastLine(el)) {
+    const next = o.rows.ids[o.rows.indexOf(id) + 1];
+    if (next) return handle(() => o.setFocus({ id: next, x: caretX(el), line: 'first' }));
+    return;
+  }
   onGlobalKeys(e, o);
 }
 

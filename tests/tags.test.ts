@@ -75,3 +75,14 @@ describe('TagIndex', () => {
     }
   });
 });
+
+describe('notes in tags', () => {
+  it('indexes tags written in a note, and follows note edits', () => {
+    const { doc, ctx, run } = setup(['a']);
+    const index = new TagIndex(doc);
+    run(() => cmd.setNote(ctx, 'a', 'подробности #важно'));
+    expect([...index.nodesWith('важно')]).toEqual(['a']);
+    run(() => cmd.setNote(ctx, 'a', ''));
+    expect(index.nodesWith('важно').size).toBe(0);
+  });
+});

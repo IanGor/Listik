@@ -1,5 +1,5 @@
 import { walkSnapshot, type Doc, type DocListener } from './doc';
-import { splitTags, type TagIndex } from './tags';
+import { content, splitTags, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
@@ -107,7 +107,7 @@ export class TextIndex implements DocListener {
       for (let k = 0; k < 1000 && pending.length; k++) {
         const id = pending.pop()!;
         const n = this.doc.nodes.get(id);
-        if (n) texts.set(id, normalize(n.text));
+        if (n) texts.set(id, normalize(content(n)));
       }
     }
     if (!pending.length) this.pending = null;
@@ -132,17 +132,18 @@ export class TextIndex implements DocListener {
     return out;
   }
 
-  op(op: Op): void {
+  op(op: Op, doc: Doc): void {
     // Not started yet: it will be built from the doc as it is then. Bullets
     // still pending get their current text when their turn comes.
     const texts = this.texts;
     if (!texts) return;
     switch (op.t) {
       case 'setText':
-        texts.set(op.id, normalize(op.to));
+      case 'setNote':
+        texts.set(op.id, normalize(content(doc.get(op.id))));
         break;
       case 'insert':
-        walkSnapshot(op.node, (s) => texts.set(s.id, normalize(s.text)));
+        walkSnapshot(op.node, (s) => texts.set(s.id, normalize(content(s))));
         break;
       case 'remove':
         walkSnapshot(op.node, (s) => texts.delete(s.id));

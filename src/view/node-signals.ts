@@ -36,6 +36,8 @@ export class NodeSignals implements DocListener {
   op(op: Op): void {
     switch (op.t) {
       case 'setText':
+      case 'setNote':
+      case 'setDone':
       case 'setCollapsed':
         this.dirty.add(op.id);
         break;

@@ -390,9 +390,12 @@ kbd {
   transform: rotate(90deg);
 }
 
-.text {
+.body {
   flex: 1;
   min-width: 0;
+}
+
+.text {
   min-height: 1lh;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -400,8 +403,33 @@ kbd {
   cursor: text;
 }
 
+/* A note under the bullet: smaller, quieter, may span lines. Notes size is
+   mirrored by NOTE_SCALE in Outline.tsx. */
+.note {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
+
+/* Completed: struck through and quiet. */
+.row.done .text {
+  color: var(--faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+}
+
+.row.done .bullet::after {
+  background: var(--faint);
+}
+
 /* The edited row sits on a soft raised surface. Drawn with a spread shadow
    so the text does not move by a pixel when editing starts. */
+.note[contenteditable],
 .text[contenteditable] {
   background: var(--surface);
   border-radius: 2px;

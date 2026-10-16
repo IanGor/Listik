@@ -37,6 +37,9 @@ export function parseTags(text: string): string[] {
 }
 
 const NONE: readonly string[] = [];
+
+/** What tags and search read: the bullet's text and its note. */
+export const content = (n: { text: string; note: string }) => (n.note ? `${n.text}\n${n.note}` : n.text);
 const EMPTY: ReadonlySet<NodeId> = new Set();
 
 /**
@@ -49,7 +52,7 @@ export class TagIndex implements DocListener {
   private unsubscribe: () => void;
 
   constructor(doc: Doc) {
-    for (const n of doc.nodes.values()) this.set(n.id, n.text);
+    for (const n of doc.nodes.values()) this.set(n.id, content(n));
     this.unsubscribe = doc.subscribe(this);
   }
 
@@ -66,13 +69,14 @@ export class TagIndex implements DocListener {
     return new Map([...this.byTag].map(([tag, ids]) => [tag, ids.size]));
   }
 
-  op(op: Op): void {
+  op(op: Op, doc: Doc): void {
     switch (op.t) {
       case 'setText':
-        this.set(op.id, op.to);
+      case 'setNote':
+        this.set(op.id, content(doc.get(op.id)));
         break;
       case 'insert':
-        walkSnapshot(op.node, (s) => this.set(s.id, s.text));
+        walkSnapshot(op.node, (s) => this.set(s.id, content(s)));
         break;
       case 'remove':
         walkSnapshot(op.node, (s) => this.set(s.id, ''));

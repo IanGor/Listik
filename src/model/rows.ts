@@ -179,7 +179,7 @@ export class VisibleRows implements DocListener {
   }
 
   op(op: Op): void {
-    if (op.t === 'setText') return;
+    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setDone') return;
     // Under a filter, edited bullets must stay visible (admit), which needs
     // the in-place patches; there, every op is patched.
     if (!this.filter && (this.stale || ++this.patched > PATCH_LIMIT)) {

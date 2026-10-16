@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { indent, setText, split } from '../src/model/commands';
+import { indent, setNote, setText, split } from '../src/model/commands';
 import { History, focusAfter } from '../src/model/history';
 import { dump, setup } from './helpers';
 
@@ -79,5 +79,20 @@ describe('History', () => {
     typeInto(env, history, '', 'x', 600);
     history.undo(env.doc);
     expect(dump(env.doc)).toEqual(['ab ']);
+  });
+});
+
+describe('History of notes', () => {
+  it('groups note typing per word and puts the caret back into the note', () => {
+    const env = setup(['x']);
+    const history = new History();
+    let now = 0;
+    for (const ch of 'abc') {
+      const ops = env.doc.transact(() => setNote(env.ctx, 'x', env.doc.get('x').note + ch));
+      history.record({ ops, before: null, after: null }, { typing: true, now: (now += 100) });
+    }
+    const e = history.undo(env.doc)!;
+    expect(env.doc.get('x').note).toBe('');
+    expect(focusAfter(e, false)).toEqual({ id: 'x', caret: 0, note: true });
   });
 });

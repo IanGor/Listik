@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  collapseChildren, deleteNode, indent, insertText, mergeUp, moveDown, moveUp, outdent, setCollapsed, split,
+  collapseChildren, deleteNode, indent, insertText, mergeUp, moveDown, moveUp, outdent, setCollapsed, setNote, split,
+  toggleDone,
 } from '../src/model/commands';
 import { checkInvariants } from '../src/model/invariants';
 import { dump, dumpRows, setup } from './helpers';
@@ -178,5 +179,23 @@ describe('collapseChildren (the logo)', () => {
     run(() => collapseChildren(ctx, doc.root));
     expect(dumpRows(rows, doc)).toEqual(['a [+]', 'd', 'e [+]']);
     expect(doc.get('b').collapsed).toBe(false);
+  });
+});
+
+describe('toggleDone and notes', () => {
+  it('completes all, or un-completes all when they are all done already', () => {
+    const { doc, ctx, run } = setup(['a', 'b']);
+    run(() => toggleDone(ctx, ['a']));
+    run(() => toggleDone(ctx, ['a', 'b']));
+    expect([doc.get('a').done, doc.get('b').done]).toEqual([true, true]);
+    run(() => toggleDone(ctx, ['a', 'b']));
+    expect([doc.get('a').done, doc.get('b').done]).toEqual([false, false]);
+  });
+
+  it('Backspace does not merge away a bullet with a note', () => {
+    const { doc, ctx, run } = setup(['a', 'b']);
+    run(() => setNote(ctx, 'b', 'не потерять'));
+    expect(run(() => mergeUp(ctx, 'b'))).toBeUndefined();
+    expect(doc.get('b').note).toBe('не потерять');
   });
 });

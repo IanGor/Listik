@@ -9,7 +9,11 @@ export interface OutlineNode {
   /** Fractional index among siblings. */
   order: string;
   text: string;
+  /** A note under the bullet (Shift+Enter), may span lines; '' for none. */
+  note: string;
   collapsed: boolean;
+  /** Completed (Ctrl+Enter): shown struck through. */
+  done: boolean;
   created: number;
   updated: number;
 }
@@ -19,7 +23,9 @@ export interface NodeSnapshot {
   id: NodeId;
   order: string;
   text: string;
+  note: string;
   collapsed: boolean;
+  done: boolean;
   created: number;
   updated: number;
   children: NodeSnapshot[];
@@ -40,10 +46,15 @@ export type Op =
   /** `at`: edit time, so replaying the op log reproduces `updated`. */
   | { t: 'setText'; id: NodeId; from: string; to: string; at?: number }
   | { t: 'move'; id: NodeId; from: Position; to: Position }
-  | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean };
+  | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean }
+  | { t: 'setDone'; id: NodeId; from: boolean; to: boolean }
+  /** `at`: edit time, as for setText. */
+  | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number };
 
 /** Where the caret should go after a command. */
 export interface Focus {
   id: NodeId;
   caret: number;
+  /** In the bullet's note rather than its text. */
+  note?: true;
 }

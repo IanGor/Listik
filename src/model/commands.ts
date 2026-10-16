@@ -20,7 +20,10 @@ function insertNew(doc: Doc, parent: NodeId, index: number, text: string): NodeI
   doc.apply({
     t: 'insert',
     parent,
-    node: { id, order: doc.orderAt(parent, index), text, collapsed: false, created: now, updated: now, children: [] },
+    node: {
+      id, order: doc.orderAt(parent, index), text, note: '', collapsed: false, done: false,
+      created: now, updated: now, children: [],
+    },
   });
   return id;
 }
@@ -47,6 +50,22 @@ function expand(doc: Doc, id: NodeId): void {
 export function setText({ doc }: Ctx, id: NodeId, text: string): void {
   const n = doc.get(id);
   if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text, at: Date.now() });
+}
+
+export function setNote({ doc }: Ctx, id: NodeId, note: string): void {
+  const n = doc.get(id);
+  if (n.note !== note) doc.apply({ t: 'setNote', id, from: n.note, to: note, at: Date.now() });
+}
+
+/**
+ * Ctrl+Enter: completes the bullets, or un-completes them if all are done
+ * already (for a selection: one press sets them all the same way).
+ */
+export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
+  const value = !ids.every((id) => doc.get(id).done);
+  for (const id of ids) {
+    if (doc.get(id).done !== value) doc.apply({ t: 'setDone', id, from: !value, to: value });
+  }
 }
 
 export function setCollapsed({ doc }: Ctx, id: NodeId, value: boolean): void {
@@ -96,7 +115,8 @@ export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
 function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
   let prev: string | null = null;
   return {
-    id: newId(), order, text: tree.text, collapsed: false, created: now, updated: now,
+    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: false, done: tree.done ?? false,
+    created: now, updated: now,
     children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now)),
   };
 }
@@ -154,12 +174,12 @@ export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): 
 
 /**
  * Backspace at the start of a bullet: remove it if empty, otherwise append
- * its text to the previous visible row. Bullets with children are left alone
- * so nothing gets lost.
+ * its text to the previous visible row. Bullets with children or a note are
+ * left alone so nothing gets lost.
  */
 export function mergeUp({ doc, rows }: Ctx, id: NodeId): Focus | void {
   const n = doc.get(id);
-  if (n.children.length > 0) return;
+  if (n.children.length > 0 || n.note) return;
   const i = rows.indexOf(id);
   if (i <= 0) return;
   const prevId = rows.ids[i - 1];

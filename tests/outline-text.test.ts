@@ -71,3 +71,36 @@ describe('insertTrees / appendTrees', () => {
     expect(dump(doc)).toEqual(['a', '  b']);
   });
 });
+
+describe('done and notes in files', () => {
+  const doc = () => {
+    const d = build(['план', '  шаг', 'итог']);
+    d.apply({ t: 'setDone', id: 'шаг', from: false, to: true });
+    d.apply({ t: 'setNote', id: 'план', from: '', to: 'первая строка\nвторая & <строка>' });
+    return d;
+  };
+  const flat = (trees: Tree[]): unknown[] =>
+    trees.flatMap((t) => [{ text: t.text, note: t.note, done: t.done }, ...flat(t.children)]);
+  const expected = [
+    { text: 'план', note: 'первая строка\nвторая & <строка>', done: undefined },
+    { text: 'шаг', note: undefined, done: true },
+    { text: 'итог', note: undefined, done: undefined },
+  ];
+
+  it('writes Markdown with [x] and note lines, and reads them back', () => {
+    const md = toMarkdown(doc());
+    expect(md).toBe('- план\n  первая строка\n  вторая & <строка>\n  - [x] шаг\n- итог\n');
+    expect(flat(parseIndented(md))).toEqual(expected);
+  });
+
+  it('writes OPML with Workflowy\'s _note and _complete, and reads them back', () => {
+    const xml = toOpml(doc());
+    expect(xml).toContain('_note="первая строка&#10;вторая &amp; &lt;строка&gt;"');
+    expect(xml).toContain('_complete="true"');
+    expect(flat(parseOpml(xml))).toEqual(expected);
+  });
+
+  it('plain indented text (no markers) has no notes: every line is a bullet', () => {
+    expect(flat(parseIndented('a\n  b'))).toEqual([{ text: 'a', note: undefined, done: undefined }, { text: 'b', note: undefined, done: undefined }]);
+  });
+});

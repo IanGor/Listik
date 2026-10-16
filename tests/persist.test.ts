@@ -135,3 +135,17 @@ describe('Persistence', () => {
     }
   });
 });
+
+describe('snapshot versions', () => {
+  it('keeps done and notes (v2) and still reads v1 snapshots', () => {
+    const doc = build(['a', '  b']);
+    doc.apply({ t: 'setDone', id: 'b', from: false, to: true });
+    doc.apply({ t: 'setNote', id: 'a', from: '', to: 'заметка\nв две строки' });
+    const copy = deserialize(serialize(doc));
+    expect(copy.get('b').done).toBe(true);
+    expect(copy.get('a').note).toBe('заметка\nв две строки');
+
+    const v1 = JSON.stringify({ v: 1, root: 'root', rows: [['x', -1, 'a0', 'старый', 0, 1, 2]] });
+    expect(deserialize(v1).get('x')).toMatchObject({ text: 'старый', done: false, note: '', created: 1, updated: 2 });
+  });
+});

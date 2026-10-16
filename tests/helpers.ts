@@ -21,8 +21,8 @@ export function build(lines: string[]): Doc {
       t: 'insert',
       parent,
       node: {
-        id: text, order: doc.orderAt(parent, doc.get(parent).children.length), text, collapsed,
-        created: 0, updated: 0, children: [],
+        id: text, order: doc.orderAt(parent, doc.get(parent).children.length), text, note: '', collapsed,
+        done: false, created: 0, updated: 0, children: [],
       },
     });
     parents[depth + 1] = text;

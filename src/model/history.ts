@@ -13,10 +13,11 @@ const LIMIT = 1000;
 /** Keystrokes closer than this extend the same undo step. */
 const TYPING_PAUSE = 1000;
 
-type SetText = Extract<Op, { t: 'setText' }>;
+/** Typing changes a bullet's text or its note. */
+type TextEdit = Extract<Op, { t: 'setText' | 'setNote' }>;
 
-const singleSetText = (e: HistoryEntry): SetText | null =>
-  e.ops.length === 1 && e.ops[0].t === 'setText' ? e.ops[0] : null;
+const singleSetText = (e: HistoryEntry): TextEdit | null =>
+  e.ops.length === 1 && (e.ops[0].t === 'setText' || e.ops[0].t === 'setNote') ? e.ops[0] : null;
 
 /**
  * Undo/redo over op batches. Typing is grouped into one step per word:
@@ -44,9 +45,9 @@ export class History {
     const open = this.typing;
     const prev = open && singleSetText(open.entry);
     const next = singleSetText(entry);
-    if (opts.typing && open && prev && next && prev.id === next.id
+    if (opts.typing && open && prev && next && prev.id === next.id && prev.t === next.t
       && now - open.time < TYPING_PAUSE && !/\s$/.test(prev.to)) {
-      open.entry.ops = [{ ...prev, to: next.to, at: next.at }];
+      open.entry.ops = [{ ...prev, to: next.to, at: next.at } as TextEdit];
       open.entry.after = entry.after;
       open.time = now;
       return;
@@ -82,7 +83,10 @@ export class History {
 /** Where the caret goes after undoing (`forward` false) or redoing an entry. */
 export function focusAfter(e: HistoryEntry, forward: boolean): Focus | null {
   const op = singleSetText(e);
-  if (op) return { id: op.id, caret: forward ? changeEnd(op.from, op.to) : changeEnd(op.to, op.from) };
+  if (op) {
+    const caret = forward ? changeEnd(op.from, op.to) : changeEnd(op.to, op.from);
+    return op.t === 'setNote' ? { id: op.id, caret, note: true } : { id: op.id, caret };
+  }
   return forward ? e.after : e.before;
 }
 

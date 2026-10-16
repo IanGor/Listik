@@ -58,7 +58,7 @@ export function sampleDoc(count: number, seed = 1): Doc {
   const now = Date.now();
   const node = (text: string, prev: string | null): NodeSnapshot => ({
     id: crypto.randomUUID(), order: generateKeyBetween(prev, null), text,
-    collapsed: false, created: now, updated: now, children: [],
+    note: '', collapsed: false, done: false, created: now, updated: now, children: [],
   });
   const lastOrder = (xs: NodeSnapshot[]) => (xs.length ? xs[xs.length - 1].order : null);
 

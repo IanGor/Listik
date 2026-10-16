@@ -80,3 +80,19 @@ describe('Doc', () => {
     expect(commit.mock.calls[0][0]).toHaveLength(2);
   });
 });
+
+describe('done and notes', () => {
+  it('applies and inverts setDone and setNote, refusing stale ones', () => {
+    const doc = build(['a']);
+    const ops = doc.transact(() => {
+      doc.apply({ t: 'setDone', id: 'a', from: false, to: true });
+      doc.apply({ t: 'setNote', id: 'a', from: '', to: 'строка 1\nстрока 2', at: 5 });
+    });
+    expect(doc.get('a')).toMatchObject({ done: true, note: 'строка 1\nстрока 2', updated: 5 });
+    expect(() => doc.apply({ t: 'setDone', id: 'a', from: false, to: true })).toThrow(/stale/);
+    doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(doc.get('a')).toMatchObject({ done: false, note: '' });
+    const snap = doc.snapshot('a');
+    expect(snap).toMatchObject({ done: false, note: '' });
+  });
+});

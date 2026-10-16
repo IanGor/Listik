@@ -35,6 +35,10 @@ export function invert(op: Op): Op {
       return { t: 'move', id: op.id, from: op.to, to: op.from };
     case 'setCollapsed':
       return { t: 'setCollapsed', id: op.id, from: op.to, to: op.from };
+    case 'setDone':
+      return { t: 'setDone', id: op.id, from: op.to, to: op.from };
+    case 'setNote':
+      return { t: 'setNote', id: op.id, from: op.to, to: op.from, at: op.at };
   }
 }
 
@@ -51,7 +55,7 @@ export class Doc {
   constructor(root: NodeId = 'root') {
     this.root = root;
     this.nodes.set(root, {
-      id: root, parent: null, children: [], order: '', text: '', collapsed: false, created: 0, updated: 0,
+      id: root, parent: null, children: [], order: '', text: '', note: '', collapsed: false, done: false, created: 0, updated: 0,
     });
   }
 
@@ -62,7 +66,10 @@ export class Doc {
     doc.apply({
       t: 'insert',
       parent: doc.root,
-      node: { id: newId(), order: generateKeyBetween(null, null), text: '', collapsed: false, created: now, updated: now, children: [] },
+      node: {
+        id: newId(), order: generateKeyBetween(null, null), text: '', note: '', collapsed: false, done: false,
+        created: now, updated: now, children: [],
+      },
     });
     return doc;
   }
@@ -99,7 +106,8 @@ export class Doc {
   snapshot(id: NodeId): NodeSnapshot {
     const n = this.get(id);
     return {
-      id: n.id, order: n.order, text: n.text, collapsed: n.collapsed, created: n.created, updated: n.updated,
+      id: n.id, order: n.order, text: n.text, note: n.note, collapsed: n.collapsed, done: n.done,
+      created: n.created, updated: n.updated,
       children: n.children.map((c) => this.snapshot(c)),
     };
   }
@@ -167,6 +175,19 @@ export class Doc {
         n.collapsed = op.to;
         break;
       }
+      case 'setDone': {
+        const n = this.get(op.id);
+        if (n.done !== op.from) throw new Error(`setDone: stale state for ${op.id}`);
+        n.done = op.to;
+        break;
+      }
+      case 'setNote': {
+        const n = this.get(op.id);
+        if (n.note !== op.from) throw new Error(`setNote: stale note for ${op.id}`);
+        n.note = op.to;
+        if (op.at !== undefined) n.updated = op.at;
+        break;
+      }
     }
     for (const l of this.listeners) l.op?.(op, this);
   }
@@ -179,7 +200,7 @@ export class Doc {
       if (this.nodes.has(s.id)) throw new Error(`insert: duplicate id ${s.id}`);
       const n: OutlineNode = {
         id: s.id, parent: p, children: [], order: s.order, text: s.text,
-        collapsed: s.collapsed, created: s.created, updated: s.updated,
+        note: s.note, collapsed: s.collapsed, done: s.done, created: s.created, updated: s.updated,
       };
       this.nodes.set(n.id, n);
       this.attach(n);

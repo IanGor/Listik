@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { collapseChildren, setCollapsed, setText, type Ctx } from '../model/commands';
+import { collapseChildren, setCollapsed, setNote, setText, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
@@ -10,7 +10,7 @@ import type { Backup } from '../persist/backup';
 import { NodeSignals } from './node-signals';
 
 /** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
-export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last' };
+export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last'; note?: true };
 
 /** The active search: what was asked and what it found when applied. */
 export interface SearchFilter {
@@ -229,6 +229,15 @@ export class Outliner {
     if (this.readOnly) return;
     batch(() => {
       const ops = this.doc.transact(() => setText(this.ctx, id, text));
+      this.history.record({ ops, before: null, after: null }, { typing: true });
+    });
+  }
+
+  /** Typing in a bullet's note: grouped into undo steps like `type`. */
+  typeNote(id: NodeId, note: string): void {
+    if (this.readOnly) return;
+    batch(() => {
+      const ops = this.doc.transact(() => setNote(this.ctx, id, note));
       this.history.record({ ops, before: null, after: null }, { typing: true });
     });
   }

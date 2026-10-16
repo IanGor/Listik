@@ -130,3 +130,14 @@ describe('decorate', () => {
     expect(decorate('без совпадений', ['пьер'])).toEqual([{ text: 'без совпадений' }]);
   });
 });
+
+describe('notes in search', () => {
+  it('finds words in notes too', () => {
+    const { doc, ctx, run } = setup(['Пьер', 'Андрей']);
+    const text = new TextIndex(doc);
+    text.warmUp();
+    run(() => cmd.setNote(ctx, 'Андрей', 'небо над Аустерлицем'));
+    expect([...text.find(['аустерлиц'])]).toEqual(['Андрей']);
+    expect([...text.find(['андрей', 'небо'])]).toEqual(['Андрей']);
+  });
+});

@@ -14,6 +14,8 @@ const PAD = 32;
 const OVERSCAN = 600;
 /** Vertical padding of `.row`, px. */
 const ROW_PAD = 10;
+/** Line height of a note relative to the text's: 14 px × 1.5 against 17 px × 1.6. */
+const NOTE_SCALE = 0.77;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
 const ADD_HEIGHT = 44;
 
@@ -88,9 +90,13 @@ export function Outline(props: { o: Outliner }) {
     // --indent changes with the viewport (index.css), so it is measured, not assumed.
     const indent = indentProbe.getBoundingClientRect().width / ch;
     v.setEstimate((id, depth) => {
-      const len = o.doc.nodes.get(id)?.text.length ?? 0;
+      const n = o.doc.nodes.get(id);
       const perLine = Math.max(10, Math.floor(cols - indent * depth - 2)); // bullet + gap is 2ch
-      return Math.max(1, Math.ceil(len / perLine)) * lh + ROW_PAD;
+      const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
+      let h = lines(n?.text ?? '') * lh + ROW_PAD;
+      // Notes are set smaller (index.css): about NOTE_SCALE of a text line each.
+      if (n?.note) for (const line of n.note.split('\n')) h += lines(line) * lh * NOTE_SCALE;
+      return h;
     });
     const [start] = range();
     Array.from(windowEl.children).forEach((el, k) => v.measure(start + k, el.getBoundingClientRect().height));

@@ -4,6 +4,8 @@ import type { NodeId } from './types';
 /** A bullet with its children, outside any document: what import, export and paste exchange. */
 export interface Tree {
   text: string;
+  note?: string;
+  done?: boolean;
   children: Tree[];
 }
 
@@ -20,6 +22,7 @@ export function countTrees(trees: Tree[]): number {
 
 const MARKER = /^(?:[-*+•]|\d+[.)])\s+/;
 const HEADING = /^#{1,6}\s+/;
+const CHECKBOX = /^\[([ xX])\]\s+/;
 
 /**
  * Indented text → trees: Markdown lists, Workflowy's plain-text export, or
@@ -27,19 +30,36 @@ const HEADING = /^#{1,6}\s+/;
  * as 4). A line indented deeper than the one before becomes its child. List
  * markers (-, *, +, •, 1.) and heading marks are dropped; `#tag` stays (a
  * heading mark needs a space after the #). Blank lines are skipped.
+ *
+ * In a list (items with markers), `- [x] item` is a completed item, and a
+ * line without a marker indented under an item continues that item's note:
+ * the way `toMarkdown` writes them.
  */
 export function parseIndented(text: string): Tree[] {
   const roots: Tree[] = [];
-  const stack: { indent: number; node: Tree }[] = [];
+  const stack: { indent: number; node: Tree; listed: boolean }[] = [];
   for (const line of text.replace(/\r\n?/g, '\n').split('\n')) {
     if (!line.trim()) continue;
     const lead = /^[ \t]*/.exec(line)![0];
     let indent = 0;
     for (const c of lead) indent += c === '\t' ? 4 : 1;
-    const node: Tree = { text: line.slice(lead.length).replace(HEADING, '').replace(MARKER, '').trimEnd(), children: [] };
+    let body = line.slice(lead.length).trimEnd();
+    const marker = MARKER.exec(body);
+    const last = stack[stack.length - 1];
+    if (!marker && last?.listed && indent > last.indent && !HEADING.test(body)) {
+      last.node.note = last.node.note ? `${last.node.note}\n${body}` : body;
+      continue;
+    }
+    body = marker ? body.slice(marker[0].length) : body.replace(HEADING, '');
+    const node: Tree = { text: body, children: [] };
+    const box = marker && CHECKBOX.exec(body);
+    if (box) {
+      node.text = body.slice(box[0].length);
+      if (box[1] !== ' ') node.done = true;
+    }
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
     (stack.length ? stack[stack.length - 1].node.children : roots).push(node);
-    stack.push({ indent, node });
+    stack.push({ indent, node, listed: !!marker });
   }
   return roots;
 }
@@ -58,17 +78,25 @@ function walk(doc: Doc, root: NodeId, fn: (id: NodeId, depth: number) => void): 
   }
 }
 
-/** A Markdown list, two spaces per level; reads back with `parseIndented`. */
+/**
+ * A Markdown list, two spaces per level; completed items as `- [x]`, note
+ * lines under their item at the text's indent. Reads back with `parseIndented`.
+ */
 export function toMarkdown(doc: Doc, root: NodeId = doc.root): string {
   const out: string[] = [];
-  walk(doc, root, (id, depth) => out.push(`${'  '.repeat(depth)}- ${doc.get(id).text}`));
+  walk(doc, root, (id, depth) => {
+    const n = doc.get(id);
+    const pad = '  '.repeat(depth);
+    out.push(`${pad}- ${n.done ? '[x] ' : ''}${n.text}`);
+    if (n.note) for (const line of n.note.split('\n')) out.push(line.trim() ? `${pad}  ${line}` : '');
+  });
   return out.length ? `${out.join('\n')}\n` : '';
 }
 
 const escapeXml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '&#10;');
 
-/** OPML 2.0, the outline exchange format Workflowy and other outliners read. */
+/** OPML 2.0, the outline exchange format Workflowy and other outliners read (with its `_note`, `_complete`). */
 export function toOpml(doc: Doc, title = 'Listik'): string {
   const out = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -79,7 +107,8 @@ export function toOpml(doc: Doc, title = 'Listik'): string {
   const emit = (id: NodeId, depth: number) => {
     const n = doc.get(id);
     const pad = '  '.repeat(depth + 2);
-    const open = `${pad}<outline text="${escapeXml(n.text)}"`;
+    const extra = (n.note ? ` _note="${escapeXml(n.note)}"` : '') + (n.done ? ' _complete="true"' : '');
+    const open = `${pad}<outline text="${escapeXml(n.text)}"${extra}`;
     if (!n.children.length) return out.push(`${open} />`);
     out.push(`${open}>`);
     for (const c of n.children) emit(c, depth + 1);
@@ -102,6 +131,12 @@ export function parseOpml(xml: string): Tree[] {
   const read = (el: Element): Tree[] =>
     Array.from(el.children)
       .filter((c) => c.tagName.toLowerCase() === 'outline')
-      .map((c) => ({ text: (c.getAttribute('text') ?? '').replace(/\s*\n\s*/g, ' '), children: read(c) }));
+      .map((c) => {
+        const tree: Tree = { text: (c.getAttribute('text') ?? '').replace(/\s*\n\s*/g, ' '), children: read(c) };
+        const note = c.getAttribute('_note');
+        if (note) tree.note = note;
+        if (c.getAttribute('_complete') === 'true') tree.done = true;
+        return tree;
+      });
   return read(body);
 }
