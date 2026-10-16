@@ -48,6 +48,8 @@ export class Outliner {
   readonly toast: Accessor<string | null>;
   /** Automatic copies into a folder; null for in-memory documents. */
   backup: Backup | null = null;
+  /** Another tab holds the document: nothing here may change it. */
+  readonly readOnly: boolean;
   private setRowsVersion: Setter<number>;
   private setFocusSignal: Setter<FocusRequest | null>;
   private setQuerySignal: Setter<string>;
@@ -60,8 +62,9 @@ export class Outliner {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSearch: number | null = null;
 
-  constructor(doc: Doc) {
+  constructor(doc: Doc, options: { readOnly?: boolean } = {}) {
     this.doc = doc;
+    this.readOnly = options.readOnly ?? false;
     this.rows = new VisibleRows(doc);
     this.tags = new TagIndex(doc);
     this.text = new TextIndex(doc);
@@ -207,6 +210,7 @@ export class Outliner {
    * it says, or `keep`. `keep` is also where undo will put the caret.
    */
   run(cmd: (ctx: Ctx) => Focus | void, keep?: Focus): void {
+    if (this.readOnly) return;
     batch(() => {
       const current = this.focus();
       const before = keep ?? (current && 'caret' in current ? current : null);
@@ -222,6 +226,7 @@ export class Outliner {
 
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: NodeId, text: string): void {
+    if (this.readOnly) return;
     batch(() => {
       const ops = this.doc.transact(() => setText(this.ctx, id, text));
       this.history.record({ ops, before: null, after: null }, { typing: true });
@@ -263,6 +268,7 @@ export class Outliner {
   }
 
   private replay(step: (doc: Doc) => HistoryEntry | null, forward: boolean): void {
+    if (this.readOnly) return;
     batch(() => {
       const e = step(this.doc);
       if (e) this.moveFocus(focusAfter(e, forward));

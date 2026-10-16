@@ -32,7 +32,7 @@ export function Row(props: RowProps) {
     o.nodes.track(id);
     return o.doc.nodes.get(id);
   };
-  const editing = () => o.focus()?.id === id;
+  const editing = () => !o.readOnly && o.focus()?.id === id;
   const folded = () => {
     o.rowsVersion();
     const n = node();
@@ -51,6 +51,7 @@ export function Row(props: RowProps) {
     e.preventDefault();
     const tag = (e.target as HTMLElement).dataset.tag;
     if (tag) return o.filterByTag(tag);
+    if (o.readOnly) return;
     const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
     o.setFocus({ id, caret: caret ?? node()?.text.length ?? 0 });
   };

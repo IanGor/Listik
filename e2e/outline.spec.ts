@@ -470,6 +470,28 @@ test.describe('persistence', () => {
     expect(result).toEqual({ texts: ['до пересборки', 'во время пересборки'], error: 'null' });
   });
 
+  test('a second tab is read-only until the first one closes, then takes over', async ({ context, page }) => {
+    await page.goto('/?db=e2e-tabs');
+    await expect(page.locator('.row')).toHaveCount(1);
+    await page.locator('.row .text').click();
+    await page.keyboard.type('из первой вкладки');
+    await page.waitForTimeout(500); // writes are batched for 300 ms
+
+    const second = await context.newPage();
+    await second.goto('/?db=e2e-tabs');
+    await expect(second.locator('.banner')).toContainText('только просмотр');
+    await expect(second.locator('.row .text')).toHaveText('из первой вкладки');
+    await second.locator('.row .text').click();
+    await expect(second.locator('.text[contenteditable]')).toHaveCount(0);
+
+    await page.close();
+    await expect(second.locator('.banner')).toHaveCount(0, { timeout: 10_000 });
+    await second.locator('.row .text').click();
+    await second.keyboard.press('Control+End');
+    await second.keyboard.type(' и второй');
+    await expect(second.locator('.text[contenteditable]')).toHaveText('из первой вкладки и второй');
+  });
+
   test('demo and sample documents never touch stored data', async ({ page }) => {
     await page.goto('/?demo&db=e2e');
     await edit(page, 'Том второй');

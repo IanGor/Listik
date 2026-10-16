@@ -85,9 +85,11 @@ export function DocumentMenu(props: { o: Outliner }) {
           <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
             Скачать как OPML <span class="hint">для Workflowy</span>
           </button>
-          <button type="button" role="menuitem" onClick={() => void importFile()}>
-            Импорт из файла…
-          </button>
+          <Show when={!o.readOnly}>
+            <button type="button" role="menuitem" onClick={() => void importFile()}>
+              Импорт из файла…
+            </button>
+          </Show>
           <Show when={backup()}>
             {(b) => (
               <>

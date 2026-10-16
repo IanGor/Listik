@@ -135,7 +135,7 @@ function ZoomTitle(props: { o: Outliner; id: NodeId }) {
     <div
       ref={el}
       class="zoom-title"
-      contentEditable="plaintext-only"
+      contentEditable={o.readOnly ? false : 'plaintext-only'}
       onFocus={() => o.setFocus(null)}
       onInput={onInput}
       onKeyDown={onKeyDown}

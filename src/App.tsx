@@ -2,6 +2,7 @@ import { Match, Switch, createResource } from 'solid-js';
 import { demoDoc, sampleDoc } from './dev/sample';
 import { Backup } from './persist/backup';
 import { Persistence } from './persist/idb';
+import { acquireWriteLock } from './persist/lock';
 import { Outline } from './view/Outline';
 import { Outliner } from './view/outliner';
 
@@ -21,6 +22,11 @@ async function load(): Promise<Outliner> {
   }
   if (params.has('demo')) return new Outliner(demoDoc());
   const name = params.get('db') ?? 'listik';
+  // Another tab is editing this document: show it read-only, and reload into
+  // the writer's seat as soon as that tab goes away.
+  if (!(await acquireWriteLock(name, () => location.reload()))) {
+    return new Outliner(await Persistence.read(name), { readOnly: true });
+  }
   const started = performance.now();
   const { doc } = await Persistence.open(name);
   console.info(`loaded ${doc.nodes.size - 1} bullets in ${Math.round(performance.now() - started)} ms`);

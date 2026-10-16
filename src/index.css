@@ -668,3 +668,23 @@ mark,
     transform: translate(-50%, 8px);
   }
 }
+
+/* Read-only tab: another tab holds the document. */
+.banner {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--chip);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.banner svg {
+  flex: none;
+  color: var(--link);
+}

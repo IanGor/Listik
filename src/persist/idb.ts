@@ -22,6 +22,19 @@ function workerCompactor(name: string): Compactor {
   });
 }
 
+/** Snapshot plus replayed log; a new single-bullet doc if nothing is stored yet. */
+async function load(db: IDBDatabase): Promise<{ doc: Doc; logSize: number; stored: boolean }> {
+  const { snapshot, batches } = await readAll(db);
+  if (!snapshot) return { doc: Doc.withEmptyBullet(), logSize: 0, stored: false };
+  const doc = deserialize(snapshot);
+  let logSize = 0;
+  for (const batch of batches) {
+    for (const op of batch) doc.apply(op);
+    logSize += batch.length;
+  }
+  return { doc, logSize, stored: true };
+}
+
 const idle = (fn: () => void) =>
   typeof requestIdleCallback === 'function' ? requestIdleCallback(fn, { timeout: 10_000 }) : setTimeout(fn, 0);
 
@@ -55,19 +68,8 @@ export class Persistence implements DocListener {
   /** Loads the doc (snapshot + log replay), or starts a new one with a single empty bullet. */
   static async open(name = 'listik'): Promise<{ doc: Doc; persistence: Persistence }> {
     const db = await openDb(name);
-    const { snapshot, batches } = await readAll(db);
-    let doc: Doc;
-    let logSize = 0;
-    if (snapshot) {
-      doc = deserialize(snapshot);
-      for (const batch of batches) {
-        for (const op of batch) doc.apply(op);
-        logSize += batch.length;
-      }
-    } else {
-      doc = Doc.withEmptyBullet();
-      await writeSnapshot(db, serialize(doc));
-    }
+    const { doc, logSize, stored } = await load(db);
+    if (!stored) await writeSnapshot(db, serialize(doc));
     const compactor = typeof Worker === 'function' ? workerCompactor(name) : () => compactLog(db);
     const persistence = new Persistence(db, doc, logSize, compactor);
     if (logSize > COMPACT_AFTER) persistence.scheduleCompact();
@@ -78,6 +80,16 @@ export class Persistence implements DocListener {
       void navigator.storage?.persist?.();
     }
     return { doc, persistence };
+  }
+
+  /** The doc as stored, without saving anything back: for a read-only tab. */
+  static async read(name = 'listik'): Promise<Doc> {
+    const db = await openDb(name);
+    try {
+      return (await load(db)).doc;
+    } finally {
+      db.close();
+    }
   }
 
   commit(ops: Op[]): void {
