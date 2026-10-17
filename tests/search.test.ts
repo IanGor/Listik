@@ -13,7 +13,7 @@ describe('normalize', () => {
 });
 
 describe('parseQuery', () => {
-  const clause = (c: Partial<Clause>): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [], ...c });
+  const clause = (c: Partial<Clause>): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [], is: [], notIs: [], ...c });
 
   it('splits words, "phrases" and #tags', () => {
     const q = parseQuery('Пьер "Анна Павловна" #Салон  #война-и-мир');
@@ -32,8 +32,8 @@ describe('parseQuery', () => {
   it('reads exclusions, is:done and OR', () => {
     const q = parseQuery('пьер -бал -"князь андрей" -#война is:done OR #наташа -is:done ИЛИ | кутузов');
     expect(q.clauses).toEqual([
-      clause({ terms: ['пьер'], notTerms: ['бал', 'князь андрей'], notTags: ['война'], done: true }),
-      clause({ tags: ['наташа'], done: false }),
+      clause({ terms: ['пьер'], notTerms: ['бал', 'князь андрей'], notTags: ['война'], is: ['done'] }),
+      clause({ tags: ['наташа'], notIs: ['done'] }),
       clause({ terms: ['кутузов'] }),
     ]);
     expect(q.terms).toEqual(['пьер', 'кутузов']); // what is excluded is not highlighted
@@ -48,7 +48,9 @@ describe('findMatches', () => {
   };
   const find = (q: string) => {
     const { doc, tags, text } = env();
+    doc.apply({ t: 'setTodo', id: 'Ёлка у Ростовых', from: false, to: true });
     doc.apply({ t: 'setDone', id: 'Ёлка у Ростовых', from: false, to: true });
+    doc.apply({ t: 'setTodo', id: 'Пьер на балу #бал', from: false, to: true });
     return [...findMatches(parseQuery(q), tags, text, doc)].sort();
   };
 
@@ -72,6 +74,8 @@ describe('findMatches', () => {
     expect(find('is:done')).toEqual(['Ёлка у Ростовых']);
     expect(find('#война OR елка')).toEqual(['Князь Андрей #война', 'Пьер и Андрей #война #бал', 'Ёлка у Ростовых'].sort());
     expect(find('-is:done -#война')).toEqual(['Пьер на балу #бал']);
+    expect(find('is:todo')).toEqual(['Пьер на балу #бал']);
+    expect(find('is:task')).toEqual(['Ёлка у Ростовых', 'Пьер на балу #бал'].sort());
   });
 
   it('follows edits and stays equal to a freshly built index', () => {

@@ -21,7 +21,7 @@ function insertNew(doc: Doc, parent: NodeId, index: number, text: string): NodeI
     t: 'insert',
     parent,
     node: {
-      id, order: doc.orderAt(parent, index), text, note: '', collapsed: false, done: false,
+      id, order: doc.orderAt(parent, index), text, note: '', collapsed: false, todo: false, done: false,
       created: now, updated: now, children: [],
     },
   });
@@ -65,6 +65,27 @@ export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
   const value = !ids.every((id) => doc.get(id).done);
   for (const id of ids) {
     if (doc.get(id).done !== value) doc.apply({ t: 'setDone', id, from: !value, to: value });
+  }
+}
+
+/**
+ * Ctrl+Enter: a plain bullet becomes a task (an empty checkbox); a task is
+ * checked or unchecked. For several bullets: any plain ones become tasks
+ * first; once all are tasks, they are checked (or all unchecked).
+ */
+export function cycleTask(ctx: Ctx, ids: NodeId[]): void {
+  const { doc } = ctx;
+  const plain = ids.filter((id) => !doc.get(id).todo);
+  if (plain.length) for (const id of plain) doc.apply({ t: 'setTodo', id, from: false, to: true });
+  else toggleDone(ctx, ids);
+}
+
+/** Ctrl+Shift+Enter: tasks become plain bullets again (and so not done). */
+export function untask({ doc }: Ctx, ids: NodeId[]): void {
+  for (const id of ids) {
+    const n = doc.get(id);
+    if (n.done) doc.apply({ t: 'setDone', id, from: true, to: false });
+    if (n.todo) doc.apply({ t: 'setTodo', id, from: true, to: false });
   }
 }
 
@@ -115,7 +136,8 @@ export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
 function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
   let prev: string | null = null;
   return {
-    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: false, done: tree.done ?? false,
+    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: false,
+    todo: tree.todo ?? tree.done ?? false, done: tree.done ?? false,
     created: now, updated: now,
     children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now)),
   };

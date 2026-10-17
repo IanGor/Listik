@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { collapseChildren, setCollapsed, setNote, setText, toggleDone, type Ctx } from '../model/commands';
+import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
@@ -280,19 +280,44 @@ export class Outliner {
     this.notify(show ? 'Выполненные показаны' : 'Выполненные скрыты — Ctrl+O, чтобы показать');
   }
 
-  /**
-   * Ctrl+Enter: completes the bullets, or un-completes them. When completed
-   * bullets are hidden they leave the list, and the caret moves on to the
-   * row that took their place.
-   */
+  /** Ctrl+Enter: plain bullets become tasks; tasks are checked or unchecked. */
+  cycleTask(ids: NodeId[], keep?: Focus): void {
+    this.changeTasks((ctx) => cycleTask(ctx, ids), ids, keep);
+  }
+
+  /** Ctrl+Shift+Enter: tasks become plain bullets again. */
+  untask(ids: NodeId[], keep?: Focus): void {
+    this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
+  }
+
+  /** A click on a task's checkbox: checked or unchecked. */
   toggleDone(ids: NodeId[], keep?: Focus): void {
+    this.changeTasks((ctx) => toggleDone(ctx, ids), ids, keep);
+  }
+
+  /**
+   * A press on a bullet that did not drag: a task's checkbox toggles; a plain
+   * bullet zooms in.
+   */
+  pressBullet(id: NodeId): void {
+    if (!this.doc.get(id).todo) return this.zoomTo(id);
+    const cur = this.focus();
+    this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
+  }
+
+  /**
+   * Applies a change to tasks. When completed tasks are hidden, completing
+   * one takes it out of the list, and the caret moves on to the row that
+   * took its place.
+   */
+  private changeTasks(cmd: (ctx: Ctx) => void, ids: NodeId[], keep?: Focus): void {
     if (!ids.length) return;
     const first = this.rows.indexOf(ids[0]);
     const last = this.rows.indexOf(ids[ids.length - 1]);
     const end = last >= 0 ? this.rows.subtreeEnd(last) : -1;
     const next = (end >= 0 ? this.rows.ids[end] : undefined) ?? (first > 0 ? this.rows.ids[first - 1] : undefined);
     batch(() => {
-      this.run((ctx) => toggleDone(ctx, ids), keep);
+      this.run(cmd, keep);
       if (keep && this.rows.indexOf(keep.id) < 0 && next) this.setFocus({ id: next, caret: 0 });
       if (this.selection() && !this.selectedSet().size) this.select(null);
     });

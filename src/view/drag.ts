@@ -149,7 +149,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
       o.setDragged(new Set<NodeId>());
       document.body.classList.remove('is-dragging');
       if (!dragging) {
-        if (drop) o.zoomTo(id);
+        if (drop) o.pressBullet(id);
         return;
       }
       if (drop && t) o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));

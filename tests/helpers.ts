@@ -22,7 +22,7 @@ export function build(lines: string[]): Doc {
       parent,
       node: {
         id: text, order: doc.orderAt(parent, doc.get(parent).children.length), text, note: '', collapsed,
-        done: false, created: 0, updated: 0, children: [],
+        todo: false, done: false, created: 0, updated: 0, children: [],
       },
     });
     parents[depth + 1] = text;

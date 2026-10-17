@@ -5,7 +5,7 @@ import {
 } from '../src/model/commands';
 import * as cmd from '../src/model/commands';
 import { checkInvariants } from '../src/model/invariants';
-import { markdownOf } from '../src/model/outline-text';
+import { markdownOf, parseIndented } from '../src/model/outline-text';
 import { dump, dumpRows, setup } from './helpers';
 
 describe('split (Enter)', () => {
@@ -268,6 +268,42 @@ describe('moveManyTo (drag and drop)', () => {
     expect(dump(doc)).toEqual(['a', '  a1', 'b [+]', '  b1']);
     run(() => cmd.moveManyTo(ctx, ['a'], 'b', 'b1'));
     expect(dump(doc)).toEqual(['b', '  b1', '  a', '    a1']);
+  });
+});
+
+describe('tasks (checkbox bullets)', () => {
+  it('Ctrl+Enter makes a plain bullet a task, then checks and unchecks it; Ctrl+Shift+Enter makes it plain again', () => {
+    const { doc, ctx, run } = setup(['a']);
+    const state = () => ({ todo: doc.get('a').todo, done: doc.get('a').done });
+    run(() => cmd.cycleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.cycleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: true });
+    run(() => cmd.cycleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.untask(ctx, ['a']));
+    expect(state()).toEqual({ todo: false, done: false });
+  });
+
+  it('on several bullets, makes the plain ones tasks first, then checks them all', () => {
+    const { doc, ctx, run } = setup(['a', 'b']);
+    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.cycleTask(ctx, ['a', 'b']));
+    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, false], [true, false]]);
+    run(() => cmd.cycleTask(ctx, ['a', 'b']));
+    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, true], [true, true]]);
+  });
+
+  it('writes tasks as - [ ] / - [x] and reads them back', () => {
+    const { doc, ctx, run } = setup(['открытая', 'закрытая', 'текст']);
+    run(() => cmd.cycleTask(ctx, ['открытая', 'закрытая']));
+    run(() => cmd.cycleTask(ctx, ['закрытая']));
+    const md = markdownOf(doc, doc.get(doc.root).children);
+    expect(md).toBe('- [ ] открытая\n- [x] закрытая\n- текст\n');
+    expect(parseIndented(md).map((t) => [t.text, !!t.todo, !!t.done])).toEqual([
+      ['открытая', true, false], ['закрытая', true, true], ['текст', false, false],
+    ]);
   });
 });
 

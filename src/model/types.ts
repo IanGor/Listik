@@ -12,7 +12,9 @@ export interface OutlineNode {
   /** A note under the bullet (Shift+Enter), may span lines; '' for none. */
   note: string;
   collapsed: boolean;
-  /** Completed (Ctrl+Enter): shown struck through. */
+  /** A task (Ctrl+Enter): drawn as a checkbox. Plain bullets are just text. */
+  todo: boolean;
+  /** A completed task: checked and struck through. Only tasks are ever done. */
   done: boolean;
   created: number;
   updated: number;
@@ -25,6 +27,7 @@ export interface NodeSnapshot {
   text: string;
   note: string;
   collapsed: boolean;
+  todo: boolean;
   done: boolean;
   created: number;
   updated: number;
@@ -47,6 +50,7 @@ export type Op =
   | { t: 'setText'; id: NodeId; from: string; to: string; at?: number }
   | { t: 'move'; id: NodeId; from: Position; to: Position }
   | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean }
+  | { t: 'setTodo'; id: NodeId; from: boolean; to: boolean }
   | { t: 'setDone'; id: NodeId; from: boolean; to: boolean }
   /** `at`: edit time, as for setText. */
   | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number };

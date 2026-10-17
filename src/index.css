@@ -346,6 +346,31 @@ kbd {
   transform: translate(-50%, -50%) scale(1.45);
 }
 
+/* A task: the bullet is a checkbox. Checked, it fills coral with a tick. */
+.bullet.todo::after {
+  width: 13px;
+  height: 13px;
+  background: transparent;
+  border: 1.5px solid var(--faint);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.row:hover .bullet.todo::after {
+  background: transparent;
+  border-color: var(--text);
+}
+
+.bullet.todo:hover::after {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.bullet.todo.checked::after,
+.row:hover .bullet.todo.checked::after {
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px no-repeat;
+  border-color: var(--primary);
+}
+
 /* Hidden children: a round halo behind the bullet, as in Workflowy. */
 .bullet.collapsed::before {
   content: '';
@@ -435,10 +460,6 @@ kbd {
   color: var(--faint);
   text-decoration: line-through;
   text-decoration-color: var(--faint);
-}
-
-.row.done .bullet::after {
-  background: var(--faint);
 }
 
 /* The edited row sits on a soft raised surface. Drawn with a spread shadow

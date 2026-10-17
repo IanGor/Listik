@@ -194,7 +194,7 @@ export class VisibleRows implements DocListener {
   }
 
   op(op: Op): void {
-    if (op.t === 'setText' || op.t === 'setNote') return;
+    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo') return;
     // Completion changes rows only while completed bullets are hidden.
     if (op.t === 'setDone' && !this.hideDone) return;
     // Under a filter, edited bullets must stay visible (admit), which needs

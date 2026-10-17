@@ -28,8 +28,18 @@ export interface Clause {
   notTags: string[];
   /** Excluded: `-word`, `-"phrase"`. */
   notTerms: string[];
-  /** `is:done` (true) or `-is:done` (false): only completed, or only open bullets. */
-  done?: boolean;
+  /** `is:task` / `is:todo` / `is:done`: only tasks / open tasks / completed tasks. */
+  is: Kind[];
+  /** The same negated: `-is:done` and so on. */
+  notIs: Kind[];
+}
+
+/** What `is:` can ask about a bullet. */
+export type Kind = 'task' | 'todo' | 'done';
+const KINDS: readonly string[] = ['task', 'todo', 'done'];
+
+function isKind(n: { todo: boolean; done: boolean }, kind: Kind): boolean {
+  return kind === 'task' ? n.todo : kind === 'done' ? n.done : n.todo && !n.done;
 }
 
 export interface Query {
@@ -44,19 +54,20 @@ const TOKEN = /(-?)"([^"]*)"|(\S+)/g;
 const TAG_TOKEN = /^#([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)$/u;
 const OR = /^(OR|ИЛИ|\|)$/;
 
-const emptyClause = (): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [] });
+const emptyClause = (): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [], is: [], notIs: [] });
 const isEmptyClause = (c: Clause) =>
-  !c.tags.length && !c.terms.length && !c.notTags.length && !c.notTerms.length && c.done === undefined;
+  !c.tags.length && !c.terms.length && !c.notTags.length && !c.notTerms.length && !c.is.length && !c.notIs.length;
 
 /**
  * Words, "phrases" and #tags must all occur; `-` before any of them excludes
- * it; `is:done` / `-is:done` keep only completed / open bullets; `OR` (or
+ * it; `is:task`, `is:todo`, `is:done` keep only tasks, open tasks, completed
+ * tasks (and `-is:…` the rest); `OR` (or
  * `ИЛИ`, `|`) separates alternatives.
  */
 export function parseQuery(text: string): Query {
   const clauses: Clause[] = [];
   let clause = emptyClause();
-  const add = (list: string[], value: string) => {
+  const add = <T extends string>(list: T[], value: T) => {
     if (value && !list.includes(value)) list.push(value);
   };
   for (const m of text.matchAll(TOKEN)) {
@@ -72,8 +83,9 @@ export function parseQuery(text: string): Query {
     }
     const negated = token.length > 1 && token.startsWith('-');
     const body = negated ? token.slice(1) : token;
-    if (body.toLowerCase() === 'is:done') {
-      clause.done = !negated;
+    const kind = /^is:(\w+)$/i.exec(body)?.[1].toLowerCase();
+    if (kind && KINDS.includes(kind)) {
+      add(negated ? clause.notIs : clause.is, kind as Kind);
       continue;
     }
     const tag = TAG_TOKEN.exec(body);
@@ -227,7 +239,10 @@ export function findMatches(q: Query, tags: TagIndex, text: TextIndex, doc: Doc)
     const excluded = c.notTags.map((t) => tags.nodesWith(t));
     for (const id of candidates) {
       if (excluded.some((s) => s.has(id))) continue;
-      if (c.done !== undefined && doc.get(id).done !== c.done) continue;
+      if (c.is.length || c.notIs.length) {
+        const n = doc.get(id);
+        if (!c.is.every((k) => isKind(n, k)) || c.notIs.some((k) => isKind(n, k))) continue;
+      }
       if (c.notTerms.length) {
         const t = text.textOf(id);
         if (c.notTerms.some((term) => t.includes(term))) continue;

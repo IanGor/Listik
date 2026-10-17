@@ -6,6 +6,8 @@ import type { NodeId } from './types';
 export interface Tree {
   text: string;
   note?: string;
+  /** A task: `- [ ]`, or `- [x]` when done. */
+  todo?: boolean;
   done?: boolean;
   children: Tree[];
 }
@@ -56,6 +58,7 @@ export function parseIndented(text: string): Tree[] {
     const box = marker && CHECKBOX.exec(body);
     if (box) {
       node.text = own(body.slice(box[0].length));
+      node.todo = true;
       if (box[1] !== ' ') node.done = true;
     }
     while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
@@ -93,7 +96,7 @@ export function markdownOf(doc: Doc, ids: NodeId[]): string {
   walk(doc, ids, (id, depth) => {
     const n = doc.get(id);
     const pad = '  '.repeat(depth);
-    out.push(`${pad}- ${n.done ? '[x] ' : ''}${n.text}`);
+    out.push(`${pad}- ${n.todo || n.done ? (n.done ? '[x] ' : '[ ] ') : ''}${n.text}`);
     if (n.note) for (const line of n.note.split('\n')) out.push(line.trim() ? `${pad}  ${line}` : '');
   });
   return out.length ? `${out.join('\n')}\n` : '';
@@ -113,7 +116,7 @@ export function toOpml(doc: Doc, title = 'Listik'): string {
   const emit = (id: NodeId, depth: number) => {
     const n = doc.get(id);
     const pad = '  '.repeat(depth + 2);
-    const extra = (n.note ? ` _note="${escapeXml(n.note)}"` : '') + (n.done ? ' _complete="true"' : '');
+    const extra = (n.note ? ` _note="${escapeXml(n.note)}"` : '') + (n.todo ? ' _task="true"' : '') + (n.done ? ' _complete="true"' : '');
     const open = `${pad}<outline text="${escapeXml(n.text)}"${extra}`;
     if (!n.children.length) return out.push(`${open} />`);
     out.push(`${open}>`);
@@ -141,7 +144,9 @@ export function parseOpml(xml: string): Tree[] {
         const tree: Tree = { text: (c.getAttribute('text') ?? '').replace(/\s*\n\s*/g, ' '), children: read(c) };
         const note = c.getAttribute('_note');
         if (note) tree.note = note;
-        if (c.getAttribute('_complete') === 'true') tree.done = true;
+        if (c.getAttribute('_task') === 'true') tree.todo = true;
+        // Workflowy has no tasks: a completed item becomes a completed task.
+        if (c.getAttribute('_complete') === 'true') tree.todo = tree.done = true;
         return tree;
       });
   return read(body);

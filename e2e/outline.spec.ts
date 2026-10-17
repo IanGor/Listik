@@ -359,15 +359,34 @@ test('the logo goes home: out of zoom and search, top level folded, one undo ste
 });
 
 test.describe('done and notes', () => {
-  test('Ctrl+Enter completes a bullet and undoes like any change', async ({ page }) => {
+  test('Ctrl+Enter makes a task (checkbox), then checks it; Ctrl+Shift+Enter makes it plain; undo works', async ({ page }) => {
+    const row = page.locator('.row', { hasText: 'Часть вторая' });
+    const box = row.locator('.bullet');
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+Enter');
-    await expect(page.locator('.row', { hasText: 'Часть вторая' })).toHaveClass(/done/);
+    await expect(box).toHaveClass(/todo/);
+    await expect(box).toHaveAttribute('aria-checked', 'false');
+    await expect(row).not.toHaveClass(/done/);
     await page.keyboard.press('Control+Enter');
-    await expect(page.locator('.row', { hasText: 'Часть вторая' })).not.toHaveClass(/done/);
-    await page.keyboard.press('Control+Enter');
+    await expect(row).toHaveClass(/done/);
+    await expect(box).toHaveAttribute('aria-checked', 'true');
     await page.keyboard.press('Control+z');
-    await expect(page.locator('.row', { hasText: 'Часть вторая' })).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/done/);
+    await page.keyboard.press('Control+Shift+Enter');
+    await expect(box).not.toHaveClass(/todo/);
+  });
+
+  test('a click on the checkbox checks the task; a click on a plain bullet still zooms in', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Control+Enter');
+    const row = page.locator('.row', { hasText: 'Том второй' });
+    await row.locator('.bullet').click();
+    await expect(row).toHaveClass(/done/);
+    await expect(editing(page)).toHaveText('Том второй'); // editing goes on
+    await row.locator('.bullet').click();
+    await expect(row).not.toHaveClass(/done/);
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
   test('Shift+Enter writes a note under the bullet; Esc and arrows move between text and note', async ({ page }) => {
@@ -397,12 +416,15 @@ test.describe('done and notes', () => {
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+o');
     await expect(page.locator('.toast')).toContainText('Выполненные скрыты');
+    await page.keyboard.press('Control+Enter'); // a task now, still open: stays
+    expect(await outline(page)).toEqual(DEMO);
     await page.keyboard.press('Control+Enter');
     expect(await outline(page)).toEqual(DEMO.filter((l) => !l.includes('Часть вторая')));
     await expect(editing(page)).toHaveText('Том второй');
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(DEMO.length); // ?demo starts fresh, nothing is completed
     await page.locator('.row .text', { hasText: 'Том второй' }).click();
+    await page.keyboard.press('Control+Enter');
     await page.keyboard.press('Control+Enter');
     expect(await outline(page)).toEqual(DEMO.slice(0, 5)); // still hidden after the reload
     await page.keyboard.press('Control+o');
@@ -416,6 +438,7 @@ test.describe('done and notes', () => {
     await page.keyboard.press('Shift+Enter');
     await page.keyboard.type('заметка');
     await page.keyboard.press('Shift+Enter');
+    await page.keyboard.press('Control+Enter');
     await page.keyboard.press('Control+Enter');
     await page.waitForTimeout(500);
     await page.reload();
@@ -434,6 +457,8 @@ test.describe('selecting several bullets', () => {
     expect(await selected(page)).toEqual(['Часть вторая', 'Том второй']);
     await expect(editing(page)).toHaveCount(0);
 
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('.row .bullet.todo')).toHaveCount(2);
     await page.keyboard.press('Control+Enter');
     await expect(page.locator('.row.done')).toHaveCount(2);
     await page.keyboard.press('Control+c');
@@ -557,7 +582,7 @@ test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({
   await page.keyboard.press('?');
   const panel = page.getByRole('dialog', { name: 'Горячие клавиши' });
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText('отметить выполненным');
+  await expect(panel).toContainText('сделать задачей (чекбокс)');
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
   await edit(page, 'Том второй');

@@ -145,6 +145,11 @@ describe('snapshot versions', () => {
     expect(copy.get('b').done).toBe(true);
     expect(copy.get('a').note).toBe('заметка\nв две строки');
 
+    // v2 had no tasks: a completed bullet becomes a completed task.
+    const v2 = JSON.stringify({ v: 2, root: 'root', rows: [['y', -1, 'a0', 'было сделано', 0, 1, 2, 1, '']] });
+    expect(deserialize(v2).get('y')).toMatchObject({ todo: true, done: true });
+    expect(deserialize(serialize(deserialize(v2))).get('y')).toMatchObject({ todo: true, done: true });
+
     const v1 = JSON.stringify({ v: 1, root: 'root', rows: [['x', -1, 'a0', 'старый', 0, 1, 2]] });
     expect(deserialize(v1).get('x')).toMatchObject({ text: 'старый', done: false, note: '', created: 1, updated: 2 });
   });

@@ -20,7 +20,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
     // Enter splits; Ctrl/Cmd+Enter completes; Shift+Enter goes to the note.
     case 'Enter':
       return handle(() => {
-        if (mod) return o.toggleDone([id], here);
+        if (mod) return e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here);
         if (e.shiftKey) return o.setFocus({ id, caret: o.doc.get(id).note.length, note: true });
         o.run((ctx) => {
           const text = ctx.doc.get(id).text;
@@ -122,7 +122,7 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
     case 'Delete':
       return handle(() => o.run((ctx) => cmd.deleteMany(ctx, roots())));
     case 'Enter':
-      if (mod) return handle(() => o.toggleDone(roots()));
+      if (mod) return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
       return handle(() => o.setFocus({ id: selection.head, caret: o.doc.get(selection.head).text.length }));
   }
   if (mod && e.code === 'KeyC') return handle(() => void copy());
@@ -148,7 +148,10 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTM
     e.preventDefault();
     fn();
   };
-  if (e.key === 'Enter' && mod) return handle(() => o.toggleDone([id], { id, caret: start, note: true }));
+  if (e.key === 'Enter' && mod) {
+    const here = { id, caret: start, note: true } as const;
+    return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
+  }
   if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
   if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);
   if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !mod && caretOnFirstLine(el)) {

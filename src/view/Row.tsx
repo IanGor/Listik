@@ -107,10 +107,12 @@ export function Row(props: RowProps) {
       </Show>
       <span
         class="bullet"
-        classList={{ collapsed: folded() }}
+        classList={{ collapsed: folded(), todo: !!node()?.todo, checked: !!node()?.done }}
+        role={node()?.todo ? 'checkbox' : undefined}
+        aria-checked={node()?.todo ? !!node()?.done : undefined}
         // No default on mousedown: DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
-        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && o.zoomTo(id)}
+        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !node()?.todo && o.zoomTo(id)}
       />
       <div class="body">
         <Show
