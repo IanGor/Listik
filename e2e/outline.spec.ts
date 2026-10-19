@@ -579,6 +579,32 @@ test.describe('forever calendar', () => {
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
+  test('‹ › and Ctrl+Alt+←/→ step to the day, month or quarter before and after', async ({ page }) => {
+    const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)}`;
+    const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+    await expect(page.locator('.period-steps')).toHaveCount(0);
+    await create(page);
+    // While writing in today's entry.
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Control+Alt+ArrowRight');
+    await expect(title(page)).toHaveText(dayText(shifted(1)));
+    await page.getByRole('button', { name: 'Следующий день' }).click();
+    await expect(title(page)).toHaveText(dayText(shifted(2)));
+    await page.keyboard.press('Control+Alt+ArrowLeft');
+    await page.getByRole('button', { name: 'Предыдущий день' }).click();
+    await expect(title(page)).toHaveText(today);
+    // Today's year was made by going there, the others were not.
+    expect(await outline(page)).toEqual([year, '  ']);
+    await page.locator('.crumbs .crumb', { hasText: /^@m/ }).click();
+    await page.getByRole('button', { name: 'Следующий месяц' }).click();
+    await expect(title(page)).toHaveText(`@m${two(((now.getMonth() + 1) % 12) + 1)}`);
+    await page.locator('.crumbs .crumb', { hasText: /^@q/ }).click();
+    await page.getByRole('button', { name: 'Предыдущий квартал' }).click();
+    await expect(title(page)).toHaveText(`@q${((Math.floor(now.getMonth() / 3) + 3) % 4) + 1}`);
+    await page.locator('.crumbs .crumb', { hasText: '@календарь' }).click();
+    await expect(page.locator('.period-steps')).toHaveCount(0);
+  });
+
   test('a stored document opens on today; a reload stays where it was', async ({ page }) => {
     await page.goto('/?db=e2e-calendar');
     await create(page);

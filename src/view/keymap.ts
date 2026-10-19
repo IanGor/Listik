@@ -24,9 +24,20 @@ export function formatSelection(o: Outliner, id: RowKey, el: HTMLElement, note: 
   if (r) selectRange(el, r.start, r.end);
 }
 
+/**
+ * Ctrl+Alt+← / Ctrl+Alt+→ in a period of the forever calendar: the day (month,
+ * quarter) before or after. Wherever the caret is; returns whether handled.
+ */
+export function periodKeys(e: KeyboardEvent, o: Outliner): boolean {
+  if (!e.ctrlKey || !e.altKey || e.shiftKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+  if (!o.stepPeriod(e.key === 'ArrowLeft' ? -1 : 1)) return false;
+  e.preventDefault();
+  return true;
+}
+
 /** Keyboard handling for the row being edited (`el` is its contenteditable). */
 export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTMLElement): void {
-  if (e.isComposing || formatKeys(e, o, id, el, false)) return;
+  if (e.isComposing || formatKeys(e, o, id, el, false) || periodKeys(e, o)) return;
   const mod = e.ctrlKey || e.metaKey;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const collapsed = start === end;
@@ -170,7 +181,7 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
 
 /** Keyboard handling in a bullet's note: Enter makes a new line; the rest leads back out. */
 export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTMLElement): void {
-  if (e.isComposing || formatKeys(e, o, id, el, true)) return;
+  if (e.isComposing || formatKeys(e, o, id, el, true) || periodKeys(e, o)) return;
   const mod = e.ctrlKey || e.metaKey;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const toText = () => o.setFocus({ id, caret: o.contentOf(id).text.length });

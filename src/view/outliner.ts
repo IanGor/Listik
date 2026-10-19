@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { createCalendar, dayOf, findCalendar, findPeriod, findYear, openYear, periodText } from '../model/calendar';
+import { createCalendar, dayOf, findCalendar, findPeriod, findYear, neighbour, openYear, periodAt, periodText, type Period } from '../model/calendar';
 import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
@@ -409,6 +409,38 @@ export class Outliner {
     };
     if (findYear(this.doc, day, year) === null && this.syncing() && !this.synced) this.afterSync = open;
     else open();
+  }
+
+  /** The calendar period (quarter, month, day) the zoom is in; null outside the calendar. Reactive. */
+  zoomPeriod(): Period | null {
+    const z = this.zoom();
+    const calendar = this.calendar();
+    return z && calendar ? periodAt(this.doc, calendar, z) : null;
+  }
+
+  /**
+   * ‹ › over the list, Ctrl+Alt+←/→: into the period before or after the one
+   * zoomed into, a day across months and years (model/calendar.ts
+   * `neighbour`). Periods missing from the calendar are passed over. Returns
+   * whether the zoom is in a period at all.
+   */
+  stepPeriod(step: -1 | 1): boolean {
+    const from = this.zoomPeriod();
+    const calendar = this.calendar();
+    if (!from || !calendar) return false;
+    const year = new Date().getFullYear();
+    let p = from;
+    for (let i = 0; i < 366; i++) {
+      p = neighbour(p, step, year);
+      const id = findPeriod(this.doc, this.tags, calendar, p);
+      if (id === null) continue;
+      batch(() => {
+        this.setFocus(null);
+        this.zoomTo(id);
+      });
+      return true;
+    }
+    return true;
   }
 
   /** The app comes back into view: still in yesterday's day, it goes on to today's. */
