@@ -62,11 +62,6 @@ export function EditBar(props: { o: Outliner }) {
     if (h) action.run(o, h);
   };
 
-  const done = () => {
-    o.setFocus(null);
-    (document.activeElement as HTMLElement | null)?.blur();
-  };
-
   return (
     <Show when={touch() && !o.readOnly && o.focus()}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
@@ -77,9 +72,6 @@ export function EditBar(props: { o: Outliner }) {
             </button>
           )}
         </For>
-        <button type="button" tabIndex={-1} class="editbar-done" title="Готово" aria-label="Готово" onClick={done}>
-          <Icon paths={['M6 9l6 6 6-6']} />
-        </button>
       </div>
     </Show>
   );

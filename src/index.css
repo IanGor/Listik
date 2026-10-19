@@ -851,12 +851,6 @@ mark,
   background: var(--surface-2);
 }
 
-/* "Done" closes the keyboard: set apart from the edits by a hairline. */
-.editbar .editbar-done {
-  border-left: 1px solid var(--hairline);
-  border-radius: 0 10px 10px 0;
-}
-
 /* --- Drag and drop ----------------------------------------------------------- */
 
 /* A finger on a bullet may still scroll the list up and down; held still,

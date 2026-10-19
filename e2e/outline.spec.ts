@@ -729,10 +729,8 @@ test.describe('touch screen', () => {
     await action(page, 'Заметка').tap();
     await expect(editing(page)).toBeFocused();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.note')).toHaveText('с телефона');
-
-    await action(page, 'Готово').tap();
-    await expect(bar(page)).toHaveCount(0);
-    await expect(page.locator('[contenteditable]')).toHaveCount(0);
+    // The keyboard has its own key to hide it.
+    await expect(action(page, 'Готово')).toHaveCount(0);
   });
 
   /** A finger down on a row's bullet, optionally held, moved in steps to (x, y), and lifted. */
