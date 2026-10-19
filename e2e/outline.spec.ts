@@ -305,8 +305,13 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
   });
 
-  test('the "+" under a zoomed-in list adds bullets without the keyboard', async ({ page }) => {
-    await expect(page.locator('.add')).toHaveCount(0); // not on the home page
+  test('the "+" under the list adds bullets without the keyboard, home or zoomed in', async ({ page }) => {
+    // Home: a new last top-level bullet.
+    await page.locator('.add').click();
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('Том третий');
+    expect(await outline(page)).toEqual([...DEMO, 'Том третий']);
+
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
     expect(await outline(page)).toEqual([]);
     await page.locator('.add').click();

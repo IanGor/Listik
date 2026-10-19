@@ -62,8 +62,8 @@ export function Outline(props: { o: Outliner }) {
     layout();
     return v.total;
   });
-  /** Zoomed in, as in Workflowy: a "+" under the list adds a bullet without the keyboard. */
-  const showAdd = () => !!o.zoom() && !o.filter() && !o.readOnly;
+  /** A "+" under the list, home or zoomed in, adds a bullet without the keyboard. */
+  const showAdd = () => !o.filter() && !o.readOnly;
   const addBullet = () => o.run((ctx) => appendChild(ctx, o.rows.top));
   const drag = createDrag(o, () => ({ scroller, spacer, windowEl, indentProbe }));
 
