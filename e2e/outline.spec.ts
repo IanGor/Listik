@@ -674,6 +674,24 @@ test.describe('phone screen', () => {
     await page.getByRole('button', { name: 'Меню документа' }).click();
     await expect(page.getByRole('menuitem', { name: /тема/ })).toHaveCount(0);
   });
+
+  test('the keyboard coming up keeps the edited row in view', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 915 });
+    await page.goto('/?sample=300');
+    await expect(page.locator('.row').first()).toBeVisible();
+    // The lowest row that is fully on screen.
+    const id = await page.locator('.row').evaluateAll((rows) => {
+      const fits = rows.filter((r) => r.getBoundingClientRect().bottom <= innerHeight);
+      return (fits[fits.length - 1] as HTMLElement).dataset.id!;
+    });
+    const row = page.locator(`.row[data-id="${id}"]`);
+    await row.locator('.text').click();
+    await expect(editing(page)).toBeFocused();
+    // The keyboard takes ~40% of the screen (index.html: it shrinks the page).
+    await page.setViewportSize({ width: 412, height: 540 });
+    await expect.poll(async () => (await row.boundingBox())!.y + (await row.boundingBox())!.height).toBeLessThanOrEqual(540);
+    await expect(editing(page)).toBeFocused();
+  });
 });
 
 test.describe('persistence', () => {

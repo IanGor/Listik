@@ -117,8 +117,17 @@ export function Outline(props: { o: Outliner }) {
   onMount(() => {
     updateMetrics();
     let width = scroller.clientWidth;
+    let height = scroller.clientHeight;
     const resize = new ResizeObserver(() => {
       setViewport(scroller.clientHeight);
+      // Shorter: on a phone the keyboard came up (index.html makes it shrink
+      // the page). The row being edited must stay above it.
+      if (scroller.clientHeight < height) {
+        const f = o.focus();
+        const i = f ? o.rows.indexOf(f.id) : -1;
+        if (i >= 0) ensureVisible(i);
+      }
+      height = scroller.clientHeight;
       if (scroller.clientWidth === width) return;
       width = scroller.clientWidth;
       updateMetrics();
