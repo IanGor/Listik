@@ -61,7 +61,7 @@ export function setNote({ doc }: Ctx, id: NodeId, note: string): void {
 }
 
 /**
- * Ctrl+Enter: completes the bullets, or un-completes them if all are done
+ * Ctrl+L: completes the bullets, or un-completes them if all are done
  * already (for a selection: one press sets them all the same way).
  */
 export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
@@ -72,7 +72,7 @@ export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
 }
 
 /**
- * Ctrl+Enter: a plain bullet becomes a task (an empty checkbox); a task is
+ * Ctrl+L: a plain bullet becomes a task (an empty checkbox); a task is
  * checked or unchecked. For several bullets: any plain ones become tasks
  * first; once all are tasks, they are checked (or all unchecked).
  */
@@ -83,7 +83,7 @@ export function cycleTask(ctx: Ctx, ids: NodeId[]): void {
   else toggleDone(ctx, ids);
 }
 
-/** Ctrl+Shift+Enter: tasks become plain bullets again (and so not done). */
+/** Ctrl+Shift+L: tasks become plain bullets again (and so not done). */
 export function untask({ doc }: Ctx, ids: NodeId[]): void {
   for (const id of ids) {
     const n = doc.get(id);

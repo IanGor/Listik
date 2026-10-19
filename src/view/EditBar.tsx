@@ -54,7 +54,7 @@ const ACTIONS: Action[] = [
 /**
  * A bar of editing actions at the bottom of a touch screen while a bullet is
  * edited and the on-screen keyboard is up: the keyboard has no Tab,
- * Ctrl+Enter or Ctrl+Z. Hidden with the keyboard, even if the row is still
+ * Ctrl+L or Ctrl+Z. Hidden with the keyboard, even if the row is still
  * being edited. It sits in the page's flow, so it rests right on the keyboard
  * (index.html). Its buttons never take focus: the keyboard stays open.
  *

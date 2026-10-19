@@ -303,12 +303,12 @@ export class Outliner {
     this.notify(show ? 'Выполненные показаны' : `Выполненные скрыты — ${touch() ? 'показать можно в меню «⋯»' : 'Ctrl+O, чтобы показать'}`);
   }
 
-  /** Ctrl+Enter: plain bullets become tasks; tasks are checked or unchecked. */
+  /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */
   cycleTask(ids: NodeId[], keep?: Focus): void {
     this.changeTasks((ctx) => cycleTask(ctx, ids), ids, keep);
   }
 
-  /** Ctrl+Shift+Enter: tasks become plain bullets again. */
+  /** Ctrl+Shift+L: tasks become plain bullets again. */
   untask(ids: NodeId[], keep?: Focus): void {
     this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
   }

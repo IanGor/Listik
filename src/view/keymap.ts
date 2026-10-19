@@ -36,11 +36,14 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
     fn();
   };
 
+  // Ctrl/Cmd+L (by physical key): task on, checked, unchecked; with Shift, a plain bullet again.
+  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
+
   switch (e.key) {
-    // Enter splits; Ctrl/Cmd+Enter completes; Shift+Enter goes to the note.
+    // Enter splits; Shift+Enter goes to the note. Ctrl+Enter, the old task key, does nothing.
     case 'Enter':
       return handle(() => {
-        if (mod) return e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here);
+        if (mod) return;
         if (e.shiftKey) return o.setFocus({ id, caret: o.doc.get(id).note.length, note: true });
         o.run((ctx) => {
           const text = ctx.doc.get(id).text;
@@ -145,9 +148,10 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
     case 'Delete':
       return handle(() => o.run((ctx) => cmd.deleteMany(ctx, roots())));
     case 'Enter':
-      if (mod) return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
+      if (mod) return handle(() => {});
       return handle(() => o.setFocus({ id: selection.head, caret: o.doc.get(selection.head).text.length }));
   }
+  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
   if (mod && e.code === 'KeyC') return handle(() => void copy());
   if (mod && e.code === 'KeyX') {
     return handle(() => {
@@ -171,10 +175,11 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTM
     e.preventDefault();
     fn();
   };
-  if (e.key === 'Enter' && mod) {
+  if (mod && !e.altKey && e.code === 'KeyL') {
     const here = { id, caret: start, note: true } as const;
     return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
   }
+  if (e.key === 'Enter' && mod) return handle(() => {});
   if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
   if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);
   if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !mod && caretOnFirstLine(el)) {

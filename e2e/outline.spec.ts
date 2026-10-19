@@ -386,26 +386,33 @@ test('the logo goes home: out of zoom and search, top level folded, one undo ste
 });
 
 test.describe('done and notes', () => {
-  test('Ctrl+Enter makes a task (checkbox), then checks it; Ctrl+Shift+Enter makes it plain; undo works', async ({ page }) => {
+  test('Ctrl+L makes a task (checkbox), then checks it; Ctrl+Shift+L makes it plain; undo works', async ({ page }) => {
     const row = page.locator('.row', { hasText: 'Часть вторая' });
     const box = row.locator('.bullet');
     await edit(page, 'Часть вторая');
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     await expect(box).toHaveClass(/todo/);
     await expect(box).toHaveAttribute('aria-checked', 'false');
     await expect(row).not.toHaveClass(/done/);
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     await expect(row).toHaveClass(/done/);
     await expect(box).toHaveAttribute('aria-checked', 'true');
     await page.keyboard.press('Control+z');
     await expect(row).not.toHaveClass(/done/);
-    await page.keyboard.press('Control+Shift+Enter');
+    await page.keyboard.press('Control+Shift+L');
     await expect(box).not.toHaveClass(/todo/);
+    // The old key does nothing now: no task, no split.
+    await page.keyboard.press('Control+Enter');
+    await expect(box).not.toHaveClass(/todo/);
+    expect(await outline(page)).toEqual(DEMO);
+    // A Russian layout: the same physical key, "д".
+    await editing(page).dispatchEvent('keydown', { key: 'д', code: 'KeyL', ctrlKey: true, bubbles: true });
+    await expect(box).toHaveClass(/todo/);
   });
 
   test('a click on the checkbox checks the task; a click on a plain bullet still zooms in', async ({ page }) => {
     await edit(page, 'Том второй');
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     const row = page.locator('.row', { hasText: 'Том второй' });
     await row.locator('.bullet').click();
     await expect(row).toHaveClass(/done/);
@@ -443,16 +450,16 @@ test.describe('done and notes', () => {
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+o');
     await expect(page.locator('.toast')).toContainText('Выполненные скрыты');
-    await page.keyboard.press('Control+Enter'); // a task now, still open: stays
+    await page.keyboard.press('Control+l'); // a task now, still open: stays
     expect(await outline(page)).toEqual(DEMO);
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     expect(await outline(page)).toEqual(DEMO.filter((l) => !l.includes('Часть вторая')));
     await expect(editing(page)).toHaveText('Том второй');
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(DEMO.length); // ?demo starts fresh, nothing is completed
     await page.locator('.row .text', { hasText: 'Том второй' }).click();
-    await page.keyboard.press('Control+Enter');
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
     expect(await outline(page)).toEqual(DEMO.slice(0, 5)); // still hidden after the reload
     await page.keyboard.press('Control+o');
     expect(await outline(page)).toEqual(DEMO);
@@ -465,8 +472,8 @@ test.describe('done and notes', () => {
     await page.keyboard.press('Shift+Enter');
     await page.keyboard.type('заметка');
     await page.keyboard.press('Shift+Enter');
-    await page.keyboard.press('Control+Enter');
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
     await page.waitForTimeout(500);
     await page.reload();
     await expect(page.locator('.row')).toHaveClass(/done/);
@@ -497,16 +504,16 @@ test('dragging across a row that is not being edited selects its text on the fir
 test.describe('selecting several bullets', () => {
   const selected = (page: Page) => page.locator('.row.selected .text').allTextContents();
 
-  test('Shift+↓ selects; Tab, Ctrl+Enter, copy, Delete and undo act on the block', async ({ page, context }) => {
+  test('Shift+↓ selects; Tab, Ctrl+L, copy, Delete and undo act on the block', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Shift+ArrowDown');
     expect(await selected(page)).toEqual(['Часть вторая', 'Том второй']);
     await expect(editing(page)).toHaveCount(0);
 
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     await expect(page.locator('.row .bullet.todo')).toHaveCount(2);
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('Control+l');
     await expect(page.locator('.row.done')).toHaveCount(2);
     await page.keyboard.press('Control+c');
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('- [x] Часть вторая\n- [x] Том второй\n');
@@ -772,7 +779,7 @@ test.describe('touch screen', () => {
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
 
-  test('a bar under the list does what Tab, Ctrl+Enter and Ctrl+Z do; the keyboard stays', async ({ page }) => {
+  test('a bar under the list does what Tab, Ctrl+L and Ctrl+Z do; the keyboard stays', async ({ page }) => {
     await expect(bar(page)).toHaveCount(0);
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     await expect(editing(page)).toBeFocused();

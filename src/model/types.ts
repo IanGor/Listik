@@ -12,7 +12,7 @@ export interface OutlineNode {
   /** A note under the bullet (Shift+Enter), may span lines; '' for none. */
   note: string;
   collapsed: boolean;
-  /** A task (Ctrl+Enter): drawn as a checkbox. Plain bullets are just text. */
+  /** A task (Ctrl+L): drawn as a checkbox. Plain bullets are just text. */
   todo: boolean;
   /** A completed task: checked and struck through. Only tasks are ever done. */
   done: boolean;
