@@ -123,6 +123,8 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
 
   const onMouseDown = (isNote: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
+    // A web address opens on its click; the title is not edited.
+    if ((e.target as HTMLElement).closest('a.url')) return;
     e.preventDefault();
     const target = e.target as HTMLElement;
     const tag = target.dataset.tag;

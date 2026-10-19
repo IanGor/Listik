@@ -1,5 +1,5 @@
 import { walkSnapshot, type Doc, type DocListener } from './doc';
-import { BOLD, ITALIC, LINK, LINK_RE, MARKER, formatFlags } from './format';
+import { BOLD, ITALIC, LINK, LINK_RE, MARKER, URL, formatFlags, webLinks } from './format';
 import { content, splitTags, tagKey, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
@@ -292,11 +292,13 @@ export interface Piece {
   marker?: true;
   /** Part of a `[[link]]` (model/links.ts): the title it leads to. Tags inside a link are just text. */
   link?: string;
+  /** Part of a web address (model/format.ts): where it leads. */
+  url?: string;
 }
 
 const HIT = 16;
 
-/** Splits text into pieces for display: tags, search hits, bold, italic, formatting markers, plain text. */
+/** Splits text into pieces for display: tags, search hits, bold, italic, formatting markers, links, web addresses, plain text. */
 export function decorate(text: string, terms: string[]): Piece[] {
   const segments = splitTags(text);
   const flags = formatFlags(text);
@@ -316,6 +318,8 @@ export function decorate(text: string, terms: string[]): Piece[] {
   const out: Piece[] = [];
   const links = flags && text.includes('[[') ? [...text.matchAll(LINK_RE)] : [];
   let link = 0;
+  const web = flags ? webLinks(text) : [];
+  let w = 0;
   let pos = 0;
   for (const s of segments) {
     const end = pos + s.text.length;
@@ -327,6 +331,9 @@ export function decorate(text: string, terms: string[]): Piece[] {
       if (m & LINK) {
         while (links[link].index + links[link][0].length <= cur) link++;
         piece.link = links[link][1];
+      } else if (m & URL) {
+        while (web[w].end <= cur) w++;
+        piece.url = web[w].href;
       } else if (s.tag) piece.tag = s.tag;
       if (m & HIT) piece.hit = true;
       if (m & MARKER) piece.marker = true;

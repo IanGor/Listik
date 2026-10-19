@@ -25,7 +25,7 @@ interface RowProps {
 const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
 
 /**
- * Tags, search hits, bold and italic within a text, as rendered spans.
+ * Tags, search hits, bold and italic, links and web addresses within a text, as rendered spans.
  * Formatting markers stay in the DOM, hidden, so offsets in the element
  * are offsets in the text (a click puts the caret where it belongs).
  */
@@ -37,7 +37,10 @@ export function Pieces(props: { o: Outliner; pieces: Piece[] }) {
         const plain = p.hit ? <mark>{p.text}</mark> : p.text;
         const inner = p.link !== undefined
           ? <span class="link" data-link={p.link}>{plain}</span>
-          : p.tag
+          : p.url !== undefined
+            // Opens in the browser (another tab; the system browser from the installed app).
+            ? <a class="url" href={p.url} target="_blank" rel="noopener noreferrer">{plain}</a>
+            : p.tag
             ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
             : plain;
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
@@ -112,6 +115,8 @@ export function Row(props: RowProps) {
   /** A click in static text: a tag filters, a link leads to its bullet, anything else puts the caret there. */
   const onStaticMouseDown = (note: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
+    // A web address opens on its click; the row is not edited.
+    if ((e.target as HTMLElement).closest('a.url')) return;
     e.preventDefault();
     const target = e.target as HTMLElement;
     const tag = target.dataset.tag;

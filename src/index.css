@@ -680,6 +680,30 @@ kbd {
   box-shadow: -6px 0 0 2px var(--surface), 6px 0 0 2px var(--surface);
 }
 
+/* A web address: underlined in the link colour, an arrow after it, opens in the browser. */
+.url {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.url:hover {
+  text-decoration-color: currentColor;
+}
+
+/* "Outside the outline": a small arrow, drawn, not in the text (offsets hold). */
+.url::after {
+  content: '↗';
+  margin-left: 1px;
+  font-size: 0.8em;
+  text-decoration: none;
+  display: inline-block;
+}
+
 /* Tags and hits are chips, also drawn outside the text box: no reflow. */
 .tag {
   color: var(--link);

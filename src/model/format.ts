@@ -1,15 +1,50 @@
 /**
  * Inline formatting, Markdown style, in a bullet's plain text: `**bold**`,
- * `*italic*` or `_italic_`, and `[[links]]` to other bullets (model/links.ts).
- * The text keeps its markers (exports stay Markdown); the static view hides
- * them and styles what they enclose.
+ * `*italic*` or `_italic_`, `[[links]]` to other bullets (model/links.ts),
+ * and web addresses. The text keeps its markers (exports stay Markdown);
+ * the static view hides them and styles what they enclose.
  */
 
-/** Per character: part of a bold or italic run or a link, or a marker itself. */
+/** Per character: part of a bold or italic run, a link or a web address, or a marker itself. */
 export const BOLD = 1;
 export const ITALIC = 2;
 export const MARKER = 4;
 export const LINK = 8;
+/** 16 is search's HIT (search.ts). */
+export const URL = 32;
+
+/**
+ * A web address: `http://`, `https://` or `www.` up to a space, a quote or a
+ * bracket. What ends a sentence is left out (`site.ru.`, `site.ru,`), and so
+ * are formatting markers (`**site.ru**`) and a closing parenthesis without
+ * its opening one inside: `(see site.ru)`.
+ */
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`[\]{}«»]+/gi;
+const TRAILING = /[.,;:!?…'"»*_]$/;
+
+/** A web address in a text: where it stands and where it leads. */
+export interface WebLink {
+  start: number;
+  end: number;
+  href: string;
+}
+
+/** The web addresses of a text, in order. */
+export function webLinks(text: string): WebLink[] {
+  if (!text.includes('://') && !/www\./i.test(text)) return [];
+  const out: WebLink[] = [];
+  for (const m of text.matchAll(URL_RE)) {
+    let url = m[0];
+    for (;;) {
+      if (TRAILING.test(url)) url = url.slice(0, -1);
+      else if (url.endsWith(')') && url.split('(').length < url.split(')').length) url = url.slice(0, -1);
+      else break;
+    }
+    if (/^(?:https?:\/\/|www\.)$/i.test(url)) continue;
+    out.push({ start: m.index, end: m.index + url.length, href: /^www\./i.test(url) ? `https://${url}` : url });
+  }
+  return out;
+}
 
 /** `[[title]]`: no brackets or line breaks inside, and not blank. */
 export const LINK_RE = /\[\[(?=[^[\]\n]*[^[\]\s])([^[\]\n]+)\]\]/g;
@@ -20,10 +55,11 @@ export const LINK_RE = /\[\[(?=[^[\]\n]*[^[\]\s])([^[\]\n]+)\]\]/g;
 const BOLD_RE = /(?<![\p{L}\p{N}*])\*\*(?=\S)(.+?)(?<=\S)\*\*(?![\p{L}\p{N}*])/gu;
 const ITALIC_RE = /(?<![\p{L}\p{N}*_])([*_])(?!\1)(?=\S)(.+?)(?<=\S)(?<!\1\1)\1(?![\p{L}\p{N}*_])/gu;
 
-/** Formatting flags of each character (BOLD, ITALIC, MARKER, LINK); null when the text has none. */
+/** Formatting flags of each character (BOLD, ITALIC, MARKER, LINK, URL); null when the text has none. */
 export function formatFlags(text: string): Uint8Array | null {
   const links = text.includes('[[');
-  if (!links && !text.includes('*') && !text.includes('_')) return null;
+  const web = webLinks(text);
+  if (!links && !web.length && !text.includes('*') && !text.includes('_')) return null;
   let flags: Uint8Array | null = null;
   // A link's brackets are markers too, flagged LINK as well: plainText drops
   // them, a link's title (links.ts) keeps them.
@@ -35,6 +71,16 @@ export function formatFlags(text: string): Uint8Array | null {
       for (let i = start; i < end; i++) flags[i] = i < start + 2 || i >= end - 2 ? MARKER | LINK : LINK;
     }
   }
+  // A web address outside a link: its `_` and `*` are not markers. Formatting
+  // is looked for with it written over in letters (same length), so a bold
+  // run may still hold a whole address.
+  let plain = text;
+  for (const w of web) {
+    if (flags && flags[w.start] & LINK) continue;
+    flags ??= new Uint8Array(text.length);
+    for (let i = w.start; i < w.end; i++) flags[i] |= URL;
+    plain = plain.slice(0, w.start) + 'x'.repeat(w.end - w.start) + plain.slice(w.end);
+  }
   const mark = (source: string, re: RegExp, style: number, marker: number) => {
     for (const m of source.matchAll(re)) {
       flags ??= new Uint8Array(text.length);
@@ -43,14 +89,14 @@ export function formatFlags(text: string): Uint8Array | null {
       for (let i = start; i < end; i++) flags[i] |= i < start + marker || i >= end - marker ? MARKER : style;
     }
   };
-  mark(text, BOLD_RE, BOLD, 2);
+  mark(plain, BOLD_RE, BOLD, 2);
   // Italic is looked for with bold's (and links') markers blanked out (same length, so
   // offsets hold): they neither open nor glue to an italic run.
-  let source = text;
+  let source = plain;
   const bold = flags as Uint8Array | null;
   if (bold) {
     source = '';
-    for (let i = 0; i < text.length; i++) source += bold[i] & MARKER ? ' ' : text[i];
+    for (let i = 0; i < plain.length; i++) source += bold[i] & MARKER ? ' ' : plain[i];
   }
   mark(source, ITALIC_RE, ITALIC, 1);
   return flags;

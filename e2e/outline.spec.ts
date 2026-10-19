@@ -1533,6 +1533,28 @@ test.describe('backlinks', () => {
   });
 });
 
+test.describe('web addresses', () => {
+  test('an address in the text opens in the browser; the row is not edited; a click beside it edits', async ({ page, context }) => {
+    await context.route('https://example.com/**', (route) => route.fulfill({ body: 'ok', contentType: 'text/plain' }));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' — см. https://example.com/a_b_c.');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    const url = page.locator('.row', { hasText: 'Том второй' }).locator('a.url');
+    await expect(url).toHaveText('https://example.com/a_b_c');
+    await expect(url).toHaveAttribute('href', 'https://example.com/a_b_c');
+    await expect(url).toHaveAttribute('target', '_blank');
+    // No italic made of the address's underscores.
+    await expect(page.locator('.row', { hasText: 'Том второй' }).locator('.md-italic')).toHaveCount(0);
+    const [popup] = await Promise.all([page.waitForEvent('popup'), url.click()]);
+    await expect.poll(() => popup.url()).toBe('https://example.com/a_b_c');
+    await popup.close();
+    await expect(editing(page)).toHaveCount(0);
+    await page.locator('.row .text', { hasText: 'Том второй' }).click({ position: { x: 5, y: 5 } });
+    await expect(editing(page)).toBeFocused();
+  });
+});
+
 test.describe('mirrors', () => {
   const list = (page: Page) => page.getByRole('listbox', { name: 'Зеркала' });
   const crumbs = (page: Page) => page.locator('.crumbs .crumb');

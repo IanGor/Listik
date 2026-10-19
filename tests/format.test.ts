@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BOLD, ITALIC, MARKER, formatFlags, plainText, toggleFormat } from '../src/model/format';
+import { BOLD, ITALIC, MARKER, URL, formatFlags, plainText, toggleFormat, webLinks } from '../src/model/format';
+import { decorate } from '../src/model/search';
 
 /** Flags as a string: b bold, i italic, B bold+italic, m marker, . plain. */
 function show(text: string): string {
@@ -50,5 +51,39 @@ describe('toggleFormat', () => {
     expect(toggleFormat('**word**', 2, 6, '*')).toEqual({ text: '***word***', start: 3, end: 7 });
     expect(toggleFormat('***word***', 3, 7, '*')).toEqual({ text: '**word**', start: 2, end: 6 });
     expect(toggleFormat('***word***', 3, 7, '**')).toEqual({ text: '*word*', start: 1, end: 5 });
+  });
+});
+
+describe('web addresses', () => {
+  const found = (text: string) => webLinks(text).map((w) => [text.slice(w.start, w.end), w.href]);
+
+  it('finds http, https and www addresses, leaving out what ends the sentence', () => {
+    expect(found('см. https://example.com/a?b=1#c, и www.site.ru.')).toEqual([
+      ['https://example.com/a?b=1#c', 'https://example.com/a?b=1#c'],
+      ['www.site.ru', 'https://www.site.ru'],
+    ]);
+    expect(found('(подробно: http://x.org/wiki/A_(b))')).toEqual([['http://x.org/wiki/A_(b)', 'http://x.org/wiki/A_(b)']]);
+    expect(found('(http://x.org)')).toEqual([['http://x.org', 'http://x.org']]);
+    expect(found('«https://ya.ru»')).toEqual([['https://ya.ru', 'https://ya.ru']]);
+    expect(found('https:// and www. alone, a@b.ru, nothing')).toEqual([]);
+  });
+
+  it('inside an address, _ and * are not markers, yet bold may hold a whole address', () => {
+    const text = 'https://x.org/a_b_c and _it_';
+    const f = formatFlags(text)!;
+    expect(f[15] & URL).toBe(URL);
+    expect(f[15] & ITALIC).toBe(0);
+    expect(f[text.indexOf('it')] & ITALIC).toBe(ITALIC);
+    const bold = formatFlags('**see https://x.org**')!;
+    expect(bold[8] & BOLD).toBe(BOLD);
+    expect(bold[8] & URL).toBe(URL);
+    expect(bold[0] & MARKER).toBe(MARKER);
+  });
+
+  it('decorates an address as a piece that leads to it; a link keeps its own', () => {
+    const pieces = decorate('читать https://x.org/a_b #тег', []);
+    expect(pieces.filter((p) => p.url)).toEqual([{ text: 'https://x.org/a_b', url: 'https://x.org/a_b' }]);
+    expect(pieces.find((p) => p.tag)?.tag).toBe('тег');
+    expect(decorate('[[Пьер]]', []).some((p) => p.url)).toBe(false);
   });
 });
