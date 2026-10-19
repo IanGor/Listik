@@ -1,4 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
+import { createCalendar, findCalendar } from '../model/calendar';
 import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
@@ -382,6 +383,23 @@ export class Outliner {
       this.run((ctx) => collapseChildren(ctx, this.doc.root));
       this.setFocus(null);
       this.setHomeRequests((n) => n + 1);
+    });
+  }
+
+  /** The forever calendar's bullet (model/calendar.ts); null if the document has none. Reactive. */
+  calendar(): NodeId | null {
+    this.rowsVersion();
+    return findCalendar(this.doc, this.tags);
+  }
+
+  /** The menu: puts the forever calendar into the document, one undo step, and goes into it. */
+  createCalendar(): void {
+    if (this.readOnly) return;
+    let calendar = this.calendar();
+    if (!calendar) this.run((ctx) => void (calendar = createCalendar(ctx)));
+    batch(() => {
+      this.setFocus(null);
+      this.zoomTo(calendar);
     });
   }
 

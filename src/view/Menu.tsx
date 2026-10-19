@@ -149,6 +149,11 @@ export function DocumentMenu(props: { o: Outliner }) {
           </div>
           <div class="menu-sep" role="separator" />
           <Show when={!o.readOnly}>
+            <Show when={!o.calendar()}>
+              <button type="button" role="menuitem" onClick={() => { close(); o.createCalendar(); }}>
+                Создать календарь <span class="hint">вечный</span>
+              </button>
+            </Show>
             <button type="button" role="menuitem" onClick={() => void importFile()}>
               Импорт из файла…
             </button>

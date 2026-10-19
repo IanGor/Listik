@@ -531,6 +531,28 @@ test('the logo goes home: out of zoom and search, top level folded, one undo ste
   expect(await outline(page)).toEqual(DEMO);
 });
 
+test.describe('forever calendar', () => {
+  const create = async (page: Page) => {
+    await page.locator('.menu-button').click();
+    await page.getByRole('menuitem', { name: /Создать календарь/ }).click();
+  };
+
+  test('the menu builds it once: quarters, months and days named by tags; one undo step', async ({ page }) => {
+    await create(page);
+    await expect(page.locator('.zoom-title')).toHaveText('@календарь');
+    expect(await outline(page)).toEqual(['@q1', '@q2', '@q3', '@q4']);
+    await page.locator('.row', { hasText: '@q4' }).locator('.toggle').click();
+    expect((await outline(page)).slice(4, 8)).toEqual(['  @m10', '    @d01 @m10', '    @d02 @m10', '    @d03 @m10']);
+    await page.locator('.menu-button').click();
+    await expect(page.getByRole('menuitem', { name: /Создать календарь/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // The unfold and the calendar itself.
+    for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z');
+    await expect(page.locator('.zoom-title')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+});
+
 test.describe('done and notes', () => {
   test('Ctrl+L makes a task (checkbox), then checks it; Ctrl+Shift+L makes it plain; undo works', async ({ page }) => {
     const row = page.locator('.row', { hasText: 'Часть вторая' });

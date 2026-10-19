@@ -40,6 +40,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **тольк
   - `commands.ts` — все команды правки;
   - `rows.ts` — `VisibleRows`: плоский pre-order список видимых строк по ключам `RowKey` (`nodeOf`, `contextOf`, `keyIn`, `locate`, `parentKey`, `host`), фильтр (`Filter{keep,open}`, `keepSet`), zoom (`top`), скрытие выполненных (`unfolded` — развёрнут ли пункт без учёта скрытых выполненных);
   - `tags.ts` — `TagIndex` (`nodesWithPrefix`: тег в поиске совпадает по началу), `content(n)` = текст + заметка; теги `#имя` (ключ «имя») и `@имя` (ключ «@имя»): `tagKey`, `tagText`;
+  - `calendar.ts` — вечный календарь (по образцу Forever Notes): `@календарь` → `@q4` → `@m10` → день `@d19 @m10` → год `@y2026`; `calendarTree`, `periodOf`/`periodAt`, `findCalendar`, `findPeriod` (по тегам, не по месту), `neighbour` (29 февраля только в високосный), `openYear`, `createCalendar`;
   - `time.ts` — `/time` → время устройства `ЧЧ:ММ` (`Outliner.insert`);
   - `format.ts` — `**жирный**`, `*курсив*`, скобки `[[ссылок]]`, веб-адреса (`webLinks`, флаг `URL`): флаги символов, `plainText`, `toggleFormat` (Ctrl+B/I, `Outliner.format`);
   - `links.ts` — ссылки `[[название]]`: `titleOf`, `resolveLink` (первый в порядке документа), `linkBefore`, пара скобок (`opensLink`/`closesLink`), подсказки `findTargets`, обратные ссылки `backlinks`/`linkEnd`; переход — `Outliner.followLink` (запоминает `cameFrom`), назад — `Outliner.goToBacklink`;
