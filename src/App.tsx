@@ -6,15 +6,17 @@ import { acquireWriteLock } from './persist/lock';
 import { codecFor, openVault, startSync, type Opened } from './sync/setup';
 import { Outline } from './view/Outline';
 import { Outliner } from './view/outliner';
+import { Restore } from './view/Restore';
 import { Unlock } from './view/Unlock';
 
 /**
  * The outline is stored in IndexedDB (`?db=name` picks the database).
  * `?demo` and `?sample=200000` open in-memory documents instead and never
  * touch stored data. An encrypted document whose key this device does not
- * remember shows the unlock screen first.
+ * remember shows the unlock screen first; one whose local copy does not open
+ * with the key it remembers offers to restore that copy from the server.
  */
-async function load(): Promise<Outliner | { locked: Opened }> {
+async function load(): Promise<Outliner | { locked: Opened } | { damaged: Opened }> {
   const params = new URLSearchParams(location.search);
   const sample = Number(params.get('sample'));
   if (sample > 0) {
@@ -30,7 +32,7 @@ async function load(): Promise<Outliner | { locked: Opened }> {
   return open(name, opened);
 }
 
-async function open(name: string, opened: Opened): Promise<Outliner> {
+async function open(name: string, opened: Opened): Promise<Outliner | { damaged: Opened }> {
   const codec = await codecFor(opened.secret);
   // Another tab is editing this document: show it read-only, and reload into
   // the writer's seat as soon as that tab goes away.
@@ -40,7 +42,16 @@ async function open(name: string, opened: Opened): Promise<Outliner> {
     return outliner;
   }
   const started = performance.now();
-  const { doc, persistence } = await Persistence.open(name, codec);
+  let stored: Awaited<ReturnType<typeof Persistence.open>>;
+  try {
+    stored = await Persistence.open(name, codec);
+  } catch (e) {
+    // AES-GCM refuses a record sealed with another key: the copy here is
+    // damaged, the server's is not.
+    if (opened.config && opened.secret && e instanceof DOMException && e.name === 'OperationError') return { damaged: opened };
+    throw e;
+  }
+  const { doc, persistence } = stored;
   console.info(`loaded ${doc.nodes.size - 2} bullets in ${Math.round(performance.now() - started)} ms`);
   const outliner = new Outliner(doc);
   outliner.persistence = persistence;
@@ -58,13 +69,17 @@ export default function App() {
   const [reopened] = createResource(unlocked, (opened) => open(new URLSearchParams(location.search).get('db') ?? 'listik', opened));
   const outliner = () => {
     const r = reopened();
-    if (r) return r;
+    if (r) return r instanceof Outliner ? r : undefined;
     const l = loaded();
     return l instanceof Outliner ? l : undefined;
   };
   const locked = () => {
     const l = loaded();
-    return l && !(l instanceof Outliner) && !unlocked() ? l.locked : null;
+    return l && 'locked' in l && !unlocked() ? l.locked : null;
+  };
+  const damaged = () => {
+    const r = reopened() ?? loaded();
+    return r && 'damaged' in r ? r.damaged : null;
   };
   const error = () => loaded.error ?? reopened.error;
   return (
@@ -72,6 +87,7 @@ export default function App() {
       <Match when={error()}>
         <p class="message">Не удалось загрузить документ: {String(error())}</p>
       </Match>
+      <Match when={damaged()}>{(opened) => <Restore opened={opened()} />}</Match>
       <Match when={locked()}>{(opened) => <Unlock opened={opened()} onUnlocked={() => setUnlocked(opened())} />}</Match>
       <Match when={outliner()}>{(o) => <Outline o={o()} />}</Match>
     </Switch>

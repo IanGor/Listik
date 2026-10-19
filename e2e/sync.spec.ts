@@ -99,3 +99,50 @@ test('two browsers share one encrypted document through the server', async ({ br
   await expect(a.locator('.row')).toHaveCount(2, { timeout: 30_000 });
   expect(await rows(a)).toEqual(['общий пункт — правка', 'с другого устройства, дописано']);
 });
+
+test('a local copy that does not open with the key is restored from the server', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const a = await (await browser.newContext()).newPage();
+  await a.goto('/?db=e2e-sync-damaged');
+  await a.locator('.row .text').click();
+  await a.keyboard.type('с сервера');
+  await a.waitForTimeout(400);
+  await openSyncDialog(a);
+  await a.locator('.sync-dialog input[type="url"]').fill(SYNC);
+  const passwords = a.locator('.sync-dialog input[type="password"]');
+  await passwords.nth(0).fill(PASS);
+  await passwords.nth(1).fill(PASS);
+  await a.getByRole('button', { name: 'Создать и включить' }).click();
+  await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
+
+  // Wait until everything is on the server, then add a batch sealed with a
+  // key this device does not have, as an older version could leave behind.
+  const storedState = () => a.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { openDb, getMeta } = (await load('/src/persist/db.ts')) as typeof import('../src/persist/db.ts');
+    const db = await openDb('e2e-sync-damaged');
+    const state = await getMeta<{ head: number; outbox: unknown[] }>(db, 'syncState');
+    db.close();
+    return state ? { head: state.head, outbox: state.outbox.length } : null;
+  });
+  await expect.poll(async () => (await storedState())?.outbox, { timeout: 15_000 }).toBe(0);
+  await a.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { openDb, done } = (await load('/src/persist/db.ts')) as typeof import('../src/persist/db.ts');
+    const { encryptedCodec } = (await load('/src/persist/codec.ts')) as typeof import('../src/persist/codec.ts');
+    const { dataKey } = (await load('/src/sync/crypto.ts')) as typeof import('../src/sync/crypto.ts');
+    const stranger = encryptedCodec(await dataKey(crypto.getRandomValues(new Uint8Array(32))));
+    const record = await stranger.encodeBatch([]);
+    const db = await openDb('e2e-sync-damaged');
+    const tx = db.transaction('oplog', 'readwrite');
+    tx.objectStore('oplog').add(record);
+    await done(tx);
+    db.close();
+  });
+
+  await a.reload();
+  await expect(a.locator('.unlock')).toContainText('прежним ключом');
+  await a.getByRole('button', { name: 'Загрузить с сервера' }).click();
+  await expect(a.locator('.row .text').first()).toHaveText('с сервера', { timeout: 30_000 });
+  await expect(a.locator('.sync-indicator')).toBeVisible();
+});

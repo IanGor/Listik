@@ -195,4 +195,30 @@ describe('encrypted storage', () => {
     const back = await Persistence.read(name, codec);
     expect(dump(back)).toEqual(['открыто', 'тайно']);
   });
+
+  it('a recode from one key to another, and back to plain, leaves nothing under the old key', async () => {
+    const { dataKey } = await import('../src/sync/crypto');
+    const { encryptedCodec, plainCodec } = await import('../src/persist/codec');
+    const a = encryptedCodec(await dataKey(new Uint8Array(32).fill(1)));
+    const b = encryptedCodec(await dataKey(new Uint8Array(32).fill(2)));
+    const name = freshName();
+    const { doc, persistence } = await Persistence.open(name);
+    const ctx = { doc, rows: new VisibleRows(doc) };
+    doc.transact(() => cmd.setText(ctx, ctx.rows.ids[0], 'первый'));
+    await persistence.recode(a);
+    // Written under key a after its snapshot: the case of a sync set up twice.
+    doc.transact(() => { cmd.split(ctx, ctx.rows.ids[0], 6); });
+    doc.transact(() => cmd.setText(ctx, ctx.rows.ids[1], 'второй'));
+    await persistence.flush();
+    await persistence.recode(b);
+    doc.transact(() => { cmd.split(ctx, ctx.rows.ids[1], 6); });
+    doc.transact(() => cmd.setText(ctx, ctx.rows.ids[2], 'третий'));
+    await persistence.flush();
+    expect(dump(await Persistence.read(name, b))).toEqual(['первый', 'второй', 'третий']);
+    await expect(Persistence.read(name, a)).rejects.toThrow();
+    // Switching sync off decrypts everything, including what came after the switch.
+    await persistence.recode(plainCodec);
+    persistence.close();
+    expect(dump(await Persistence.read(name, plainCodec))).toEqual(['первый', 'второй', 'третий']);
+  });
 });

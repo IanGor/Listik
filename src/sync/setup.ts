@@ -122,16 +122,34 @@ export async function joinSync(opened: Opened, persistence: Persistence | null, 
   await rememberSecret(opened.db, { dek, token });
 }
 
-/** Stops syncing and decrypts the local store; the server keeps its copy. */
+/**
+ * Stops syncing and decrypts the local store; the server keeps its copy.
+ * The store is decrypted before the key is forgotten: a failed decryption
+ * then leaves sync switched off but the key still here, never the data
+ * under a key nobody has.
+ */
 export async function disconnectSync(handle: SyncHandle, persistence: Persistence, opened: Opened): Promise<void> {
   handle.engine.stop();
+  await persistence.recode(plainCodec);
   await writeSyncConfig(opened.db, undefined);
   await writeKeyslot(opened.db, undefined);
   await writeSyncState(opened.db, undefined);
   await forgetSecret(opened.db);
   opened.config = opened.keyslot = null;
   opened.secret = null;
-  await persistence.recode(plainCodec);
+}
+
+/**
+ * Rebuilds this browser's copy from the server's when the local store
+ * cannot be read with the document's key (records left under another key by
+ * an older version, see Persistence.recode). Edits not sent yet survive: they
+ * are in the sync state's outbox, not in the unreadable records. Reload after.
+ */
+export async function restoreFromServer(opened: Opened): Promise<void> {
+  const { db, config, secret } = opened;
+  if (!config || !secret) throw new Error('Синхронизация на этом устройстве не настроена');
+  const key = await dataKey(secret.dek);
+  await bootstrap(db, encryptedCodec(key), key, config.docId, httpTransport(config.server, config.docId, secret.token));
 }
 
 /** The passphrase will be asked on the next load of this document here. */

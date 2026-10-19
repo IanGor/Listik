@@ -1,6 +1,6 @@
 import { Doc, type DocListener } from '../model/doc';
 import type { Op } from '../model/types';
-import { plainCodec, type Codec } from './codec';
+import { plainCodec, recoding, type Codec } from './codec';
 import { compactLog } from './compact';
 import { done, openDb, readAll, writeSnapshot } from './db';
 import { coalesce, deserialize, serialize } from './serialize';
@@ -19,7 +19,7 @@ function workerCompactor(name: string): Compactor {
   return (codec, force) => new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<{ folded?: number; error?: string }>) =>
       e.data.error ? reject(new Error(e.data.error)) : resolve(e.data.folded ?? 0);
-    worker.postMessage({ name, key: codec.key, force });
+    worker.postMessage({ name, key: codec.key, old: codec.old, force });
   });
 }
 
@@ -145,13 +145,23 @@ export class Persistence implements DocListener {
   /**
    * Switches to another codec: new writes use it at once, and a forced
    * compaction rewrites the snapshot and folds the log, so nothing stays
-   * stored the old way. Turning encryption on (or off) is this.
+   * stored the old way. Turning encryption on (or off), or onto another key,
+   * is this. The compaction reads both ways (`recoding`); unlike routine
+   * compaction its failure is thrown, since until it succeeds the store
+   * mixes two codecs and the caller must not go on as if it were switched.
    */
   async recode(codec: Codec): Promise<void> {
     await this.flush();
-    this.codec = codec;
     if (this.compacting) await this.compacting;
-    await this.compact(true);
+    const through = recoding(codec, this.codec);
+    this.codec = codec;
+    const run = this.compactor(through, true).then((folded) => {
+      this.logSize -= folded;
+    });
+    this.compacting = run.catch(() => {}).finally(() => {
+      this.compacting = null;
+    });
+    await run;
   }
 
   close(): void {

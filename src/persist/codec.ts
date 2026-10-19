@@ -14,6 +14,8 @@ export interface Codec {
   readonly encrypted: boolean;
   /** The data key, for handing to the compaction worker. */
   readonly key?: CryptoKey;
+  /** Set while recoding: the codec being replaced, which reads what it stored (see `recoding`). */
+  readonly old?: { key?: CryptoKey };
   encodeSnapshot(json: string): Promise<unknown>;
   decodeSnapshot(record: unknown): Promise<string>;
   encodeBatch(ops: Op[]): Promise<unknown>;
@@ -43,6 +45,27 @@ export const plainCodec: Codec = {
     return record as Op[];
   },
 };
+
+/**
+ * Writes like `codec` and reads what either `codec` or `old` stored. A
+ * recode compacts through it, so the snapshot and batches stored the old
+ * way and the batches written since the switch all fold into a snapshot of
+ * the new kind. Without it a switch between two keys (or from a key back to
+ * plain) cannot read the old records and leaves them stranded.
+ */
+export function recoding(codec: Codec, old: Codec): Codec {
+  const either = <T>(first: () => Promise<T>, second: () => Promise<T>) =>
+    first().catch((e: unknown) => second().catch(() => { throw e; }));
+  return {
+    ...codec,
+    old: { key: old.key },
+    decodeSnapshot: (record) => either(() => codec.decodeSnapshot(record), () => old.decodeSnapshot(record)),
+    decodeBatch: (record) => either(() => codec.decodeBatch(record), () => old.decodeBatch(record)),
+  };
+}
+
+/** The codec for a data key, or the plain one without. */
+export const codecForKey = (key?: CryptoKey): Codec => (key ? encryptedCodec(key) : plainCodec);
 
 export function encryptedCodec(key: CryptoKey): Codec {
   return {
