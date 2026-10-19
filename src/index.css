@@ -519,22 +519,41 @@ mark,
 
 /* --- Zoom ----------------------------------------------------------------- */
 
-.zoomhead {
+/* The path stays above the list (Crumbs in ZoomHeader.tsx); the title
+   scrolls with the rows, at the top of the spacer (Outline.tsx measures it). */
+.crumbbar {
   flex: none;
   width: 100%;
   max-width: calc(var(--column) + 6ch);
   margin: 0 auto;
-  padding: 28px 2.5ch 0 3.5ch;
+  padding: 14px 2.5ch 4px 3.5ch;
   box-sizing: border-box;
 }
 
+/* With the list scrolled, a hairline where the rows go under the path. */
+.crumbbar.scrolled {
+  box-shadow: 0 1px 0 var(--hairline);
+}
+
+/* One line: a long path scrolls sideways, its end in view. */
 .crumbs {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  overflow-x: auto;
   font-size: 14px;
   color: var(--muted);
+  scrollbar-width: none;
+}
+
+.zoomhead {
+  position: absolute;
+  top: 0;
+  left: 3.5ch;
+  right: 2.5ch;
+  padding-top: 14px;
 }
 
 .crumb {
@@ -557,6 +576,15 @@ mark,
   background: var(--surface);
 }
 
+/* Where you are: the end of the path, not a link. */
+.crumb.current,
+.crumb.current:hover {
+  flex: none;
+  color: var(--text);
+  background: none;
+  cursor: default;
+}
+
 .crumbs .sep {
   flex: none;
   margin: 0 4px;
@@ -565,7 +593,6 @@ mark,
 
 .zoom-title {
   min-height: 1lh;
-  margin-top: 8px;
   font-size: 28px;
   font-weight: 600;
   line-height: 1.25;
@@ -649,8 +676,8 @@ mark,
     white-space: normal;
   }
 
-  .zoomhead {
-    padding-top: 20px;
+  .crumbbar {
+    padding-top: 10px;
   }
 
   .zoom-title {
@@ -687,8 +714,8 @@ mark,
     height: 52px;
   }
 
-  .zoomhead {
-    padding-top: 16px;
+  .crumbbar {
+    padding-top: 8px;
   }
 }
 

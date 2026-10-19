@@ -1,4 +1,4 @@
-import { For, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
 import type { NodeId } from '../model/types';
 import { caretOnLastLine, selectionIn, setCaret } from './caret';
@@ -6,42 +6,53 @@ import { onGlobalKeys } from './keymap';
 import type { Outliner } from './outliner';
 
 /**
- * Shown while zoomed into a bullet, as in Workflowy: the path back up
- * (breadcrumbs) and the bullet itself as an editable title.
+ * The path from the root to where you are, the place itself included:
+ * "Главная" alone on the home page. It stays above the list while the
+ * zoomed-in bullet's title (ZoomTitle) scrolls away with it, as in Workflowy.
+ * One line; a long path scrolls sideways and shows its end.
  */
-export function ZoomHeader(props: { o: Outliner; id: NodeId }) {
+export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   const o = props.o;
-  const id = props.id;
-  /** Ancestors between the root and the zoomed-in bullet, outermost first. */
+  let nav!: HTMLElement;
+  /** From the root's first child down to the zoomed-in bullet. */
   const path = createMemo(() => {
     o.rowsVersion();
+    const id = o.zoom();
     const out: NodeId[] = [];
-    if (!o.doc.has(id)) return out;
-    for (let p = o.doc.get(id).parent; p !== null && p !== o.doc.root; p = o.doc.get(p).parent) out.unshift(p);
+    if (!id || !o.doc.has(id)) return out;
+    for (let p: NodeId | null = id; p !== null && p !== o.doc.root; p = o.doc.get(p).parent) out.unshift(p);
     return out;
   });
 
+  createEffect(on(path, () => {
+    nav.scrollLeft = nav.scrollWidth;
+  }));
+
   return (
-    <div class="zoomhead">
-      <nav class="crumbs" aria-label="Путь">
-        <button type="button" class="crumb" onClick={() => o.zoomTo(null)}>Главная</button>
+    <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
+      <nav ref={nav} class="crumbs" aria-label="Путь">
+        <Show
+          when={path().length}
+          fallback={<span class="crumb current" aria-current="page">Главная</span>}
+        >
+          <button type="button" class="crumb" onClick={() => o.zoomTo(null)}>Главная</button>
+        </Show>
         <For each={path()}>
-          {(p) => (
+          {(p, i) => (
             <>
               <svg class="sep" width="8" height="10" viewBox="0 0 8 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M2.5 1.5 6 5l-3.5 3.5" />
               </svg>
-              <Crumb o={o} id={p} />
+              <Crumb o={o} id={p} current={i() === path().length - 1} />
             </>
           )}
         </For>
       </nav>
-      <ZoomTitle o={o} id={id} />
     </div>
   );
 }
 
-function Crumb(props: { o: Outliner; id: NodeId }) {
+function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   const o = props.o;
   const id = props.id;
   o.nodes.acquire(id);
@@ -51,9 +62,14 @@ function Crumb(props: { o: Outliner; id: NodeId }) {
     return o.doc.nodes.get(id)?.text || '…';
   };
   return (
-    <button type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id)}>
-      {text()}
-    </button>
+    <Show
+      when={!props.current}
+      fallback={<span class="crumb current" aria-current="page" title={text()}>{text()}</span>}
+    >
+      <button type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id)}>
+        {text()}
+      </button>
+    </Show>
   );
 }
 
@@ -62,7 +78,7 @@ function Crumb(props: { o: Outliner; id: NodeId }) {
  * DOM is the source of truth while typing; outside changes (undo) are
  * written back. Enter starts the first child.
  */
-function ZoomTitle(props: { o: Outliner; id: NodeId }) {
+export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   const o = props.o;
   const id = props.id;
   let el!: HTMLDivElement;

@@ -247,13 +247,17 @@ test.describe('zoom', () => {
   test('clicking a bullet zooms in; breadcrumbs, back and forward zoom out and in', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await expect(title(page)).toHaveText('Часть первая');
-    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый']);
+    // The path from the root, the place itself included (not a link).
+    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть первая']);
+    await expect(page.locator('.crumbs [aria-current="page"]')).toHaveText('Часть первая');
     expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
     expect(new URL(page.url()).hash).toMatch(/^#\/.+/);
 
     await page.goBack();
     await expect(title(page)).toHaveCount(0);
     expect(await outline(page)).toEqual(DEMO);
+    // Home: the path is the root alone.
+    await expect(crumbs(page)).toHaveText(['Главная']);
     await page.goForward();
     await expect(title(page)).toHaveText('Часть первая');
 
@@ -261,6 +265,24 @@ test.describe('zoom', () => {
     await expect(title(page)).toHaveText('Том первый');
     await crumbs(page).filter({ hasText: 'Главная' }).click();
     expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('the title scrolls away with the list; the path stays, ending at the bullet', async ({ page }) => {
+    await page.goto('/?sample=300');
+    await expect(page.locator('.row').first()).toBeVisible();
+    await page.locator('.row .bullet').first().click();
+    await expect(title(page)).toBeVisible();
+    const name = (await title(page).textContent())!;
+    await expect(page.locator('.crumbs [aria-current="page"]')).toHaveText(name);
+    const before = (await title(page).boundingBox())!.y;
+    const path = (await page.locator('.crumbbar').boundingBox())!.y;
+    const first = (await page.locator('.row').first().boundingBox())!;
+    // The rows start under the title, not over it.
+    expect(first.y).toBeGreaterThan(before + (await title(page).boundingBox())!.height);
+    await page.locator('.scroller').evaluate((el) => (el.scrollTop = 200));
+    await expect.poll(async () => (await title(page).boundingBox())!.y).toBeLessThan(before - 150);
+    expect((await page.locator('.crumbbar').boundingBox())!.y).toBe(path);
+    await expect(page.locator('.crumbs [aria-current="page"]')).toBeVisible();
   });
 
   test('Alt+→ zooms into the edited bullet, Alt+← zooms out back to it', async ({ page }) => {

@@ -9,13 +9,12 @@ import { Shortcuts } from './Shortcuts';
 import { Suggest } from './Suggest';
 import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
-import { ZoomHeader } from './ZoomHeader';
+import { Crumbs, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
 import { Virtualizer } from './virtualizer';
 
-/** Space above the first and below the last row, px; zoomed in, the list starts right under the title. */
-const PAD = 28;
-const ZOOM_PAD = 14;
+/** Space above the first and below the last row, px; zoomed in, above the title. */
+const PAD = 14;
 /** Rows rendered beyond the viewport on each side, px. */
 const OVERSCAN = 600;
 /** Vertical padding of `.row`, px. */
@@ -47,12 +46,25 @@ export function Outline(props: { o: Outliner }) {
   const v = new Virtualizer(o.rows, () => 24);
   onCleanup(() => v.dispose());
 
-  const pad = () => (o.zoom() ? ZOOM_PAD : PAD);
+  /** Height of the zoomed-in bullet's title, which scrolls with the list above its first row. */
+  const [head, setHead] = createSignal(0);
+  const headObserver = new ResizeObserver(([entry]) => setHead(entry.borderBoxSize[0].blockSize));
+  onCleanup(() => headObserver.disconnect());
+  const observeHead = (el: HTMLElement) => {
+    headObserver.observe(el);
+    setHead(el.getBoundingClientRect().height);
+    onCleanup(() => {
+      headObserver.unobserve(el);
+      setHead(0);
+    });
+  };
+  /** Where the first row starts in the scrolled area. */
+  const top = () => PAD + (o.zoom() ? head() : 0);
 
   const range = createMemo(() => {
     o.rowsVersion();
     layout();
-    return v.range(scrollTop() - pad(), viewport(), OVERSCAN);
+    return v.range(scrollTop() - top(), viewport(), OVERSCAN);
   });
   const ids = createMemo(() => {
     const [start, end] = range();
@@ -77,12 +89,12 @@ export function Outline(props: { o: Outliner }) {
       const k = current.indexOf((entry.target as HTMLElement).dataset.id!);
       if (k < 0) continue;
       const i = start + k;
-      const top = v.offsetOf(i) + pad();
+      const y = v.offsetOf(i) + top();
       const d = v.measure(i, entry.borderBoxSize[0].blockSize);
       if (!d) continue;
       changed = true;
       // A row above the viewport changed height: shift so the visible content stays put.
-      if (top < scroller.scrollTop) anchor += d;
+      if (y < scroller.scrollTop) anchor += d;
     }
     if (anchor) scroller.scrollTop += anchor;
     if (changed) bumpLayout();
@@ -159,13 +171,13 @@ export function Outline(props: { o: Outliner }) {
   });
 
   const ensureVisible = (i: number) => {
-    const top = v.offsetOf(i) + pad();
-    const bottom = top + v.heightOf(i);
+    const y = v.offsetOf(i) + top();
+    const bottom = y + v.heightOf(i);
     const st = scroller.scrollTop;
     const vh = scroller.clientHeight;
     let next = st;
-    if (top < st) next = top - pad();
-    else if (bottom > st + vh) next = bottom - vh + pad();
+    if (y < st) next = y - PAD;
+    else if (bottom > st + vh) next = bottom - vh + PAD;
     if (next === st) return;
     scroller.scrollTop = next;
     setScrollTop(scroller.scrollTop);
@@ -224,12 +236,19 @@ export function Outline(props: { o: Outliner }) {
         </div>
       </Show>
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
-      <Show when={o.zoom()} keyed>{(id) => <ZoomHeader o={o} id={id} />}</Show>
+      <Crumbs o={o} scrolled={scrollTop() > 0} />
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-        <div ref={spacer} class="spacer" style={{ height: `${total() + 2 * pad() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
           <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
-          <div ref={windowEl} class="window" style={{ transform: `translateY(${pad() + v.offsetOf(range()[0])}px)` }}>
+          <Show when={o.zoom()} keyed>
+            {(id) => (
+              <div ref={observeHead} class="zoomhead">
+                <ZoomTitle o={o} id={id} />
+              </div>
+            )}
+          </Show>
+          <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
             <For each={ids()}>
               {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
             </For>
@@ -242,7 +261,7 @@ export function Outline(props: { o: Outliner }) {
             <button
               type="button"
               class="add"
-              style={{ top: `${pad() + total()}px` }}
+              style={{ top: `${top() + total()}px` }}
               title="Новый пункт"
               aria-label="Новый пункт"
               onClick={addBullet}
