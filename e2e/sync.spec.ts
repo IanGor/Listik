@@ -87,6 +87,8 @@ test('two browsers share one encrypted document through the server', async ({ br
   await expect(a.locator('.row')).toHaveCount(2);
   await openSyncDialog(a);
   await a.getByRole('button', { name: 'Забыть пароль здесь' }).click();
+  // The key is forgotten once the toast shows; a reload before that races the write.
+  await expect(a.locator('.toast')).toContainText('спросят пароль');
   await a.reload();
   await expect(a.locator('.unlock')).toBeVisible();
   await a.locator('.unlock input[type="password"]').fill('не тот пароль');
