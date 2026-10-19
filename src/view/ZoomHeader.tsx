@@ -10,7 +10,8 @@ import { Pieces } from './Row';
 
 /**
  * The path from the root to where you are, the place itself included:
- * "Главная" alone on the home page. It stays above the list while the
+ * "Главная" alone on the home page. A click on it goes home; on the home
+ * page, it folds every top-level bullet. It stays above the list while the
  * zoomed-in bullet's title (ZoomTitle) scrolls away with it, as in Workflowy.
  * One line that never shortens a crumb: a long path scrolls sideways and
  * stays at its end, so the bullets next to where you are show whole.
@@ -48,12 +49,17 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
-        <Show
-          when={path().length}
-          fallback={<span class="crumb current" aria-current="page">Главная</span>}
+        {/* Home; once there, every top-level bullet folded (`goHome`), an overview. */}
+        <button
+          type="button"
+          class="crumb"
+          classList={{ current: !path().length }}
+          aria-current={path().length ? undefined : 'page'}
+          title={path().length ? 'На главную' : 'Свернуть всё'}
+          onClick={() => (path().length ? o.zoomTo(null) : o.goHome())}
         >
-          <button type="button" class="crumb" onClick={() => o.zoomTo(null)}>Главная</button>
-        </Show>
+          Главная
+        </button>
         <For each={path()}>
           {(p, i) => (
             <>

@@ -3,7 +3,8 @@ import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
 
 /**
- * The header, as in Workflowy: name, search and the menu. The day/night
+ * The header, as in Workflowy: name (it leads to today, in the forever
+ * calendar), search and the menu. The day/night
  * switch and the sync state live in the menu, on every screen.
  */
 export function TopBar(props: { o: Outliner }) {
@@ -12,9 +13,9 @@ export function TopBar(props: { o: Outliner }) {
       <button
         type="button"
         class="brand"
-        title="На главную, всё свернуть"
-        aria-label="Listik: на главную, всё свернуть"
-        onClick={() => props.o.goHome()}
+        title="Сегодня"
+        aria-label="Listik: сегодня"
+        onClick={() => props.o.goToday()}
       >
         Listik
       </button>

@@ -518,10 +518,14 @@ test.describe('zoom', () => {
   });
 });
 
-test('the logo goes home: out of zoom and search, top level folded, one undo step', async ({ page }) => {
+test('"Главная" goes home, and there folds the top level: out of zoom and search, one undo step', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');
-  await page.locator('.brand').click();
+  await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+  await expect(page.locator('.zoom-title')).toHaveCount(0);
+  expect(await outline(page)).toEqual(DEMO);
+  await page.locator('.search').fill('шерер');
+  await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   await expect(page.locator('.zoom-title')).toHaveCount(0);
   await expect(page.locator('.search')).toHaveValue('');
   expect(new URL(page.url()).hash).toBe('');
@@ -536,20 +540,59 @@ test.describe('forever calendar', () => {
     await page.locator('.menu-button').click();
     await page.getByRole('menuitem', { name: /Создать календарь/ }).click();
   };
+  const two = (n: number) => String(n).padStart(2, '0');
+  const now = new Date();
+  const today = `@d${two(now.getDate())} @m${two(now.getMonth() + 1)}`;
+  const year = `@y${now.getFullYear()}`;
+  const title = (page: Page) => page.locator('.zoom-title');
 
-  test('the menu builds it once: quarters, months and days named by tags; one undo step', async ({ page }) => {
+  test('the menu builds it once, named by tags, and goes to today; undo takes it all back', async ({ page }) => {
     await create(page);
-    await expect(page.locator('.zoom-title')).toHaveText('@календарь');
+    await expect(title(page)).toHaveText(today);
+    expect(await outline(page)).toEqual([year, '  ']);
+    await page.locator('.crumbs .crumb', { hasText: '@календарь' }).click();
     expect(await outline(page)).toEqual(['@q1', '@q2', '@q3', '@q4']);
     await page.locator('.row', { hasText: '@q4' }).locator('.toggle').click();
     expect((await outline(page)).slice(4, 8)).toEqual(['  @m10', '    @d01 @m10', '    @d02 @m10', '    @d03 @m10']);
     await page.locator('.menu-button').click();
     await expect(page.getByRole('menuitem', { name: /Создать календарь/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
-    // The unfold and the calendar itself.
-    for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z');
-    await expect(page.locator('.zoom-title')).toHaveCount(0);
+    // The unfold, today's year and the calendar itself.
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z');
+    await expect(title(page)).toHaveCount(0);
     expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('the logo opens today: this year first, the caret at its last entry; no second year', async ({ page }) => {
+    await page.locator('.brand').click();
+    await expect(page.locator('.toast')).toContainText('Календаря ещё нет');
+    await create(page);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('утро');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(title(page)).toHaveCount(0);
+    await page.locator('.brand').click();
+    await expect(title(page)).toHaveText(today);
+    await expect(editing(page)).toHaveText('утро');
+    await page.keyboard.type(', кофе');
+    expect(await outline(page)).toEqual([year, '  утро, кофе']);
+    expect(new URL(page.url()).hash).not.toBe('');
+  });
+
+  test('a stored document opens on today; a reload stays where it was', async ({ page }) => {
+    await page.goto('/?db=e2e-calendar');
+    await create(page);
+    await expect(title(page)).toHaveText(today);
+    await page.keyboard.type('запись');
+    await page.waitForTimeout(500);
+    await page.goto('/?db=e2e-calendar');
+    await expect(title(page)).toHaveText(today);
+    expect(await outline(page)).toEqual([year, '  запись']);
+    await expect(editing(page)).toHaveText('запись');
+    await page.locator('.crumbs .crumb', { hasText: /^@m/ }).click();
+    await page.waitForTimeout(300);
+    await page.reload();
+    await expect(title(page)).toHaveText(`@m${two(now.getMonth() + 1)}`);
   });
 });
 
@@ -1880,11 +1923,11 @@ test.describe('at scale', () => {
     await expect(page.locator('.row mark').first()).toBeVisible();
   });
 
-  test('200k bullets: the logo folds ~700 chapters in about a frame', async ({ page }) => {
+  test('200k bullets: "Главная" folds ~700 chapters in about a frame', async ({ page }) => {
     await page.goto('/?sample=200000');
     await expect(page.locator('.row').first()).toBeVisible();
     await page.waitForTimeout(1000);
-    const ms = await page.locator('.brand').evaluate(async (el) => {
+    const ms = await page.locator('.crumbs .crumb', { hasText: 'Главная' }).evaluate(async (el) => {
       const started = performance.now();
       (el as HTMLElement).click();
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));

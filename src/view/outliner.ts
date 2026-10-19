@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { createCalendar, findCalendar } from '../model/calendar';
+import { createCalendar, dayOf, findCalendar, findPeriod, findYear, openYear, periodText } from '../model/calendar';
 import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
@@ -129,6 +129,16 @@ export class Outliner {
   readonly syncStatus: Accessor<SyncStatus>;
   private setSyncStatus: Setter<SyncStatus>;
   private unwatchSync: (() => void) | null = null;
+  /**
+   * The server has been heard from since the start (or there is no sync):
+   * only then is today's year bullet made, lest a device not yet up to date
+   * add a second one beside another device's.
+   */
+  private synced = false;
+  /** Today's year bullet, waiting for `synced`. */
+  private afterSync: (() => void) | null = null;
+  /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
+  private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
   readonly syncRequests: Accessor<number>;
   private setSyncRequests: Setter<number>;
@@ -372,7 +382,43 @@ export class Outliner {
   }
 
   /**
-   * The logo: back to the top of the whole outline with every top-level
+   * The logo, and the start: into today's day in the forever calendar
+   * (model/calendar.ts), ready to write: this year's bullet first in it,
+   * the caret at its end (`openYear`, one undo step). `quiet` (the start)
+   * says nothing when there is no calendar or no such day.
+   */
+  goToday(quiet = false): void {
+    const now = new Date();
+    const calendar = this.calendar();
+    const day = calendar && findPeriod(this.doc, this.tags, calendar, dayOf(now));
+    if (!day) {
+      if (quiet) return;
+      return this.notify(calendar ? `В календаре нет дня ${periodText(dayOf(now))}` : 'Календаря ещё нет: меню «⋯» → «Создать календарь»');
+    }
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      this.zoomTo(day);
+    });
+    this.today = { day, date: now.toDateString() };
+    if (this.readOnly) return;
+    const year = now.getFullYear();
+    const open = () => {
+      // Made later (after sync): only if still there and not writing elsewhere meanwhile.
+      if (this.zoom() === day && !this.focus()) this.run((ctx) => openYear(ctx, day, year));
+    };
+    if (findYear(this.doc, day, year) === null && this.syncing() && !this.synced) this.afterSync = open;
+    else open();
+  }
+
+  /** The app comes back into view: still in yesterday's day, it goes on to today's. */
+  resumed(): void {
+    const t = this.today;
+    if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
+  }
+
+  /**
+   * "Главная" over the list, on the home page: back to the top of the whole outline with every top-level
    * bullet folded, an overview at a glance. Search and zoom are left; the
    * folding is one undo step.
    */
@@ -392,15 +438,11 @@ export class Outliner {
     return findCalendar(this.doc, this.tags);
   }
 
-  /** The menu: puts the forever calendar into the document, one undo step, and goes into it. */
+  /** The menu: puts the forever calendar into the document, one undo step, and goes to today in it. */
   createCalendar(): void {
     if (this.readOnly) return;
-    let calendar = this.calendar();
-    if (!calendar) this.run((ctx) => void (calendar = createCalendar(ctx)));
-    batch(() => {
-      this.setFocus(null);
-      this.zoomTo(calendar);
-    });
+    if (!this.calendar()) this.run((ctx) => void createCalendar(ctx));
+    this.goToday();
   }
 
   /** Alt+→: zoom into a bullet and edit its first child, or its title if it has none. */
@@ -510,10 +552,20 @@ export class Outliner {
     const engine = this.syncHandle?.engine;
     if (!engine) {
       this.setSyncStatus({ phase: 'stopped', pending: 0, head: 0 });
-      return;
+      return this.heardFromServer();
     }
     this.setSyncStatus(engine.status);
-    this.unwatchSync = engine.subscribe((s) => this.setSyncStatus({ ...s }));
+    this.unwatchSync = engine.subscribe((s) => {
+      this.setSyncStatus({ ...s });
+      if (s.phase === 'synced' || s.phase === 'offline' || s.phase === 'error') this.heardFromServer();
+    });
+  }
+
+  private heardFromServer(): void {
+    this.synced = true;
+    const pending = this.afterSync;
+    this.afterSync = null;
+    pending?.();
   }
 
   /** Ctrl+F: put the caret into the search box. */

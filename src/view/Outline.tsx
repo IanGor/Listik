@@ -244,6 +244,11 @@ export function Outline(props: { o: Outliner }) {
   }, { defer: true }));
 
   syncZoomWithHash(o);
+  // Opened without a place in the address (the installed app always is): today's day, if there is a calendar.
+  if (!location.hash) o.goToday(true);
+  const onVisible = () => document.visibilityState === 'visible' && o.resumed();
+  document.addEventListener('visibilitychange', onVisible);
+  onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
 
   createEffect(on(o.homeRequests, () => {
     scroller.scrollTop = 0;
