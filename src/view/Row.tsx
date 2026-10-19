@@ -200,7 +200,8 @@ export function Row(props: RowProps) {
           when={editingNote()}
           fallback={
             <Show when={content()?.note}>
-              <div class="note" onMouseDown={onStaticMouseDown(true)}>
+              {/* Its first lines only (NOTE_LINES), all of them while the row is edited. */}
+              <div class="note" classList={{ clamped: !focused() }} onMouseDown={onStaticMouseDown(true)}>
                 <Pieces o={o} pieces={notePieces()} />
               </div>
             </Show>

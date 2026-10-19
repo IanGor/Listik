@@ -3,8 +3,8 @@ import { prependChild } from '../model/commands';
 import { plainText } from '../model/format';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
-import { caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
-import { onGlobalKeys } from './keymap';
+import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
+import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Pieces } from './Row';
 
@@ -90,28 +90,37 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   );
 }
 
+/** What of the title is being edited, and where the caret goes; null while it only shows. */
+type TitleEdit = { note: boolean; caret: number } | null;
+
 /**
- * The zoomed-in bullet's text. It shows like a row's: tags filter on a
- * click, links lead to their bullet, bold and italic are styled. A click
- * elsewhere in it (or Ctrl+↑ from the first row, `titleRequests`) makes it
- * editable where the click was (TitleEditable).
+ * The zoomed-in bullet's text and, under it, its whole note. Both show like
+ * a row's: tags filter on a click, links lead to their bullet, bold and
+ * italic are styled. A click elsewhere makes that part editable where the
+ * click was (TitleEditable, TitleNoteEditable); so does Ctrl+↑ from the
+ * first row (`titleRequests`), and Shift+Enter goes between the two.
  */
 export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   const o = props.o;
   const id = props.id;
   o.nodes.acquire(id);
   onCleanup(() => o.nodes.release(id));
-  const text = () => {
+  const node = () => {
     o.nodes.track(id);
-    return o.doc.nodes.get(id)?.text ?? '';
+    return o.doc.nodes.get(id);
   };
-  /** Where the caret goes in the editor; null while the title only shows. */
-  const [caret, setCaretAt] = createSignal<number | null>(null);
-  const pieces = createMemo(() => decorate(text(), o.filter()?.query.terms ?? []));
+  const text = () => node()?.text ?? '';
+  const note = () => node()?.note ?? '';
+  const [edit, setEdit] = createSignal<TitleEdit>(null);
+  /** An editor lost focus: editing ends, unless it has moved to the other part already. */
+  const leave = (isNote: boolean) => edit()?.note === isNote && setEdit(null);
+  const terms = () => o.filter()?.query.terms ?? [];
+  const pieces = createMemo(() => decorate(text(), terms()));
+  const notePieces = createMemo(() => decorate(note(), terms()));
 
-  createEffect(on(o.titleRequests, () => !o.readOnly && setCaretAt(text().length), { defer: true }));
+  createEffect(on(o.titleRequests, () => !o.readOnly && setEdit({ note: false, caret: text().length }), { defer: true }));
 
-  const onMouseDown = (e: MouseEvent) => {
+  const onMouseDown = (isNote: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const target = e.target as HTMLElement;
@@ -120,29 +129,53 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
     if (link !== undefined) return o.followLink(link);
     if (o.readOnly) return;
-    setCaretAt(offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY) ?? text().length);
+    const at = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
+    setEdit({ note: isNote, caret: at ?? (isNote ? note() : text()).length });
   };
 
   return (
-    <Show
-      when={caret() !== null}
-      fallback={
-        <div class="zoom-title" onMouseDown={onMouseDown}>
-          <Pieces o={o} pieces={pieces()} />
-        </div>
-      }
-    >
-      <TitleEditable o={o} id={id} text={text} caret={caret()!} done={() => setCaretAt(null)} />
-    </Show>
+    <>
+      <Show
+        when={edit() && !edit()!.note}
+        fallback={
+          <div class="zoom-title" onMouseDown={onMouseDown(false)}>
+            <Pieces o={o} pieces={pieces()} />
+          </div>
+        }
+      >
+        <TitleEditable o={o} id={id} text={text} caret={edit()!.caret} edit={setEdit} leave={() => leave(false)} />
+      </Show>
+      <Show
+        when={edit()?.note}
+        fallback={
+          <Show when={note()}>
+            <div class="note zoom-note" onMouseDown={onMouseDown(true)}>
+              <Pieces o={o} pieces={notePieces()} />
+            </div>
+          </Show>
+        }
+      >
+        <TitleNoteEditable o={o} id={id} note={note} caret={edit()!.caret} edit={setEdit} leave={() => leave(true)} textLength={() => text().length} />
+      </Show>
+    </>
   );
+}
+
+interface TitleEditorProps {
+  o: Outliner;
+  id: NodeId;
+  caret: number;
+  /** Moves editing to the other part, or ends it (null). */
+  edit: (e: TitleEdit) => void;
+  leave: () => void;
 }
 
 /**
  * The title being edited. Like a row's editor, the DOM is the source of
  * truth while typing; outside changes (undo) are written back. Enter starts
- * the first child; leaving it shows the title again.
+ * the first child, Shift+Enter goes to the note; leaving shows the title again.
  */
-function TitleEditable(props: { o: Outliner; id: NodeId; text: () => string; caret: number; done: () => void }) {
+function TitleEditable(props: TitleEditorProps & { text: () => string }) {
   const o = props.o;
   const id = props.id;
   const text = props.text;
@@ -177,13 +210,20 @@ function TitleEditable(props: { o: Outliner; id: NodeId; text: () => string; car
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing) return;
+    if (e.isComposing || formatKeys(e, o, id, el, false)) return;
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (!e.shiftKey) o.run((ctx) => prependChild(ctx, id));
-    } else if (e.key === 'ArrowDown' && !e.altKey && !e.shiftKey) {
+      if (e.ctrlKey || e.metaKey) return;
+      if (e.shiftKey) return props.edit({ note: true, caret: o.doc.get(id).note.length });
+      o.run((ctx) => prependChild(ctx, id));
+    } else if (e.key === 'ArrowDown' && !e.altKey && !e.shiftKey && caretOnLastLine(el)) {
+      // Down into the note first, if there is one; then the first row.
+      if (o.doc.get(id).note) {
+        e.preventDefault();
+        return props.edit({ note: true, caret: 0 });
+      }
       const first = o.rows.ids[0];
-      if (first && caretOnLastLine(el)) {
+      if (first) {
         e.preventDefault();
         o.setFocus({ id: first, caret: 0 });
       }
@@ -198,26 +238,101 @@ function TitleEditable(props: { o: Outliner; id: NodeId; text: () => string; car
     }
   };
 
-  const onBeforeInput = (e: InputEvent) => {
-    if (e.inputType === 'historyUndo') {
-      e.preventDefault();
-      o.undo();
-    } else if (e.inputType === 'historyRedo') {
-      e.preventDefault();
-      o.redo();
-    }
-  };
-
   return (
     <div
       ref={el}
       class="zoom-title"
       contentEditable="plaintext-only"
       onFocus={() => o.setFocus(null)}
-      onBlur={() => props.done()}
+      onBlur={() => props.leave()}
       onInput={onInput}
       onKeyDown={onKeyDown}
-      onBeforeInput={onBeforeInput}
+      onBeforeInput={(e) => historyInput(e, o)}
     />
   );
+}
+
+/**
+ * The zoomed-in bullet's note being edited, as a row's (NoteEditable in
+ * Row.tsx): Enter starts a new line; Shift+Enter, Esc or Backspace in an
+ * empty note go back to the title.
+ */
+function TitleNoteEditable(props: TitleEditorProps & { note: () => string; textLength: () => number }) {
+  const o = props.o;
+  const id = props.id;
+  const note = props.note;
+  let el!: HTMLDivElement;
+  // An empty last line only shows with a placeholder "\n" after it (Row.tsx).
+  const read = () => (el.textContent ?? '').replace(/\n$/, '');
+  const write = (t: string) => {
+    el.textContent = t.endsWith('\n') ? `${t}\n` : t;
+  };
+  const toTitle = () => props.edit({ note: false, caret: props.textLength() });
+
+  onMount(() => {
+    write(note());
+    el.focus({ preventScroll: true });
+    setCaret(el, Math.min(props.caret, note().length));
+  });
+
+  createEffect(on(note, (t) => {
+    if (read() === t) return;
+    const caret = selectionIn(el)?.[0];
+    write(t);
+    if (caret !== undefined) setCaret(el, Math.min(caret, t.length));
+  }, { defer: true }));
+
+  const onInput = () => {
+    // Other browsers may insert <br> for a new line: turn it back into text.
+    if (el.querySelector('br')) {
+      const caret = selectionIn(el)?.[0];
+      write(el.innerText.replace(/\n$/, ''));
+      if (caret !== undefined) setCaret(el, caret);
+    }
+    o.typeNote(id, read());
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.isComposing || formatKeys(e, o, id, el, true)) return;
+    const mod = e.ctrlKey || e.metaKey;
+    const [start, end] = selectionIn(el) ?? [0, 0];
+    const handle = (fn: () => void) => {
+      e.preventDefault();
+      fn();
+    };
+    if (e.key === 'Enter' && mod) return handle(() => {});
+    if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toTitle);
+    if (e.key === 'Backspace' && start === 0 && end === 0 && !read()) return handle(toTitle);
+    if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !mod && caretOnFirstLine(el)) return handle(toTitle);
+    if (e.key === 'ArrowDown' && !e.shiftKey && !e.altKey && !mod && caretOnLastLine(el)) {
+      const first = o.rows.ids[0];
+      if (first) return handle(() => o.setFocus({ id: first, caret: 0 }));
+      return;
+    }
+    onGlobalKeys(e, o);
+  };
+
+  return (
+    <div
+      ref={el}
+      class="note zoom-note"
+      contentEditable="plaintext-only"
+      onFocus={() => o.setFocus(null)}
+      onBlur={() => props.leave()}
+      onInput={onInput}
+      onKeyDown={onKeyDown}
+      onBeforeInput={(e) => historyInput(e, o)}
+    />
+  );
+}
+
+/** Undo and redo from the browser's own menu, which bypass keydown. */
+function historyInput(e: InputEvent, o: Outliner): void {
+  if (e.inputType === 'historyUndo') {
+    e.preventDefault();
+    o.undo();
+  } else if (e.inputType === 'historyRedo') {
+    e.preventDefault();
+    o.redo();
+  }
 }

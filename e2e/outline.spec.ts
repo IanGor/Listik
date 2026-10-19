@@ -496,6 +496,58 @@ test.describe('done and notes', () => {
     expect(await outline(page)).toEqual(['Том второй']);
   });
 
+  test('a note shows its first 3 lines until its bullet is edited; the zoomed-in bullet shows its whole note', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('один\nдва\nтри\nчетыре\nпять');
+    await page.keyboard.press('Escape');
+    const row = page.locator('.row', { hasText: 'Том второй' });
+    const note = row.locator('.note');
+    const lineHeight = await note.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+    // Being edited (the caret in its text): all five lines.
+    await expect(note).not.toHaveClass(/clamped/);
+    expect((await note.boundingBox())!.height).toBeCloseTo(5 * lineHeight, 0);
+    // Left: three lines, the rest behind an ellipsis.
+    await page.keyboard.press('Escape');
+    await expect(note).toHaveClass(/clamped/);
+    expect((await note.boundingBox())!.height).toBeCloseTo(3 * lineHeight, 0);
+    await expect(note).toHaveText('один\nдва\nтри\nчетыре\nпять');
+
+    // Zoomed in, the title shows the whole note; Shift+Enter in the title edits it, Esc goes back.
+    await row.locator('.bullet').click();
+    const zoomNote = page.locator('.zoom-note');
+    await expect(zoomNote).toHaveText('один\nдва\nтри\nчетыре\nпять');
+    expect((await zoomNote.boundingBox())!.height).toBeCloseTo(5 * lineHeight, 0);
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Shift+Enter');
+    await expect(zoomNote).toBeFocused();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('\nшесть #важно');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.zoom-title')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(zoomNote.locator('.tag')).toHaveText('#важно');
+    // A click on the note edits it where the click was.
+    await zoomNote.click({ position: { x: 3, y: 3 } });
+    await expect(zoomNote).toBeFocused();
+    await page.keyboard.press('Escape');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(note).toHaveText('один\nдва\nтри\nчетыре\nпять\nшесть #важно');
+  });
+
+  test('a bullet without a note gets one from the zoom title with Shift+Enter', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await expect(page.locator('.zoom-note')).toHaveCount(0);
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Shift+Enter');
+    await expect(page.locator('.zoom-note')).toBeFocused();
+    await page.keyboard.type('описание');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.zoom-note')).toHaveText('описание');
+  });
+
   test('Ctrl+O hides completed bullets: completing one moves the caret on; the choice is remembered', async ({ page }) => {
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+o');

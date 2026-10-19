@@ -494,6 +494,18 @@ kbd {
   cursor: text;
 }
 
+/* A row not being edited shows the first 3 lines of its note (NOTE_LINES in
+   Outline.tsx), the rest behind an ellipsis. The chips of tags reach
+   outside the text box, so the clip leaves them room. */
+.note.clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
 /* Selected bullets: one soft band from the bullet on, behind the row. */
 .row.selected::after {
   content: '';
@@ -689,6 +701,11 @@ mark,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   outline: none;
+}
+
+/* The zoomed-in bullet's note: whole, under the title. */
+.zoom-note {
+  margin-top: 6px;
 }
 
 .zoom-title:empty::before {

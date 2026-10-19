@@ -23,6 +23,8 @@ const OVERSCAN = 600;
 const ROW_PAD = 4;
 /** Line height of a note relative to the text's: 14 px × 1.5 against 17 px × 1.53. */
 const NOTE_SCALE = 0.81;
+/** Lines of a note shown under a row not being edited (`.note.clamped` in index.css). */
+const NOTE_LINES = 3;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
 /** Air kept between the caret's line and the edge it nears, in lines: room for descenders (р, у, д). */
@@ -122,8 +124,12 @@ export function Outline(props: { o: Outliner }) {
       const perLine = Math.max(10, Math.floor(cols - indent * depth - BULLET_GAP / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
-      // Notes are set smaller (index.css): about NOTE_SCALE of a text line each.
-      if (n?.note) for (const line of n.note.split('\n')) h += lines(line) * lh * NOTE_SCALE;
+      // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
+      if (n?.note) {
+        let shown = 0;
+        for (const line of n.note.split('\n')) shown += lines(line);
+        h += Math.min(NOTE_LINES, shown) * lh * NOTE_SCALE;
+      }
       return h;
     });
     const [start] = range();
