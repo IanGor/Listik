@@ -10,28 +10,32 @@
 :root {
   color-scheme: light dark;
 
-  --canvas: light-dark(#faf9f5, #1c1b18);
+  /* Dark after Reference/color_pallete.png: a neutral graphite instead of
+     the earlier brown-black; light keeps Claude's cream, with the same accents. */
+  --canvas: light-dark(#faf9f5, #262624);
   /* Raised surfaces, one step up: inputs, the edited row, chips. */
-  --surface: light-dark(#f2ede4, #262420);
+  --surface: light-dark(#f2ede4, #2f2f2c);
   /* Pressed / hovered surfaces, one more step. */
-  --surface-2: light-dark(#e9e2d6, #2f2c27);
-  --text: light-dark(#1f1e1c, #f0ede6);
-  --muted: light-dark(#6c6a64, #a09d96);
-  --faint: light-dark(#8e8b82, #7d7a73);
-  --hairline: light-dark(#e6dfd8, #33302b);
-  --guide: light-dark(#e3dcd2, #2f2c28);
-  --halo: light-dark(#e6ddcf, #3a3631);
-  /* Coral. Tag text is a step darker on cream and lighter on dark, for contrast. */
-  --primary: #cc785c;
+  --surface-2: light-dark(#e9e2d6, #393936);
+  --text: light-dark(#1f1e1c, #f0eee6);
+  --muted: light-dark(#6c6a64, #a3a29c);
+  --faint: light-dark(#8e8b82, #7c7b75);
+  --hairline: light-dark(#e6dfd8, #3a3a37);
+  --guide: light-dark(#e3dcd2, #353532);
+  --halo: light-dark(#e6ddcf, #42423e);
+  /* Coral: bullets, caret, focus, selection. A step deeper on cream, so the
+     dots hold 3.7:1 there (4.9:1 on graphite). Tag text is darker on cream
+     and lighter on dark, for contrast. */
+  --primary: light-dark(#c96442, #d97757);
   --link: light-dark(#a9583e, #e3997e);
-  --chip: light-dark(rgb(204 120 92 / 0.1), rgb(204 120 92 / 0.16));
+  --chip: light-dark(rgb(217 119 87 / 0.1), rgb(217 119 87 / 0.16));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
      darker on cream, for contrast. */
   --bold: light-dark(#2f6497, #8cb4dc);
   --italic: light-dark(#55702f, #a3b886);
-  --ring: rgb(204 120 92 / 0.22);
-  --selection: rgb(204 120 92 / 0.24);
+  --ring: rgb(217 119 87 / 0.22);
+  --selection: rgb(217 119 87 / 0.24);
   --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
   --shadow-pop: light-dark(0 12px 32px rgb(31 30 28 / 0.12), 0 12px 32px rgb(0 0 0 / 0.5));
 
@@ -341,41 +345,32 @@ kbd {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--faint);
+  /* Bullets carry the coral of the palette (Reference/color_pallete.png). */
+  background: var(--primary);
   transform: translate(-50%, -50%);
   transition: transform 180ms var(--ease-out), background 180ms var(--ease-out);
 }
 
-/* The bullet is the way in (zoom): it answers the pointer. */
-.row:hover .bullet::after {
-  background: var(--text);
-}
-
+/* The bullet is the way in (zoom): it answers the pointer by growing. */
 .bullet:hover::after {
   transform: translate(-50%, -50%) scale(1.45);
 }
 
-/* A task: the bullet is a checkbox. Checked, it fills coral with a tick. */
+/* A task: the bullet is a coral checkbox. Checked, it fills with a tick. */
 .bullet.todo::after {
   width: 13px;
   height: 13px;
   background: transparent;
-  border: 1.5px solid var(--faint);
+  border: 1.5px solid var(--primary);
   border-radius: 4px;
   box-sizing: border-box;
-}
-
-.row:hover .bullet.todo::after {
-  background: transparent;
-  border-color: var(--text);
 }
 
 .bullet.todo:hover::after {
   transform: translate(-50%, -50%) scale(1.1);
 }
 
-.bullet.todo.checked::after,
-.row:hover .bullet.todo.checked::after {
+.bullet.todo.checked::after {
   background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px no-repeat;
   border-color: var(--primary);
 }
@@ -499,7 +494,7 @@ kbd {
 
 .tag:hover,
 .tag.active {
-  --chip: light-dark(rgb(204 120 92 / 0.2), rgb(204 120 92 / 0.28));
+  --chip: light-dark(rgb(217 119 87 / 0.2), rgb(217 119 87 / 0.28));
 }
 
 mark,

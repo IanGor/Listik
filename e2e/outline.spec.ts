@@ -642,7 +642,7 @@ test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({
 test.describe('theme', () => {
   const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const CREAM = 'rgb(250, 249, 245)';
-  const DARK = 'rgb(28, 27, 24)';
+  const DARK = 'rgb(38, 38, 36)';
 
   test('follows the system until picked; the pick survives a reload', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
