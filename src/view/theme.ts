@@ -36,6 +36,25 @@ export function setTheme(t: Theme): void {
   setThemeSignal(t);
 }
 
+/**
+ * Switches to the other theme. The new one opens as a circle from `from` (the
+ * button pressed); instant with reduced motion.
+ */
+export function toggleTheme(from: DOMRect): void {
+  const next = theme() === 'dark' ? 'light' : 'dark';
+  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return setTheme(next);
+  const x = from.left + from.width / 2;
+  const y = from.top + from.height / 2;
+  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  const transition = document.startViewTransition(() => setTheme(next));
+  void transition.ready.then(() => {
+    document.documentElement.animate(
+      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 560, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', pseudoElement: '::view-transition-new(root)' },
+    );
+  });
+}
+
 media?.addEventListener('change', () => {
   if (!saved()) setThemeSignal(system());
 });

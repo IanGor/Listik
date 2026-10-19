@@ -19,6 +19,14 @@ export function describeSync(s: SyncStatus): string {
   }
 }
 
+/** The cloud's state: in step with the server, changes waiting, no connection, or an error. */
+export function syncState(s: SyncStatus): 'synced' | 'pending' | 'offline' | 'error' {
+  if (s.phase === 'error') return 'error';
+  if (s.phase === 'offline') return 'offline';
+  if (s.phase === 'syncing' || s.pending) return 'pending';
+  return 'synced';
+}
+
 /**
  * Sync settings: connect this document to a server (as a new document or as
  * another device of an existing one), and manage a live connection.

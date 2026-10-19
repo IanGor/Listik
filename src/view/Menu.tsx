@@ -5,11 +5,17 @@ import type { BackupStatus } from '../persist/backup';
 import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
-import { describeSync } from './SyncDialog';
+import { narrow } from './screen';
+import { describeSync, syncState } from './SyncDialog';
+import { theme, toggleTheme } from './theme';
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 
-/** The document menu: export, import, and automatic copies into a folder. */
+/**
+ * The document menu: export, import, and automatic copies into a folder. On a
+ * phone-width screen it also holds the theme switch, and its button carries
+ * the cloud's dot while changes wait or the connection is lost.
+ */
 export function DocumentMenu(props: { o: Outliner }) {
   const o = props.o;
   const [open, setOpen] = createSignal(false);
@@ -53,6 +59,13 @@ export function DocumentMenu(props: { o: Outliner }) {
     }
   };
 
+  /** The sync state worth a dot on the button; none when in step or off. */
+  const syncAlert = () => {
+    if (!narrow() || !o.syncing()) return null;
+    const state = syncState(o.syncStatus());
+    return state === 'synced' ? null : state;
+  };
+
   const act = (fn: () => Promise<void> | undefined) => () => {
     close();
     void fn()?.catch((e: unknown) => {
@@ -65,8 +78,8 @@ export function DocumentMenu(props: { o: Outliner }) {
     <div class="menu-anchor" ref={root}>
       <button
         type="button"
-        class="icon-button"
-        title="Документ: экспорт, импорт, автокопия"
+        class="icon-button menu-button"
+        title={syncAlert() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, автокопия'}
         aria-label="Меню документа"
         aria-haspopup="menu"
         aria-expanded={open()}
@@ -77,6 +90,7 @@ export function DocumentMenu(props: { o: Outliner }) {
           <circle cx="12" cy="12" r="1.7" />
           <circle cx="19" cy="12" r="1.7" />
         </svg>
+        <Show when={syncAlert()}>{(state) => <span class={`sync-dot sync-${state()}`} />}</Show>
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
@@ -92,6 +106,20 @@ export function DocumentMenu(props: { o: Outliner }) {
           <button type="button" role="menuitem" onClick={() => { close(); o.toggleShowDone(); }}>
             {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'} <span class="hint">Ctrl+O</span>
           </button>
+          <Show when={narrow()}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                // Measure before closing: the circle opens from this item.
+                const from = e.currentTarget.getBoundingClientRect();
+                close();
+                toggleTheme(from);
+              }}
+            >
+              {theme() === 'dark' ? 'Дневная тема' : 'Ночная тема'}
+            </button>
+          </Show>
           <div class="menu-sep" role="separator" />
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => void importFile()}>

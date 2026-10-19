@@ -2,10 +2,14 @@ import { Show } from 'solid-js';
 import { DocumentMenu } from './Menu';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
-import { describeSync } from './SyncDialog';
-import { setTheme, theme } from './theme';
+import { narrow } from './screen';
+import { describeSync, syncState } from './SyncDialog';
+import { theme, toggleTheme } from './theme';
 
-/** The header, as in Workflowy: name, search, and the day/night switch. */
+/**
+ * The header, as in Workflowy: name, search, and the day/night switch. On a
+ * phone-width screen the cloud and the switch live in the menu instead.
+ */
 export function TopBar(props: { o: Outliner }) {
   return (
     <header class="topbar">
@@ -20,11 +24,13 @@ export function TopBar(props: { o: Outliner }) {
       </button>
       <SearchBar o={props.o} />
       <div class="topbar-actions">
-        <Show when={props.o.syncing()}>
+        <Show when={!narrow() && props.o.syncing()}>
           <SyncIndicator o={props.o} />
         </Show>
         <DocumentMenu o={props.o} />
-        <ThemeToggle />
+        <Show when={!narrow()}>
+          <ThemeToggle />
+        </Show>
       </div>
     </header>
   );
@@ -33,13 +39,7 @@ export function TopBar(props: { o: Outliner }) {
 /** A cloud: plain when in step with the server, with a dot while changes wait, crossed without a connection. */
 function SyncIndicator(props: { o: Outliner }) {
   const status = () => props.o.syncStatus();
-  const state = () => {
-    const s = status();
-    if (s.phase === 'error') return 'error';
-    if (s.phase === 'offline') return 'offline';
-    if (s.phase === 'syncing' || s.pending) return 'pending';
-    return 'synced';
-  };
+  const state = () => syncState(status());
   return (
     <button
       type="button"
@@ -62,30 +62,13 @@ function ThemeToggle() {
   const dark = () => theme() === 'dark';
   const label = () => (dark() ? 'Дневная тема' : 'Ночная тема');
 
-  /** The new theme opens as a circle from the button; instant with reduced motion. */
-  const toggle = (e: MouseEvent) => {
-    const next = dark() ? 'light' : 'dark';
-    if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return setTheme(next);
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = r.left + r.width / 2;
-    const y = r.top + r.height / 2;
-    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-    const transition = document.startViewTransition(() => setTheme(next));
-    void transition.ready.then(() => {
-      document.documentElement.animate(
-        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-        { duration: 560, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', pseudoElement: '::view-transition-new(root)' },
-      );
-    });
-  };
-
   return (
     <button
       type="button"
       class="icon-button theme-toggle"
       title={label()}
       aria-label={label()}
-      onClick={toggle}
+      onClick={(e) => toggleTheme(e.currentTarget.getBoundingClientRect())}
     >
       <Show when={dark()} fallback={<MoonIcon />}>
         <SunIcon />

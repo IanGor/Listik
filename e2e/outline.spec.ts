@@ -638,6 +638,44 @@ test.describe('theme', () => {
   });
 });
 
+test.describe('phone screen', () => {
+  const rightmost = (page: Page) =>
+    page.locator('.topbar > *, .topbar-actions > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
+
+  test('the header fits; the theme switch moves into the menu and back', async ({ page }) => {
+    // A OnePlus 8 held upright, then the narrowest phones.
+    for (const width of [412, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await expect(page.locator('.theme-toggle')).toHaveCount(0);
+      expect(await rightmost(page)).toBeLessThanOrEqual(width);
+      // A query with its count and the clear button still leaves room for the menu.
+      await page.locator('.search').fill('#салон');
+      await expect(page.locator('.searchbar .count')).toBeVisible();
+      expect(await rightmost(page)).toBeLessThanOrEqual(width);
+      await page.locator('.search').fill('');
+      await page.getByRole('button', { name: 'Меню документа' }).click();
+      const box = (await page.locator('.menu').boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      await page.keyboard.press('Escape');
+    }
+
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: 'Ночная тема' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('.menu')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Дневная тема' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Turned sideways or on a laptop the switch is back in the header, not in the menu.
+    await page.setViewportSize({ width: 915, height: 412 });
+    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Дневная тема');
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await expect(page.getByRole('menuitem', { name: /тема/ })).toHaveCount(0);
+  });
+});
+
 test.describe('persistence', () => {
   test('edits survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e');

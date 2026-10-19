@@ -1,6 +1,7 @@
 import { Show, createEffect, on } from 'solid-js';
 import { plural } from '../util/plural';
 import type { Outliner } from './outliner';
+import { narrow } from './screen';
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
@@ -45,7 +46,7 @@ export function SearchBar(props: { o: Outliner }) {
         ref={input}
         class="search"
         type="text"
-        placeholder="Поиск по тексту и #тегам"
+        placeholder={narrow() ? 'Поиск и #теги' : 'Поиск по тексту и #тегам'}
         title="Слова через пробел, «фраза в кавычках», #тег; -слово или -#тег исключает; OR — или; is:done — выполненные"
         spellcheck={false}
         value={o.query()}

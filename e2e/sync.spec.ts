@@ -146,3 +146,33 @@ test('a local copy that does not open with the key is restored from the server',
   await expect(a.locator('.row .text').first()).toHaveText('с сервера', { timeout: 30_000 });
   await expect(a.locator('.sync-indicator')).toBeVisible();
 });
+
+test('on a phone the cloud moves into the menu: a dot on its button while changes wait', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  const a = await context.newPage();
+  await a.goto('/?db=e2e-sync-phone');
+  await expect(a.locator('.row')).toHaveCount(1);
+  await openSyncDialog(a);
+  await a.locator('.sync-dialog input[type="url"]').fill(SYNC);
+  const passwords = a.locator('.sync-dialog input[type="password"]');
+  await passwords.nth(0).fill(PASS);
+  await passwords.nth(1).fill(PASS);
+  await a.getByRole('button', { name: 'Создать и включить' }).click();
+  await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
+
+  await expect(a.locator('.sync-indicator')).toHaveCount(0);
+  const dot = a.locator('.menu-button .sync-dot');
+  await expect(dot).toHaveCount(0, { timeout: 15_000 });
+  await a.locator('.topbar [aria-label="Меню документа"]').click();
+  await expect(a.locator('.menu-note')).toContainText('Синхронизировано');
+  await a.keyboard.press('Escape');
+
+  await context.setOffline(true);
+  await a.locator('.row .text').click();
+  await a.keyboard.type('без сети');
+  await expect(dot).toBeVisible({ timeout: 15_000 });
+  await context.setOffline(false);
+  await expect(dot).toHaveCount(0, { timeout: 30_000 });
+  await context.close();
+});
