@@ -3,7 +3,7 @@ import * as cmd from '../model/commands';
 import { parseIndented } from '../model/outline-text';
 import { decorate, type Piece } from '../model/search';
 import type { NodeId } from '../model/types';
-import { lineHeight, offsetFromPoint, selectionIn, setCaret } from './caret';
+import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
 
@@ -82,6 +82,27 @@ export function Row(props: RowProps) {
     const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
     const length = (note ? node()?.note : node()?.text)?.length ?? 0;
     o.setFocus(note ? { id, caret: caret ?? length, note: true } : { id, caret: caret ?? length });
+    followDrag(note, caret ?? length);
+  };
+
+  /**
+   * The press made the row editable, which swaps its element for another: the
+   * browser's own drag selection, anchored in the old one, never starts. So
+   * until the button is released the selection follows the pointer by hand,
+   * from where the press put the caret.
+   */
+  const followDrag = (note: boolean, anchor: number) => {
+    const move = (e: MouseEvent) => {
+      if (!(e.buttons & 1)) return stop();
+      const target = el.querySelector<HTMLElement>(note ? '.note[contenteditable]' : '.text[contenteditable]');
+      if (target) selectRange(target, anchor, offsetNear(target, e.clientX, e.clientY));
+    };
+    const stop = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
   };
 
 

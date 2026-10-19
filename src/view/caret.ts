@@ -20,19 +20,24 @@ export function selectionIn(el: HTMLElement): [number, number] | null {
   return [offsetIn(el, r.startContainer, r.startOffset), offsetIn(el, r.endContainer, r.endOffset)];
 }
 
-export function setCaret(el: HTMLElement, offset: number): void {
-  const sel = getSelection();
-  if (!sel) return;
+/** The DOM position of text offset `offset` in `el`. */
+function pointAt(el: HTMLElement, offset: number): [Node, number] {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let left = offset;
   for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
-    if (left <= n.length) {
-      sel.collapse(n, left);
-      return;
-    }
+    if (left <= n.length) return [n, left];
     left -= n.length;
   }
-  sel.collapse(el, el.childNodes.length);
+  return [el, el.childNodes.length];
+}
+
+export function setCaret(el: HTMLElement, offset: number): void {
+  getSelection()?.collapse(...pointAt(el, offset));
+}
+
+/** Selects from text offset `anchor` to `focus` in `el`; `focus` may come first. */
+export function selectRange(el: HTMLElement, anchor: number, focus: number): void {
+  getSelection()?.setBaseAndExtent(...pointAt(el, anchor), ...pointAt(el, focus));
 }
 
 /** Text offset in `el` nearest to a viewport point, or null if the point is not over `el`'s text. */
@@ -49,6 +54,19 @@ export function offsetFromPoint(el: HTMLElement, x: number, y: number): number |
     if (r) ({ startContainer: node, startOffset: offset } = r);
   }
   return node && el.contains(node) ? offsetIn(el, node, offset) : null;
+}
+
+/**
+ * Like offsetFromPoint, for any point: above `el` is its start, below it its
+ * end, to the side the nearest place on that line. For a drag that leaves
+ * the element.
+ */
+export function offsetNear(el: HTMLElement, x: number, y: number): number {
+  const r = el.getBoundingClientRect();
+  const length = el.textContent?.length ?? 0;
+  if (y < r.top) return 0;
+  if (y >= r.bottom) return length;
+  return offsetFromPoint(el, Math.min(Math.max(x, r.left + 1), r.right - 1), y) ?? length;
 }
 
 export function lineHeight(el: HTMLElement): number {

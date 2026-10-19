@@ -447,6 +447,26 @@ test.describe('done and notes', () => {
   });
 });
 
+test('dragging across a row that is not being edited selects its text on the first press', async ({ page }) => {
+  const text = page.locator('.row .text', { hasText: 'Так говорила' });
+  await expect(text).not.toHaveAttribute('contenteditable');
+  const box = (await text.boundingBox())!;
+  const y = box.y + box.height / 4;
+  // From before "Так" to somewhere past "говорила"; the row wraps, so stay on its first line.
+  await page.mouse.move(box.x + 1, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 60, y, { steps: 4 });
+  await page.mouse.move(box.x + 130, y, { steps: 4 });
+  await page.mouse.up();
+  await expect(editing(page)).toBeFocused();
+  const selected = await page.evaluate(() => getSelection()!.toString());
+  expect(selected.startsWith('Так говори')).toBe(true);
+  // Typing replaces the selection, as in any editor.
+  await page.keyboard.type('Вот');
+  const original = 'Так говорила в июле 1805 года известная Анна Павловна Шерер #шерер';
+  await expect(editing(page)).toHaveText('Вот' + original.slice(selected.length));
+});
+
 test.describe('selecting several bullets', () => {
   const selected = (page: Page) => page.locator('.row.selected .text').allTextContents();
 
