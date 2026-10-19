@@ -850,6 +850,59 @@ mark,
   background: var(--surface-2);
 }
 
+/* --- Suggestions for /commands and #tags (Suggest.tsx) --------------------- */
+
+.suggest {
+  position: fixed;
+  z-index: 25;
+  box-sizing: border-box;
+  padding: 4px;
+  font-size: 14px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+}
+
+.suggest-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+  border-radius: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.suggest-item.current {
+  background: var(--surface);
+}
+
+.suggest-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggest-tag .suggest-label {
+  color: var(--link);
+}
+
+.suggest-hint {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* Finger-sized rows; mirrored by rowHeight in Suggest.tsx. */
+@media (pointer: coarse) {
+  .suggest-item {
+    height: 40px;
+  }
+}
+
 /* --- Drag and drop ----------------------------------------------------------- */
 
 /* A finger on a bullet may still scroll the list up and down; held still,

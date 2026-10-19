@@ -71,6 +71,11 @@ export class TagIndex implements DocListener {
     return new Map([...this.byTag].map(([tag, ids]) => [tag, ids.size]));
   }
 
+  /** The same, without building a map: completion reads it on every keystroke. */
+  *entries(): IterableIterator<[tag: string, count: number]> {
+    for (const [tag, ids] of this.byTag) yield [tag, ids.size];
+  }
+
   op(op: Op, doc: Doc): void {
     switch (op.t) {
       case 'setText':

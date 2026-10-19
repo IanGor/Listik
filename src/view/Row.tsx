@@ -7,6 +7,7 @@ import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
+import { suggestKey } from './Suggest';
 
 interface RowProps {
   o: Outliner;
@@ -267,7 +268,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       ref={el}
       class="text"
       contentEditable="plaintext-only"
-      onKeyDown={(e) => onEditorKeyDown(e, o, id, el)}
+      onKeyDown={(e) => suggestKey(e) || onEditorKeyDown(e, o, id, el)}
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
       onPaste={onPaste}
@@ -325,7 +326,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
       ref={el}
       class="note"
       contentEditable="plaintext-only"
-      onKeyDown={(e) => onNoteKeyDown(e, o, id, el)}
+      onKeyDown={(e) => suggestKey(e) || onNoteKeyDown(e, o, id, el)}
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, read(), true)}
       onBeforeInput={historyInput(o)}

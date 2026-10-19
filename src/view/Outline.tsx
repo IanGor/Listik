@@ -6,6 +6,7 @@ import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
+import { Suggest } from './Suggest';
 import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { ZoomHeader } from './ZoomHeader';
@@ -254,6 +255,7 @@ export function Outline(props: { o: Outliner }) {
         </div>
       </div>
       <EditBar o={o} />
+      <Suggest o={o} />
     </div>
   );
 }

@@ -750,6 +750,29 @@ test.describe('touch screen', () => {
     await expect(bar(page)).toHaveCount(0);
   });
 
+  test('suggestions: fewer with the keyboard up, above the bar, taken with a tap', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
+    await page.keyboard.press('Control+End');
+    await editing(page).evaluate((el) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', ' ' + Array.from({ length: 20 }, (_, i) => `#тема${i}`).join(' '));
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await page.keyboard.type(' #');
+    const tags = page.getByRole('listbox', { name: 'Теги' });
+    // 540 px × 0.3 / 40 px rows.
+    await expect(tags.getByRole('option')).toHaveCount(4);
+    const box = (await tags.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(412);
+    expect(box.y + box.height).toBeLessThanOrEqual((await bar(page).boundingBox())!.y);
+    await page.keyboard.type('шер');
+    await tags.getByRole('option', { name: '#шерер' }).tap();
+    await expect(editing(page)).toHaveText(/#шерер $/);
+    await expect(editing(page)).toBeFocused();
+  });
+
   test('the clock button puts the current time at the caret', async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 9, 19, 23, 40));
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
@@ -870,6 +893,79 @@ test.describe('time', () => {
     await cdp.send('Input.insertText', { text: 'time' });
     await expect(editing(page)).toHaveText('Том второй 09:05');
     await cdp.detach();
+  });
+});
+
+test.describe('suggestions', () => {
+  const list = (page: Page, name: 'Теги' | 'Команды') => page.getByRole('listbox', { name });
+  const options = (page: Page) => page.getByRole('option').allTextContents();
+  /** Pastes one line into the edited row: many tags at once. */
+  const paste = (page: Page, text: string) =>
+    editing(page).evaluate((el, t) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', t);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, text);
+
+  test('# offers existing tags, filters as you type, and Enter takes one', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' #');
+    await expect(list(page, 'Теги')).toBeVisible();
+    expect(await options(page)).toEqual(['#салон1', '#шерер1']);
+    await page.keyboard.type('ш');
+    expect(await options(page)).toEqual(['#шерер1']);
+    await page.keyboard.press('Enter');
+    await expect(list(page, 'Теги')).toHaveCount(0);
+    await expect(editing(page)).toHaveText('Том второй #шерер ');
+    await page.keyboard.type('и');
+    await expect(editing(page)).toHaveText('Том второй #шерер и');
+    expect(await outline(page)).toHaveLength(DEMO.length);
+  });
+
+  test('↑/↓ choose, a click takes, Esc closes and Enter splits again', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' #');
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('option', { selected: true })).toHaveText('#шерер1');
+    await page.getByRole('option', { name: '#салон' }).click();
+    await expect(editing(page)).toHaveText('Том второй #салон ');
+
+    await page.keyboard.type('#');
+    await page.keyboard.press('Escape');
+    await expect(list(page, 'Теги')).toHaveCount(0);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual([...DEMO.slice(0, -1), 'Том второй #салон #', '']);
+  });
+
+  test('/ offers commands; a few letters are enough', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 19, 9, 5));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' /');
+    await expect(list(page, 'Команды')).toBeVisible();
+    expect(await options(page)).toEqual(['/timeтекущее время, ЧЧ:ММ']);
+    await page.keyboard.type('ti');
+    await page.keyboard.press('Tab');
+    await expect(editing(page)).toHaveText('Том второй 09:05');
+    expect(await outline(page)).toEqual(DEMO.slice(0, -1).concat('Том второй 09:05'));
+    await page.keyboard.type(' /x');
+    await expect(list(page, 'Команды')).toHaveCount(0);
+  });
+
+  test('as many as fit a third of the window; in the middle of a word the whole word is replaced', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await paste(page, ' ' + Array.from({ length: 20 }, (_, i) => `#тема${i}`).join(' '));
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('#тем');
+    // 720 px × 0.3 / 32 px rows.
+    await expect(page.getByRole('option')).toHaveCount(6);
+    await page.keyboard.type('а1');
+    await expect(page.getByRole('option').first()).toHaveText('#тема11');
+    // The caret back inside the word: what is before it is the query, and the whole word goes.
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('option').first()).toHaveText('#тема01');
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('#тема0 ');
   });
 });
 
