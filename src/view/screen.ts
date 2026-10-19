@@ -9,9 +9,8 @@ function query(q: string): Accessor<boolean> {
 }
 
 /**
- * A phone-width screen. The header then keeps only the logo, search and the
- * menu; the cloud and the theme switch move into the menu. The width must
- * match the `max-width: 640px` media query in index.css.
+ * A phone-width screen: a shorter search placeholder. The width must match
+ * the `max-width: 640px` media query in index.css.
  */
 export const narrow = query('(max-width: 640px)');
 

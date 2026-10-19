@@ -621,13 +621,17 @@ test.describe('theme', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
     expect(await background(page)).toBe(DARK);
-    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Дневная тема');
-
-    await page.locator('.theme-toggle').click();
+    // The switch lives in the menu, as everything but search does.
+    await expect(page.locator('.topbar button')).toHaveCount(2);
+    const menu = page.getByRole('button', { name: 'Меню документа' });
+    await menu.click();
+    await page.getByRole('menuitem', { name: 'Дневная тема' }).click();
     // The switch runs inside a view transition: it lands on the next frame.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     expect(await background(page)).toBe(CREAM);
-    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Ночная тема');
+    await menu.click();
+    await expect(page.getByRole('menuitem', { name: 'Ночная тема' })).toBeVisible();
+    await page.keyboard.press('Escape');
 
     await page.reload();
     expect(await background(page)).toBe(CREAM);
@@ -642,11 +646,10 @@ test.describe('phone screen', () => {
   const rightmost = (page: Page) =>
     page.locator('.topbar > *, .topbar-actions > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
 
-  test('the header fits; the theme switch moves into the menu and back', async ({ page }) => {
+  test('the header fits; the theme switch works from the menu', async ({ page }) => {
     // A OnePlus 8 held upright, then the narrowest phones.
     for (const width of [412, 320]) {
       await page.setViewportSize({ width, height: 800 });
-      await expect(page.locator('.theme-toggle')).toHaveCount(0);
       expect(await rightmost(page)).toBeLessThanOrEqual(width);
       // A query with its count and the clear button still leaves room for the menu.
       await page.locator('.search').fill('#салон');
@@ -666,13 +669,6 @@ test.describe('phone screen', () => {
     await expect(page.locator('.menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Меню документа' }).click();
     await expect(page.getByRole('menuitem', { name: 'Дневная тема' })).toBeVisible();
-    await page.keyboard.press('Escape');
-
-    // Turned sideways or on a laptop the switch is back in the header, not in the menu.
-    await page.setViewportSize({ width: 915, height: 412 });
-    await expect(page.locator('.theme-toggle')).toHaveAttribute('aria-label', 'Дневная тема');
-    await page.getByRole('button', { name: 'Меню документа' }).click();
-    await expect(page.getByRole('menuitem', { name: /тема/ })).toHaveCount(0);
   });
 
   test('the keyboard coming up keeps the edited row in view', async ({ page }) => {

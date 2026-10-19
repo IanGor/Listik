@@ -5,16 +5,16 @@ import type { BackupStatus } from '../persist/backup';
 import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
-import { narrow, touch } from './screen';
+import { touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { theme, toggleTheme } from './theme';
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 
 /**
- * The document menu: export, import, and automatic copies into a folder. On a
- * phone-width screen it also holds the theme switch, and its button carries
- * the cloud's dot while changes wait or the connection is lost.
+ * The document menu: export, import, automatic copies into a folder, the
+ * theme switch and sync. Its button carries a dot while changes wait for the
+ * server or the connection is lost.
  */
 export function DocumentMenu(props: { o: Outliner }) {
   const o = props.o;
@@ -61,7 +61,7 @@ export function DocumentMenu(props: { o: Outliner }) {
 
   /** The sync state worth a dot on the button; none when in step or off. */
   const syncAlert = () => {
-    if (!narrow() || !o.syncing()) return null;
+    if (!o.syncing()) return null;
     const state = syncState(o.syncStatus());
     return state === 'synced' ? null : state;
   };
@@ -79,7 +79,7 @@ export function DocumentMenu(props: { o: Outliner }) {
       <button
         type="button"
         class="icon-button menu-button"
-        title={syncAlert() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, автокопия'}
+        title={o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
         aria-label="Меню документа"
         aria-haspopup="menu"
         aria-expanded={open()}
@@ -107,20 +107,18 @@ export function DocumentMenu(props: { o: Outliner }) {
             {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'}
             <Show when={!touch()}><span class="hint">Ctrl+O</span></Show>
           </button>
-          <Show when={narrow()}>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={(e) => {
-                // Measure before closing: the circle opens from this item.
-                const from = e.currentTarget.getBoundingClientRect();
-                close();
-                toggleTheme(from);
-              }}
-            >
-              {theme() === 'dark' ? 'Дневная тема' : 'Ночная тема'}
-            </button>
-          </Show>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              // Measure before closing: the circle opens from this item.
+              const from = e.currentTarget.getBoundingClientRect();
+              close();
+              toggleTheme(from);
+            }}
+          >
+            {theme() === 'dark' ? 'Дневная тема' : 'Ночная тема'}
+          </button>
           <div class="menu-sep" role="separator" />
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => void importFile()}>

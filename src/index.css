@@ -258,7 +258,7 @@ kbd {
   background: var(--surface-2);
 }
 
-/* Theme switch: the new theme opens as a circle from the button (TopBar.tsx). */
+/* Theme switch: the new theme opens as a circle from the menu item (theme.ts). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -612,8 +612,7 @@ mark,
 
 /* --- Narrow screens -------------------------------------------------------- */
 
-/* Phones. The width is mirrored by view/screen.ts: the header keeps the logo,
-   search and the menu, which takes over the cloud and the theme switch. */
+/* Phones. The width is mirrored by view/screen.ts. */
 @media (max-width: 640px) {
   :root {
     --font-size: 16px;
@@ -1199,22 +1198,12 @@ body.is-dragging * {
   letter-spacing: -0.01em;
 }
 
-/* The menu button carries the cloud's dot on phones (Menu.tsx). */
+/* The menu button carries the sync dot (Menu.tsx). */
 .menu-button {
   position: relative;
 }
 
-/* The cloud in the header. */
-.sync-indicator {
-  position: relative;
-  color: var(--muted);
-}
-
-.sync-indicator.sync-offline,
-.sync-indicator.sync-error {
-  color: var(--link);
-}
-
+/* The menu button's dot: changes wait for the server, or no connection. */
 .sync-dot {
   position: absolute;
   top: 9px;

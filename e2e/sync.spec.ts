@@ -5,6 +5,9 @@ const PASS = 'очень длинный пароль';
 
 const rows = (page: Page) => page.locator('.row .text').evaluateAll((els) => els.map((e) => e.textContent));
 
+/** The menu button, once its hint tells the sync state: sync is on. */
+const syncOn = (page: Page) => page.locator('.menu-button[title^="Документ. "]');
+
 async function openSyncDialog(page: Page) {
   await page.locator('.topbar [aria-label="Меню документа"]').click();
   await page.getByRole('menuitem', { name: /Синхронизация/ }).click();
@@ -30,7 +33,7 @@ test('two browsers share one encrypted document through the server', async ({ br
   await passwords.nth(1).fill(PASS);
   await a.getByRole('button', { name: 'Создать и включить' }).click();
   await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
-  await expect(a.locator('.sync-indicator')).toBeVisible();
+  await expect(syncOn(a)).toBeVisible();
   await openSyncDialog(a);
   const code = (await a.locator('.doc-code').textContent())!.trim();
   expect(code.length).toBeGreaterThan(10);
@@ -60,7 +63,7 @@ test('two browsers share one encrypted document through the server', async ({ br
   await b.locator('.sync-dialog input[type="password"]').fill(PASS);
   await b.getByRole('button', { name: 'Подключиться' }).click();
   await expect(b.locator('.row .text').first()).toHaveText('общий пункт', { timeout: 30_000 });
-  await expect(b.locator('.sync-indicator')).toBeVisible();
+  await expect(syncOn(b)).toBeVisible();
 
   // B types; A gets it through the event stream. A edits; B gets it.
   await b.locator('.row .text').first().click();
@@ -144,10 +147,10 @@ test('a local copy that does not open with the key is restored from the server',
   await expect(a.locator('.unlock')).toContainText('прежним ключом');
   await a.getByRole('button', { name: 'Загрузить с сервера' }).click();
   await expect(a.locator('.row .text').first()).toHaveText('с сервера', { timeout: 30_000 });
-  await expect(a.locator('.sync-indicator')).toBeVisible();
+  await expect(syncOn(a)).toBeVisible();
 });
 
-test('on a phone the cloud moves into the menu: a dot on its button while changes wait', async ({ browser }) => {
+test('the sync state lives in the menu: a dot on its button while changes wait', async ({ browser }) => {
   test.setTimeout(120_000);
   const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
   const a = await context.newPage();
@@ -161,7 +164,6 @@ test('on a phone the cloud moves into the menu: a dot on its button while change
   await a.getByRole('button', { name: 'Создать и включить' }).click();
   await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
 
-  await expect(a.locator('.sync-indicator')).toHaveCount(0);
   const dot = a.locator('.menu-button .sync-dot');
   await expect(dot).toHaveCount(0, { timeout: 15_000 });
   await a.locator('.topbar [aria-label="Меню документа"]').click();
