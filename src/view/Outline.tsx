@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf } from '../model/rows';
 import { Backlinks } from './Backlinks';
+import { touch } from './screen';
 import { createDrag } from './drag';
 import { EditBar } from './EditBar';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
@@ -28,6 +29,8 @@ const NOTE_SCALE = 0.81;
 const NOTE_LINES = 3;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
+/** The column kept free at the end of every row for the fold arrow on a touch screen, px (`--fold` in index.css). */
+const FOLD_COLUMN = 32;
 /** Air kept between the caret's line and the edge it nears, in lines: room for descenders (р, у, д). */
 const CARET_ROOM = 0.6;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
@@ -133,7 +136,7 @@ export function Outline(props: { o: Outliner }) {
     const indent = indentProbe.getBoundingClientRect().width / ch;
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
-      const perLine = Math.max(10, Math.floor(cols - indent * depth - BULLET_GAP / ch));
+      const perLine = Math.max(10, Math.floor(cols - indent * depth - (BULLET_GAP + (touch() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.

@@ -461,12 +461,19 @@ kbd {
   color: var(--text);
 }
 
+/* The turn answers at once and settles without overshoot (a tap carries no
+   momentum to spend); reversed mid-way, it turns back from where it is. The
+   press itself shows: the arrow gives a little under the finger or pointer. */
 .toggle svg {
-  transition: transform 200ms var(--ease-out);
+  transition: transform 280ms cubic-bezier(0.2, 0.9, 0.25, 1), scale 100ms var(--ease-out);
 }
 
 .toggle.open svg {
   transform: rotate(90deg);
+}
+
+.toggle:active svg {
+  scale: 0.8;
 }
 
 .body {
@@ -874,14 +881,39 @@ mark,
     display: none;
   }
 
+  /* At the end of the row, in a column of its own (--fold) that every row
+     keeps free: the arrows stand in one line at any depth, the text wraps
+     short of them, and the bullet on the left is left to zoom with a tap. */
+  .row {
+    --fold: 32px;
+  }
+
+  .row .body {
+    padding-right: var(--fold);
+  }
+
   .toggle {
+    left: auto;
+    right: 0;
+    width: var(--fold);
     opacity: 1;
   }
 
+  /* A finger-sized target, and a soft disc under the arrow while pressed. */
   .toggle::before {
     content: '';
     position: absolute;
-    inset: -6px -4px -6px -10px;
+    inset: -6px -4px;
+    border-radius: 50%;
+    transition: background 100ms var(--ease-out);
+  }
+
+  .toggle:active::before {
+    background: var(--surface-2);
+  }
+
+  .toggle svg {
+    position: relative;
   }
 }
 
@@ -1147,6 +1179,13 @@ mark,
 @media (max-width: 380px) {
   .editbar-insert .editbar-labelled > :last-child {
     display: none;
+  }
+}
+
+/* Reduced motion: the arrow just shows its new state. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle svg {
+    transition: none;
   }
 }
 

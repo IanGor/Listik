@@ -1182,12 +1182,20 @@ test.describe('touch screen', () => {
     expect(await panel.evaluate((d) => d.scrollWidth <= d.clientWidth)).toBe(true);
   });
 
-  test('fold arrows show without hover and fold at a tap', async ({ page }) => {
+  test('fold arrows show without hover, stand in one column at the end of the rows, and fold at a tap', async ({ page }) => {
     const toggle = page.locator('.row', { hasText: 'Том первый' }).locator('.toggle');
     await expect(toggle).toHaveCSS('opacity', '1');
-    // The finger lands a little beside the 16px arrow: still the arrow.
+    // One column at the right, whatever the depth; the text wraps short of it.
+    const inner = (await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').boundingBox())!;
     const box = (await toggle.boundingBox())!;
-    await page.touchscreen.tap(box.x - 6, box.y + box.height / 2);
+    expect(inner.x).toBeCloseTo(box.x, 0);
+    const row = (await page.locator('.row', { hasText: 'Том первый' }).boundingBox())!;
+    expect(box.x + box.width).toBeCloseTo(row.x + row.width, 0);
+    const long = page.locator('.row', { hasText: 'Eh bien' });
+    const text = (await long.locator('.text').boundingBox())!;
+    expect(text.x + text.width).toBeLessThanOrEqual(inner.x);
+    // The bullet, on the left, still zooms; the finger may land a little beside the arrow.
+    await page.touchscreen.tap(box.x + box.width + 3, box.y + box.height / 2);
     expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
     await toggle.tap();
     expect(await outline(page)).toEqual(DEMO);
