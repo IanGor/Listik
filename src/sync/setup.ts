@@ -2,7 +2,7 @@ import type { Doc } from '../model/doc';
 import { encryptedCodec, plainCodec, type Codec } from '../persist/codec';
 import { openDb } from '../persist/db';
 import type { Persistence } from '../persist/idb';
-import { httpTransport, normalizeServer, type Transport } from './client';
+import { HttpError, httpTransport, normalizeServer, type Transport } from './client';
 import { createKeyslot, dataKey, deriveKek, newDocId, openKeyslot, rewrapKeyslot, tokenFromKek, type Keyslot } from './crypto';
 import { SyncEngine, bootstrap, writeSyncState } from './engine';
 import {
@@ -71,7 +71,14 @@ export async function createSync(doc: Doc, opened: Opened, persistence: Persiste
   const docId = newDocId();
   const { keyslot, dek, token } = await createKeyslot(passphrase, docId);
   const transport = httpTransport(server, docId, token);
-  const { created } = await transport.putKeyslot(keyslot);
+  let created: boolean;
+  try {
+    ({ created } = await transport.putKeyslot(keyslot));
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 403) throw new Error('Сервер не принимает новые документы (LISTIK_ALLOW_CREATE=0)');
+    if (e instanceof HttpError && e.status === 429) throw new Error('Сервер временно не отвечает на попытки подключения: слишком много неудачных');
+    throw e;
+  }
   if (!created) throw new Error('Такой документ на сервере уже есть');
   const config = { server: normalizeServer(server), docId };
   await writeKeyslot(opened.db, keyslot);
@@ -101,7 +108,8 @@ export async function joinSync(opened: Opened, persistence: Persistence | null, 
   try {
     keyslot = await transport.getKeyslot();
   } catch (e) {
-    if (e instanceof Error && /^(401|404)$|unauthorized|no such/.test(e.message)) throw new Error('Документ с таким кодом и паролем на сервере не найден');
+    if (e instanceof HttpError && e.status === 429) throw new Error('Сервер временно не отвечает на попытки подключения: слишком много неудачных');
+    if (e instanceof HttpError && (e.status === 401 || e.status === 404)) throw new Error('Документ с таким кодом и паролем на сервере не найден');
     throw e;
   }
   const { dek } = await openKeyslot(passphrase, docId, keyslot);

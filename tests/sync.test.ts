@@ -159,6 +159,21 @@ describe('sync', () => {
     expect(dump(c.doc)).toEqual(dump(reloaded.doc));
   });
 
+  it('LISTIK_ALLOW_CREATE=0 refuses new documents but keeps serving existing ones', async () => {
+    const { a } = await createDoc();
+    process.env.LISTIK_ALLOW_CREATE = '0';
+    try {
+      const docId = newDocId();
+      const t = httpTransport(url, docId, `token-${docId}`);
+      await expect(t.putKeyslot({ v: 1, kdf: { m: 1, t: 1, p: 1 }, wrapped: { iv: '', ct: '' } })).rejects.toThrow(/new documents/);
+      a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'по-прежнему работает'));
+      await a.engine.sync();
+      expect(a.engine.status.phase).toBe('synced');
+    } finally {
+      delete process.env.LISTIK_ALLOW_CREATE;
+    }
+  });
+
   it('the server refuses a forged or reordered batch chain', async () => {
     const { docId, token, transport, a } = await createDoc();
     a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'честно'));
@@ -234,5 +249,15 @@ describe('sync', () => {
         expect(dump(back), `seed ${seed} local log`).toEqual(dump(d.doc));
       }
     }
+  });
+  // Last: it throttles the one address every test here shares.
+  it('repeated failed authentications get a 429 for a while', async () => {
+    const { docId } = await createDoc();
+    const wrong = httpTransport(url, docId, 'definitely-not-the-token');
+    let last: unknown;
+    for (let k = 0; k < 25; k++) {
+      last = await wrong.getOps(0).catch((e: unknown) => e);
+    }
+    expect(String((last as Error).message)).toMatch(/429|too many/);
   });
 });

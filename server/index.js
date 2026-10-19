@@ -9,6 +9,11 @@
  *   LISTIK_PORT      port (default 8787)
  *   LISTIK_ORIGINS   allowed browser origins, comma-separated, or "*"
  *   LISTIK_RETENTION days to keep batches already folded into a snapshot (default 30)
+ *   LISTIK_ALLOW_CREATE "0" refuses new documents (set it once yours exists; read per request, no restart needed
+ *                    when the process is given the variable another way, e.g. systemctl set-environment is not
+ *                    enough: edit sync.env and restart)
+ *
+ * Failed authentications and probes of unknown documents are rate-limited per address.
  *
  * API (all under /docs/:id, Authorization: Bearer <token>):
  *   PUT    keyslot            create the document (first token wins) or rotate the token
@@ -33,6 +38,9 @@ const RETENTION_MS = Number(process.env.LISTIK_RETENTION ?? 30) * 86_400_000;
 const MAX_OPS_BODY = 8 * 1024 * 1024;
 const MAX_SNAPSHOT = 256 * 1024 * 1024;
 const PAGE = 1000;
+/** Failed authentications (or probes of unknown documents) per address before it is told to wait. */
+const FAIL_LIMIT = 20;
+const FAIL_WINDOW_MS = 10 * 60_000;
 
 const ID = /^[A-Za-z0-9_-]{8,64}$/;
 const hash = (s) => createHash('sha256').update(s).digest('hex');
@@ -166,6 +174,29 @@ class Document {
   }
 }
 
+/** address → { count, until }: refused requests, forgotten after the window. */
+const failures = new Map();
+
+function throttled(address) {
+  const f = failures.get(address);
+  if (!f) return false;
+  if (Date.now() > f.until) {
+    failures.delete(address);
+    return false;
+  }
+  return f.count >= FAIL_LIMIT;
+}
+
+function noteFailure(address) {
+  const now = Date.now();
+  const f = failures.get(address);
+  if (f && now <= f.until) f.count++;
+  else failures.set(address, { count: 1, until: now + FAIL_WINDOW_MS });
+  if (failures.size > 10_000) for (const [k, v] of failures) if (now > v.until) failures.delete(k);
+}
+
+const addressOf = (req) => (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+
 const docs = new Map();
 const docFor = (id) => {
   let d = docs.get(id);
@@ -220,19 +251,26 @@ async function handle(req, res) {
   const m = /^\/docs\/([^/]+)(?:\/(keyslot|ops|events|snapshot))?$/.exec(url.pathname);
   if (!m || !ID.test(m[1])) throw new HttpError(404, 'not found');
   const [, id, part] = m;
+  const address = addressOf(req);
+  if (throttled(address)) throw new HttpError(429, 'too many failed attempts, try later');
   const doc = docFor(id);
   const exists = await doc.load();
+  const refuse = (status, message) => {
+    noteFailure(address);
+    throw new HttpError(status, message);
+  };
 
   if (part === 'keyslot' && req.method === 'PUT') {
     const body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8'));
     if (!body.keyslot || typeof body.keyslot !== 'object') throw new HttpError(400, 'keyslot missing');
     if (!exists) {
+      if (process.env.LISTIK_ALLOW_CREATE === '0') refuse(403, 'this server does not accept new documents');
       const t = body.token ?? token(req);
       if (typeof t !== 'string' || t.length < 16) throw new HttpError(400, 'token missing');
       await doc.create(hash(t), body.keyslot);
       return json(res, 201, { created: true });
     }
-    if (!doc.authorized(token(req))) throw new HttpError(401, 'unauthorized');
+    if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
     await doc.serial(async () => {
       await writeFile(join(doc.dir, 'keyslot.json'), JSON.stringify(body.keyslot));
       if (typeof body.newToken === 'string' && body.newToken.length >= 16) {
@@ -243,8 +281,8 @@ async function handle(req, res) {
     return json(res, 200, { updated: true });
   }
 
-  if (!exists) throw new HttpError(404, 'no such document');
-  if (!doc.authorized(token(req))) throw new HttpError(401, 'unauthorized');
+  if (!exists) refuse(404, 'no such document');
+  if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
 
   if (part === 'keyslot' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
