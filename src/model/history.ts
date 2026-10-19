@@ -1,4 +1,5 @@
 import { invert, type Doc } from './doc';
+import { applyMerged } from './merge';
 import type { Focus, Op } from './types';
 
 export interface HistoryEntry {
@@ -61,8 +62,9 @@ export class History {
     const e = this.undoStack.pop();
     if (!e) return null;
     this.typing = null;
+    // Through the merge layer: another device may have changed the bullet since.
     doc.transact(() => {
-      for (let i = e.ops.length - 1; i >= 0; i--) doc.apply(invert(e.ops[i]));
+      for (let i = e.ops.length - 1; i >= 0; i--) applyMerged(doc, invert(e.ops[i]));
     });
     this.redoStack.push(e);
     return e;
@@ -73,7 +75,7 @@ export class History {
     if (!e) return null;
     this.typing = null;
     doc.transact(() => {
-      for (const op of e.ops) doc.apply(op);
+      for (const op of e.ops) applyMerged(doc, op);
     });
     this.undoStack.push(e);
     return e;

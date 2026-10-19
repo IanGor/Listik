@@ -117,6 +117,8 @@ export class TextIndex implements DocListener {
   private texts: Map<NodeId, string> | null = null;
   /** Bullets not normalized yet, while the build is in progress. */
   private pending: NodeId[] | null = null;
+  /** Bullets deleted (moved to the trash) while the build is in progress: skipped when their turn comes. */
+  private excluded: Set<NodeId> | null = null;
   private doc: Doc;
   private unsubscribe: () => void;
 
@@ -150,7 +152,8 @@ export class TextIndex implements DocListener {
   private start(): Map<NodeId, string> {
     if (!this.texts) {
       this.texts = new Map();
-      this.pending = [...this.doc.nodes.keys()].filter((id) => id !== this.doc.root);
+      this.pending = [];
+      this.doc.walk(this.doc.root, (n) => n.id !== this.doc.root && this.pending!.push(n.id));
     }
     return this.texts;
   }
@@ -164,10 +167,10 @@ export class TextIndex implements DocListener {
       for (let k = 0; k < 1000 && pending.length; k++) {
         const id = pending.pop()!;
         const n = this.doc.nodes.get(id);
-        if (n) texts.set(id, normalize(content(n)));
+        if (n && !this.excluded?.has(id)) texts.set(id, normalize(content(n)));
       }
     }
-    if (!pending.length) this.pending = null;
+    if (!pending.length) this.pending = this.excluded = null;
   }
 
   /** Every bullet. */
@@ -207,14 +210,30 @@ export class TextIndex implements DocListener {
     switch (op.t) {
       case 'setText':
       case 'setNote':
-        texts.set(op.id, normalize(content(doc.get(op.id))));
+        if (doc.inOutline(op.id)) texts.set(op.id, normalize(content(doc.get(op.id))));
         break;
       case 'insert':
-        walkSnapshot(op.node, (s) => texts.set(s.id, normalize(content(s))));
+        if (doc.inOutline(op.parent)) walkSnapshot(op.node, (s) => texts.set(s.id, normalize(content(s))));
         break;
       case 'remove':
         walkSnapshot(op.node, (s) => texts.delete(s.id));
         break;
+      case 'move': {
+        // Across the trash boundary: the subtree enters or leaves the index.
+        const now = doc.inOutline(op.to.parent);
+        if (now === doc.inOutline(op.from.parent)) break;
+        const excluded = this.pending ? (this.excluded ??= new Set()) : null;
+        doc.walk(op.id, (n) => {
+          if (now) {
+            texts.set(n.id, normalize(content(n)));
+            excluded?.delete(n.id);
+          } else {
+            texts.delete(n.id);
+            excluded?.add(n.id);
+          }
+        });
+        break;
+      }
     }
   }
 }

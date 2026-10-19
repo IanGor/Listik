@@ -1,3 +1,4 @@
+import { TRASH_TTL, purgeTrash } from '../model/trash';
 import { done, readAll } from './db';
 import { deserialize, serialize } from './serialize';
 
@@ -17,6 +18,7 @@ export async function compactLog(db: IDBDatabase): Promise<number> {
     for (const op of batch) doc.apply(op);
     folded += batch.length;
   }
+  purgeTrash(doc, Date.now() - TRASH_TTL);
   const json = serialize(doc);
   const tx = db.transaction(['meta', 'oplog'], 'readwrite');
   tx.objectStore('meta').put(json, 'snapshot');

@@ -1,5 +1,6 @@
-import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
-import { newId, type Doc } from './doc';
+import { generateKeyBetween } from 'fractional-indexing';
+import { clock } from './clock';
+import { TRASH, newId, trashKey, type Doc } from './doc';
 import { countTrees, type Tree } from './outline-text';
 import type { VisibleRows } from './rows';
 import type { Focus, NodeId, NodeSnapshot } from './types';
@@ -16,7 +17,7 @@ export interface Ctx {
 
 function insertNew(doc: Doc, parent: NodeId, index: number, text: string): NodeId {
   const id = newId();
-  const now = Date.now();
+  const now = clock.now();
   doc.apply({
     t: 'insert',
     parent,
@@ -38,8 +39,10 @@ function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
   });
 }
 
+/** Deleting a bullet moves it into the trash, keyed by the time (see TRASH in doc.ts). */
 function remove(doc: Doc, id: NodeId): void {
-  doc.apply({ t: 'remove', parent: doc.get(id).parent!, node: doc.snapshot(id) });
+  const n = doc.get(id);
+  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: trashKey(clock.now()) } });
 }
 
 function expand(doc: Doc, id: NodeId): void {
@@ -49,12 +52,12 @@ function expand(doc: Doc, id: NodeId): void {
 
 export function setText({ doc }: Ctx, id: NodeId, text: string): void {
   const n = doc.get(id);
-  if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text, at: Date.now() });
+  if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text, at: clock.now() });
 }
 
 export function setNote({ doc }: Ctx, id: NodeId, note: string): void {
   const n = doc.get(id);
-  if (n.note !== note) doc.apply({ t: 'setNote', id, from: n.note, to: note, at: Date.now() });
+  if (n.note !== note) doc.apply({ t: 'setNote', id, from: n.note, to: note, at: clock.now() });
 }
 
 /**
@@ -159,7 +162,7 @@ export function insertTrees(ctx: Ctx, id: NodeId, start: number, end: number, tr
     return { id, caret: start };
   }
   if (countTrees(trees) > 2) rows.expectMany();
-  const now = Date.now();
+  const now = clock.now();
   const last = trees.length - 1;
   const [first] = trees;
   setText(ctx, id, before + first.text + (last === 0 ? after : ''));
@@ -184,7 +187,7 @@ export function insertText(ctx: Ctx, id: NodeId, start: number, end: number, lin
 /** Import: the trees become the last children of `parent`. Focuses the first one. */
 export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): Focus | void {
   if (countTrees(trees) > 2) rows.expectMany();
-  const now = Date.now();
+  const now = clock.now();
   let first: NodeId | undefined;
   for (const tree of trees) {
     const node = snapshotOf(tree, doc.orderAt(parent, doc.get(parent).children.length), now);
@@ -343,9 +346,7 @@ export function moveManyTo({ doc, rows }: Ctx, ids: NodeId[], parent: NodeId, af
   const children = doc.get(parent).children;
   let k = after === null ? -1 : children.indexOf(after);
   while (k >= 0 && moving.has(children[k])) k--; // dropped right after a moving bullet: after its predecessor
-  const a = k >= 0 ? doc.get(children[k]).order : null;
-  const b = k + 1 < children.length ? doc.get(children[k + 1]).order : null;
-  const keys = generateNKeysBetween(a, b, ids.length);
+  const keys = doc.ordersAt(parent, k + 1, ids.length);
   if (ids.length > 2) rows.expectMany();
   if (parent !== doc.root) expand(doc, parent);
   ids.forEach((id, i) => {

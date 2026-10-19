@@ -1,8 +1,24 @@
-import { generateKeyBetween } from 'fractional-indexing';
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { nanoid } from 'nanoid';
 import type { NodeId, NodeSnapshot, Op, OutlineNode } from './types';
 
 export const newId = (): NodeId => nanoid();
+
+/**
+ * The hidden second root. Deleting a bullet moves it here instead of
+ * destroying it, so an edit arriving late from another device still has
+ * somewhere to land, and so undoing a deletion works across devices. The
+ * trash is purged of old entries by compaction (`purgeTrash`).
+ */
+export const TRASH: NodeId = 'trash';
+
+/**
+ * Order key of a bullet in the trash: when it was thrown away, as a
+ * fixed-width base-36 time, so the trash sorts by age and purging stops at
+ * the first entry that is young enough. Never fed to `generateKeyBetween`.
+ */
+export const trashKey = (time: number): string => Math.max(0, Math.floor(time)).toString(36).padStart(9, '0');
+export const trashTime = (key: string): number => parseInt(key, 36);
 
 export interface DocListener {
   /** Called after each op is applied. */
@@ -26,7 +42,8 @@ export function walkSnapshot(root: NodeSnapshot, fn: (s: NodeSnapshot) => void):
 export function invert(op: Op): Op {
   switch (op.t) {
     case 'insert':
-      return { t: 'remove', parent: op.parent, node: op.node };
+      // Undoing a creation puts the bullet in the trash rather than destroying it (see TRASH).
+      return { t: 'move', id: op.node.id, from: { parent: op.parent, order: op.node.order }, to: { parent: TRASH, order: trashKey(op.node.created) } };
     case 'remove':
       return { t: 'insert', parent: op.parent, node: op.node };
     case 'setText':
@@ -56,10 +73,28 @@ export class Doc {
 
   constructor(root: NodeId = 'root') {
     this.root = root;
-    this.nodes.set(root, {
-      id: root, parent: null, children: [], order: '', text: '', note: '', collapsed: false, todo: false, done: false,
-      created: 0, updated: 0,
-    });
+    for (const id of [root, TRASH]) {
+      this.nodes.set(id, {
+        id, parent: null, children: [], order: '', text: '', note: '', collapsed: false, todo: false, done: false,
+        created: 0, updated: 0,
+      });
+    }
+  }
+
+  /** Is the bullet in the outline proper (not in the trash)? */
+  inOutline(id: NodeId): boolean {
+    for (let p: NodeId | null = id; p !== null; p = this.get(p).parent) if (p === this.root) return true;
+    return false;
+  }
+
+  /** Visits `id` and all its descendants. */
+  walk(id: NodeId, fn: (n: OutlineNode) => void): void {
+    const stack = [id];
+    while (stack.length) {
+      const n = this.get(stack.pop()!);
+      fn(n);
+      for (const c of n.children) stack.push(c);
+    }
   }
 
   /** A document with a single empty bullet — the state a new outline starts in. */
@@ -100,10 +135,22 @@ export class Doc {
 
   /** A fresh order key for inserting at `index` among the current children of `parent`. */
   orderAt(parent: NodeId, index: number): string {
+    return this.ordersAt(parent, index, 1)[0];
+  }
+
+  /**
+   * `count` fresh order keys for inserting at `index`. Siblings may share a
+   * key after two devices inserted into the same gap at once (ties break by
+   * id); there is nothing strictly between equal keys, so the new keys then
+   * go after the whole run of equals.
+   */
+  ordersAt(parent: NodeId, index: number, count: number): string[] {
     const kids = this.get(parent).children;
     const a = index > 0 ? this.get(kids[index - 1]).order : null;
-    const b = index < kids.length ? this.get(kids[index]).order : null;
-    return generateKeyBetween(a, b);
+    let k = index;
+    while (a !== null && k < kids.length && this.get(kids[k]).order <= a) k++;
+    const b = k < kids.length ? this.get(kids[k]).order : null;
+    return generateNKeysBetween(a, b, count);
   }
 
   snapshot(id: NodeId): NodeSnapshot {
@@ -228,17 +275,17 @@ export class Doc {
     }
   }
 
-  /** Inserts `n` into its parent's children, keeping them sorted by order. */
+  /** Inserts `n` into its parent's children, keeping them sorted by order, then by id for equal orders. */
   private attach(n: OutlineNode): void {
     const kids = this.get(n.parent!).children;
     let lo = 0;
     let hi = kids.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (this.get(kids[mid]).order < n.order) lo = mid + 1;
+      const m = this.get(kids[mid]);
+      if (m.order < n.order || (m.order === n.order && m.id < n.id)) lo = mid + 1;
       else hi = mid;
     }
-    if (lo < kids.length && this.get(kids[lo]).order === n.order) throw new Error(`Duplicate order ${n.order}`);
     kids.splice(lo, 0, n.id);
   }
 

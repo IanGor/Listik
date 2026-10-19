@@ -1,23 +1,25 @@
-import type { Doc } from './doc';
+import { TRASH, type Doc } from './doc';
 import type { NodeId } from './types';
 
-/** Throws if the tree is inconsistent. Used by tests and dev assertions. */
+/** Throws if the tree (outline and trash) is inconsistent. Used by tests and dev assertions. */
 export function checkInvariants(doc: Doc): void {
-  const root = doc.get(doc.root);
-  if (root.parent !== null) throw new Error('root has a parent');
-  const seen = new Set<NodeId>([doc.root]);
-  const stack = [doc.root];
+  for (const r of [doc.root, TRASH]) if (doc.get(r).parent !== null) throw new Error(`${r} has a parent`);
+  const seen = new Set<NodeId>([doc.root, TRASH]);
+  const stack = [doc.root, TRASH];
   while (stack.length) {
     const n = doc.get(stack.pop()!);
-    let prevOrder: string | null = null;
+    let prev: { order: string; id: NodeId } | null = null;
     for (const cid of n.children) {
       if (seen.has(cid)) throw new Error(`${cid} reachable twice`);
       seen.add(cid);
       const c = doc.nodes.get(cid);
       if (!c) throw new Error(`${n.id} has missing child ${cid}`);
       if (c.parent !== n.id) throw new Error(`${cid}.parent is ${c.parent}, expected ${n.id}`);
-      if (prevOrder !== null && !(prevOrder < c.order)) throw new Error(`children of ${n.id} out of order`);
-      prevOrder = c.order;
+      // Sorted by order; equal orders (concurrent inserts) by id.
+      if (prev && !(prev.order < c.order || (prev.order === c.order && prev.id < c.id))) {
+        throw new Error(`children of ${n.id} out of order`);
+      }
+      prev = { order: c.order, id: c.id };
       stack.push(cid);
     }
   }

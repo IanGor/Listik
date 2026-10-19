@@ -1,11 +1,12 @@
-import { Doc } from '../model/doc';
+import { Doc, TRASH } from '../model/doc';
 import type { NodeId, Op } from '../model/types';
 import { own } from '../util/own';
 
 /**
- * One node; `parent` is the index of the parent's row, -1 for the root.
- * Version 1 rows end at `updated`; version 2 adds `done` and `note`;
- * version 3 adds `todo` (in v2, anything done was in effect a task).
+ * One node; `parent` is the index of the parent's row, -1 for the root and
+ * -2 for the trash (v4). Version 1 rows end at `updated`; version 2 adds
+ * `done` and `note`; version 3 adds `todo` (in v2, anything done was in
+ * effect a task); version 4 adds the trash's rows after the outline's.
  */
 export type SnapshotRow = [
   id: NodeId, parent: number, order: string, text: string, collapsed: 0 | 1, created: number, updated: number,
@@ -14,7 +15,7 @@ export type SnapshotRow = [
 
 /** Rows in pre-order, so children arrive already sorted. */
 export interface Snapshot {
-  v: 1 | 2 | 3;
+  v: 1 | 2 | 3 | 4;
   root: NodeId;
   rows: SnapshotRow[];
 }
@@ -29,6 +30,8 @@ export function serialize(doc: Doc): string {
       stackParents.push(parent);
     }
   };
+  // The trash's rows come after the whole outline: pushed first, popped last.
+  pushChildren(doc.get(TRASH).children, -2);
   pushChildren(doc.get(doc.root).children, -1);
   while (stackIds.length) {
     const n = doc.get(stackIds.pop()!);
@@ -37,7 +40,7 @@ export function serialize(doc: Doc): string {
     rows.push([n.id, parent, n.order, n.text, n.collapsed ? 1 : 0, n.created, n.updated, n.done ? 1 : 0, n.note, n.todo ? 1 : 0]);
     pushChildren(n.children, index);
   }
-  const snapshot: Snapshot = { v: 3, root: doc.root, rows };
+  const snapshot: Snapshot = { v: 4, root: doc.root, rows };
   return JSON.stringify(snapshot);
 }
 
@@ -49,11 +52,11 @@ export function serialize(doc: Doc): string {
  */
 export function deserialize(json: string): Doc {
   const s = JSON.parse(json) as Snapshot;
-  if (s.v !== 1 && s.v !== 2 && s.v !== 3) throw new Error(`Unsupported snapshot version ${s.v}`);
+  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4) throw new Error(`Unsupported snapshot version ${s.v}`);
   const doc = new Doc(s.root);
   const ids = new Array<NodeId>(s.rows.length);
   s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo], i) => {
-    const parent = p < 0 ? s.root : ids[p];
+    const parent = p === -1 ? s.root : p === -2 ? TRASH : ids[p];
     const id = own(rawId);
     ids[i] = id;
     doc.nodes.set(id, {

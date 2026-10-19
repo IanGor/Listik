@@ -45,6 +45,8 @@ const EMPTY: ReadonlySet<NodeId> = new Set();
 /**
  * Tag → bullets that carry it. Built once in a single pass, then kept in
  * sync by ops: editing a bullet costs only re-parsing that bullet's text.
+ * Bullets in the trash are not indexed; a move across the trash boundary
+ * indexes or drops the whole subtree.
  */
 export class TagIndex implements DocListener {
   private byTag = new Map<string, Set<NodeId>>();
@@ -52,7 +54,7 @@ export class TagIndex implements DocListener {
   private unsubscribe: () => void;
 
   constructor(doc: Doc) {
-    for (const n of doc.nodes.values()) this.set(n.id, content(n));
+    doc.walk(doc.root, (n) => this.set(n.id, content(n)));
     this.unsubscribe = doc.subscribe(this);
   }
 
@@ -73,14 +75,20 @@ export class TagIndex implements DocListener {
     switch (op.t) {
       case 'setText':
       case 'setNote':
-        this.set(op.id, content(doc.get(op.id)));
+        if (doc.inOutline(op.id)) this.set(op.id, content(doc.get(op.id)));
         break;
       case 'insert':
-        walkSnapshot(op.node, (s) => this.set(s.id, content(s)));
+        if (doc.inOutline(op.parent)) walkSnapshot(op.node, (s) => this.set(s.id, content(s)));
         break;
       case 'remove':
         walkSnapshot(op.node, (s) => this.set(s.id, ''));
         break;
+      case 'move': {
+        const now = doc.inOutline(op.to.parent);
+        if (now === doc.inOutline(op.from.parent)) break;
+        doc.walk(op.id, (n) => this.set(n.id, now ? content(n) : ''));
+        break;
+      }
     }
   }
 
