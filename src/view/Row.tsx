@@ -3,9 +3,9 @@ import * as cmd from '../model/commands';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
+import { nodeOf, type RowKey } from '../model/rows';
 import { decorate, type Piece } from '../model/search';
 import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
-import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
@@ -13,13 +13,13 @@ import { suggestKey } from './Suggest';
 
 interface RowProps {
   o: Outliner;
-  /** Fixed for the component's lifetime: rows are keyed by id. */
-  id: NodeId;
+  /** The row's key, fixed for the component's lifetime (model/rows.ts: under a mirror, not the bullet's id). */
+  id: RowKey;
   depth: number;
   /** Starts measuring the row element; returns the stop function. */
   observe: (el: HTMLElement) => () => void;
   /** A press on the bullet: a click zooms in, a drag moves (drag.ts). */
-  grab: (e: PointerEvent, id: NodeId) => void;
+  grab: (e: PointerEvent, id: RowKey) => void;
 }
 
 const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
@@ -54,6 +54,7 @@ function Pieces(props: { o: Outliner; pieces: Piece[] }) {
 export function Row(props: RowProps) {
   const o = props.o;
   const id = props.id;
+  const nid = nodeOf(id);
   let el!: HTMLDivElement;
   let bullet!: HTMLSpanElement;
   onMount(() => onCleanup(props.observe(el)));
@@ -66,12 +67,12 @@ export function Row(props: RowProps) {
     bullet.addEventListener('touchmove', hold, { passive: false });
     onCleanup(() => bullet.removeEventListener('touchmove', hold));
   });
-  o.nodes.acquire(id);
-  onCleanup(() => o.nodes.release(id));
+  o.nodes.acquire(nid);
+  onCleanup(() => o.nodes.release(nid));
 
   const node = () => {
-    o.nodes.track(id);
-    return o.doc.nodes.get(id);
+    o.nodes.track(nid);
+    return o.doc.nodes.get(nid);
   };
   /** What the row shows: the mirrored bullet for a mirror (model/mirrors.ts), else the bullet itself. */
   const content = () => {
@@ -91,16 +92,18 @@ export function Row(props: RowProps) {
   const focused = () => !o.readOnly && o.focus()?.id === id;
   const editingText = () => focused() && !inNote(o.focus());
   const editingNote = () => focused() && inNote(o.focus());
+  // A mirror's children are its original's, shown under it (model/rows.ts).
   const folded = () => {
     o.rowsVersion();
-    const n = node();
-    return !!n && o.rows.hasHiddenChildren(n);
+    return !!content() && o.rows.hasHiddenChildren(id);
   };
-  const hasChildren = () => (node()?.children.length ?? 0) > 0;
+  const hasChildren = () => {
+    o.rowsVersion();
+    return !!content() && (o.rows.host(id)?.children.length ?? 0) > 0;
+  };
   const open = () => {
     o.rowsVersion();
-    const n = node();
-    return !!n && o.rows.showsChildren(n);
+    return !!content() && o.rows.showsChildren(id);
   };
   const terms = () => o.filter()?.query.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
@@ -215,7 +218,7 @@ export function Row(props: RowProps) {
  * being composed (Android keyboards compose every word) the text must not be
  * touched, so there the check waits for the composition to end.
  */
-const timeCommand = (o: Outliner, id: NodeId, el: HTMLElement, text: string, note: boolean) => {
+const timeCommand = (o: Outliner, id: RowKey, el: HTMLElement, text: string, note: boolean) => {
   const caret = selectionIn(el)?.[0];
   if (caret === undefined || !timeCommandBefore(text, caret)) return;
   o.insert(note ? { id, caret, note: true } : { id, caret }, timeOfDay(), TIME_COMMAND.length);
@@ -288,16 +291,17 @@ function placeCaret(el: HTMLElement, f: FocusRequest): void {
  * caret stays put. Only changes made elsewhere (merge, paste, undo) are
  * written into the DOM. Invariant: the element holds a single text node.
  */
-function Editable(props: { o: Outliner; id: NodeId }) {
+function Editable(props: { o: Outliner; id: RowKey }) {
   const o = props.o;
   const id = props.id;
+  const nid = nodeOf(id);
   let el!: HTMLDivElement;
   // Through a mirror, the original's text (model/mirrors.ts): tracked by both ids.
   const text = () => {
-    o.nodes.track(id);
-    const n = o.doc.nodes.get(id);
+    o.nodes.track(nid);
+    const n = o.doc.nodes.get(nid);
     if (n?.mirrorOf) o.nodes.track(n.mirrorOf);
-    return n ? o.doc.content(id).text : '';
+    return n ? o.doc.content(nid).text : '';
   };
 
   onMount(() => {
@@ -356,15 +360,16 @@ function Editable(props: { o: Outliner; id: NodeId }) {
  * The note under the focused row, editable. Unlike the text it spans lines:
  * Enter starts a new line; Shift+Enter or Esc go back to the text.
  */
-function NoteEditable(props: { o: Outliner; id: NodeId }) {
+function NoteEditable(props: { o: Outliner; id: RowKey }) {
   const o = props.o;
   const id = props.id;
+  const nid = nodeOf(id);
   let el!: HTMLDivElement;
   const note = () => {
-    o.nodes.track(id);
-    const n = o.doc.nodes.get(id);
+    o.nodes.track(nid);
+    const n = o.doc.nodes.get(nid);
     if (n?.mirrorOf) o.nodes.track(n.mirrorOf);
-    return n ? o.doc.content(id).note : '';
+    return n ? o.doc.content(nid).note : '';
   };
   // An empty last line only shows with a placeholder "\n" after it (Chromium
   // adds one itself on Enter): the DOM holds the note plus that placeholder.

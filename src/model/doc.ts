@@ -85,11 +85,12 @@ export class Doc {
 
   /**
    * The bullet whose text, note and task state the row `id` shows: the
-   * mirrored bullet for a mirror (itself if that one is gone), else itself.
+   * mirrored bullet for a mirror (through a chain of mirrors, as far as it
+   * goes; itself if that one is gone), else itself.
    */
   content(id: NodeId): OutlineNode {
     const n = this.get(id);
-    return n.mirrorOf ? (this.nodes.get(n.mirrorOf) ?? n) : n;
+    return n.mirrorOf ? this.get(this.origin(id)) : n;
   }
 
   /** The bullet behind a chain of mirrors: what a new mirror should point at, and where zoom goes. */
@@ -102,6 +103,24 @@ export class Doc {
       seen.add(cur);
       cur = n.mirrorOf;
     }
+  }
+
+  /**
+   * The bullet whose children show under `id`, and where children put under
+   * it go: a mirror's are its original's. Null for a mirror whose original
+   * is gone.
+   */
+  host(id: NodeId): OutlineNode | null {
+    const n = this.get(id);
+    if (!n.mirrorOf) return n;
+    const o = this.nodes.get(this.origin(id));
+    return o && !o.mirrorOf ? o : null;
+  }
+
+  /** Is `id` the bullet `ancestor` or inside it? */
+  within(id: NodeId, ancestor: NodeId): boolean {
+    for (let p: NodeId | null = id; p !== null; p = this.nodes.get(p)?.parent ?? null) if (p === ancestor) return true;
+    return false;
   }
 
   /** Is the bullet in the outline proper (not in the trash)? */

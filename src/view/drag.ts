@@ -1,12 +1,12 @@
 import { createSignal, type Accessor } from 'solid-js';
 import { moveManyTo } from '../model/commands';
-import type { NodeId } from '../model/types';
+import type { RowKey } from '../model/rows';
 import type { Outliner } from './outliner';
 
-/** Where a drop would land, and the line that shows it (px, relative to the spacer). */
+/** Where a drop would land (rows: under a mirror row, into its original), and the line that shows it (px, relative to the spacer). */
 export interface DropTarget {
-  parent: NodeId;
-  after: NodeId | null;
+  parent: RowKey;
+  after: RowKey | null;
   top: number;
   left: number;
 }
@@ -41,7 +41,7 @@ const EDGE = 48;
 export function createDrag(o: Outliner, el: () => Elements) {
   const [target, setTarget] = createSignal<DropTarget | null>(null);
 
-  function start(e: PointerEvent, id: NodeId): void {
+  function start(e: PointerEvent, id: RowKey): void {
     if (e.button !== 0) return;
     e.preventDefault();
     const handle = e.currentTarget as HTMLElement;
@@ -49,9 +49,9 @@ export function createDrag(o: Outliner, el: () => Elements) {
     const startX = e.clientX;
     const startY = e.clientY;
     let dragging = false;
-    let ids: NodeId[] = [];
+    let ids: RowKey[] = [];
     /** Rows of the dragged subtrees, which cannot take a drop. */
-    let inside = new Set<NodeId>();
+    let inside = new Set<RowKey>();
     let pointer = { x: startX, y: startY };
     let scrollFrame = 0;
     const finger = e.pointerType === 'touch';
@@ -108,8 +108,8 @@ export function createDrag(o: Outliner, el: () => Elements) {
       const minDepth = nextId ? rows.depths[prev + 1] : 0;
       const depth = Math.max(minDepth, Math.min(maxDepth, Math.round((pointer.x - base) / indent - 0.5)));
 
-      let parent: NodeId;
-      let after: NodeId | null;
+      let parent: RowKey;
+      let after: RowKey | null;
       if (!prevId) {
         parent = rows.top;
         after = null;
@@ -118,12 +118,12 @@ export function createDrag(o: Outliner, el: () => Elements) {
         after = null;
       } else {
         let node = prevId;
-        for (let d = rows.depths[prev]; d > depth; d--) node = o.doc.get(node).parent!;
-        parent = o.doc.get(node).parent!;
+        for (let d = rows.depths[prev]; d > depth; d--) node = rows.parentKey(node)!;
+        parent = rows.parentKey(node) ?? rows.top;
         after = node;
       }
       // Never into a dragged subtree.
-      for (let p: NodeId | null = parent; p !== null && p !== rows.top; p = o.doc.get(p).parent) {
+      for (let p: RowKey | null = parent; p !== null && p !== rows.top; p = rows.parentKey(p)) {
         if (inside.has(p)) return null;
       }
 
@@ -167,7 +167,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
       cancelAnimationFrame(scrollFrame);
       const t = target();
       setTarget(null);
-      o.setDragged(new Set<NodeId>());
+      o.setDragged(new Set<RowKey>());
       document.body.classList.remove('is-dragging');
       if (!dragging) {
         if (drop) o.pressBullet(id);

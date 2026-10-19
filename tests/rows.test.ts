@@ -118,7 +118,7 @@ describe('VisibleRows', () => {
     check();
     doc.transact(() => cmd.toggleDone(ctx, ['c1']));
     expect(dumpRows(rows, doc)).toEqual(['b', 'c']);
-    expect(rows.hasHiddenChildren(doc.get('c'))).toBe(true);
+    expect(rows.hasHiddenChildren('c')).toBe(true);
     doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
     expect(dumpRows(rows, doc)).toEqual(['a', '  a1', 'b', 'c']);
     check();

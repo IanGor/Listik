@@ -20,9 +20,9 @@ describe('filter by tag', () => {
   it('shows matches with their ancestors; matches start folded', () => {
     const { doc, rows } = filtered(DOC, 'x');
     expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', 'e', '  f #x']);
-    expect(rows.hasHiddenChildren(doc.get('b #x'))).toBe(true);
-    expect(rows.hasHiddenChildren(doc.get('a'))).toBe(true); // "d" is off the path
-    expect(rows.hasHiddenChildren(doc.get('f #x'))).toBe(false);
+    expect(rows.hasHiddenChildren('b #x')).toBe(true);
+    expect(rows.hasHiddenChildren('a')).toBe(true); // "d" is off the path
+    expect(rows.hasHiddenChildren('f #x')).toBe(false);
   });
 
   it('opening a bullet on the path shows all its children; the doc is untouched', () => {
@@ -84,7 +84,7 @@ describe('filter by tag', () => {
           () => cmd.mergeUp(ctx, id),
           () => cmd.deleteNode(ctx, id),
         ] : [];
-        const action = pick<() => Focus | void>([
+        const action = pick<() => Focus | string | void>([
           ...destructive,
           () => cmd.split(ctx, id, Math.floor(rand() * (n.text.length + 1))),
           () => cmd.indent(ctx, id),
@@ -94,7 +94,7 @@ describe('filter by tag', () => {
           () => cmd.insertText(ctx, id, 0, 0, ['p', 'q']),
           () => cmd.setText(ctx, id, n.text + ' #x'),
         ]);
-        let focus: Focus | void = undefined;
+        let focus: Focus | string | void = undefined;
         doc.transact(() => { focus = action(); });
 
         checkInvariants(doc);
@@ -103,7 +103,8 @@ describe('filter by tag', () => {
         fresh.dispose();
         expect(rows.ids, `seed ${seed} step ${step}`).toEqual(fresh.ids);
         expect(rows.depths, `seed ${seed} step ${step}`).toEqual(fresh.depths);
-        const target = (focus as Focus | void)?.id ?? (doc.has(id) ? id : null);
+        const f = focus as Focus | string | void;
+        const target = (typeof f === 'string' ? f : f?.id) ?? (doc.has(id) ? id : null);
         if (target) expect(rows.indexOf(target), `seed ${seed} step ${step}: ${target} hidden`).toBeGreaterThanOrEqual(0);
       }
     }

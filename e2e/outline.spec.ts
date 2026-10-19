@@ -1200,6 +1200,32 @@ test.describe('mirrors', () => {
     await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая (зеркало']);
   });
 
+  test('a mirror shows everything under its original; edits there are the original\'s, the caret stays in the mirror', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Том перв');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    const all = await outline(page);
+    expect(all).toEqual([...DEMO, ...DEMO.slice(0, 5)]);
+    await expect(page.locator('.row.mirror')).toHaveCount(1);
+
+    // Enter at the end of a bullet inside the mirror: the new bullet is the original's, edited in the mirror.
+    const inMirror = page.locator('.row[data-id*="/"]', { hasText: 'Часть вторая' });
+    await inMirror.locator('.text').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Часть третья');
+    await expect(page.locator('.row[data-id*="/"] .text[contenteditable]')).toHaveText('Часть третья');
+    await expect(page.locator('.row .text', { hasText: 'Часть третья' })).toHaveCount(2);
+    expect((await outline(page)).slice(0, 7)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй']);
+
+    // The mirror folds on its own; the original stays open.
+    await page.keyboard.press('Escape');
+    await page.locator('.row.mirror .toggle').click();
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй', 'Том первый']);
+  });
+
   test('(( with other text puts the mirror below; ) steps over; Backspace takes out an empty pair', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');

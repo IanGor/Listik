@@ -3,6 +3,7 @@ import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from 
 import { findTargets } from '../model/links';
 import { tagKey, type Sigil } from '../model/tags';
 import { timeOfDay } from '../model/time';
+import { nodeOf, type RowKey } from '../model/rows';
 import type { NodeId } from '../model/types';
 import { selectionIn } from './caret';
 import type { Outliner } from './outliner';
@@ -20,7 +21,7 @@ interface Item {
 }
 
 interface Open {
-  id: NodeId;
+  id: RowKey;
   note: boolean;
   token: Token;
   items: Item[];
@@ -42,7 +43,7 @@ let accept: (i: number) => void = () => {};
 let refresh = (_now?: boolean) => {};
 
 const rowHeight = () => (touch() ? 40 : 32);
-const keyOf = (id: NodeId, note: boolean, t: Token) => `${id}\n${note}\n${t.start}`;
+const keyOf = (id: RowKey, note: boolean, t: Token) => `${id}\n${note}\n${t.start}`;
 
 /**
  * Keys of the editing row while suggestions show (Row.tsx calls this first):
@@ -104,12 +105,12 @@ export function Suggest(props: { o: Outliner }) {
     matchCommands(t.query).slice(0, limit).map((c) => ({ label: `/${c.name}`, hint: c.hint, text: RUN[c.name] }));
 
   /** Tags of the token's own set (`#` or `@`), by name. */
-  const tags = (id: NodeId, t: Token, text: string, limit: number): Item[] => {
+  const tags = (id: RowKey, t: Token, text: string, limit: number): Item[] => {
     const sigil = t.kind as Sigil;
     // The word being typed is already indexed as a tag, from this very
     // bullet: it counts only for the other bullets that carry it.
     const typed = tagKey(sigil, text.slice(t.start + 1, t.end));
-    const self = o.tags.nodesWith(typed).has(id) ? typed : null;
+    const self = o.tags.nodesWith(typed).has(o.contentOf(id).id) ? typed : null;
     const counts = new Map<string, number>();
     for (const [key, n] of o.tags.entries()) {
       if (key.startsWith('@') !== (sigil === '@')) continue;
@@ -132,7 +133,7 @@ export function Suggest(props: { o: Outliner }) {
    */
   let found: { key: string; items: Item[] } | null = null;
   let later = false;
-  const links = (id: NodeId, t: Token, limit: number, now: boolean): Item[] | null => {
+  const links = (id: RowKey, t: Token, limit: number, now: boolean): Item[] | null => {
     const key = `${id}\n${limit}\n${t.kind}\n${t.query}`;
     if (found?.key !== key) {
       if (!now) {
@@ -146,9 +147,9 @@ export function Suggest(props: { o: Outliner }) {
         return null;
       }
       const mirror = t.kind === '((';
-      const items = findTargets(o.doc, o.text, t.query, id, limit)
+      const items = findTargets(o.doc, o.text, t.query, o.contentOf(id).id, limit)
         // A bullet cannot mirror itself or the bullet it already mirrors.
-        .filter((target) => !mirror || o.doc.origin(target.id) !== o.doc.origin(id))
+        .filter((target) => !mirror || o.doc.origin(target.id) !== o.doc.origin(nodeOf(id)))
         .map((target) => ({
           label: target.title,
           hint: target.where,
@@ -192,7 +193,7 @@ export function Suggest(props: { o: Outliner }) {
     const s = open();
     const item = s?.items[i];
     if (!s || !item) return;
-    const n = o.doc.content(s.id);
+    const n = o.contentOf(s.id);
     const text = s.note ? n.note : n.text;
     // A tag is followed by a space, so typing goes on after it.
     const insert = item.text() + (item.tag && !/\s/.test(text[s.token.end] ?? '') ? ' ' : '');

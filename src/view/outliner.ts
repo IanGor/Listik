@@ -4,7 +4,7 @@ import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { resolveLink } from '../model/links';
-import { VisibleRows, keepSet } from '../model/rows';
+import { VisibleRows, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
@@ -34,13 +34,17 @@ function writeSetting(key: string, value: string | null): void {
   }
 }
 
-/** Where the caret goes: a text offset, or a horizontal position on the row's first/last line (↑/↓). */
+/**
+ * Where the caret goes: a text offset, or a horizontal position on the row's
+ * first/last line (↑/↓). `id` is a row's key (model/rows.ts: a bullet under
+ * a mirror shows in a row of its own).
+ */
 export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last'; note?: true };
 
-/** Several bullets selected: from `anchor` (where it started) to `head` (the moving end). */
+/** Several rows selected: from `anchor` (where it started) to `head` (the moving end). */
 export interface Selection {
-  anchor: NodeId;
-  head: NodeId;
+  anchor: RowKey;
+  head: RowKey;
 }
 
 /** The active search: what was asked and what it found when applied. */
@@ -85,8 +89,8 @@ export class Outliner {
   readonly showDone: Accessor<boolean>;
   private setShowDone: Setter<boolean>;
   /** Rows being dragged (with their subtrees), shown dimmed. */
-  readonly dragged: Accessor<ReadonlySet<NodeId>>;
-  readonly setDragged: Setter<ReadonlySet<NodeId>>;
+  readonly dragged: Accessor<ReadonlySet<RowKey>>;
+  readonly setDragged: Setter<ReadonlySet<RowKey>>;
   /** Automatic copies into a folder; null for in-memory documents. */
   backup: Backup | null = null;
   /** The stored document's persistence; null for in-memory documents. */
@@ -114,7 +118,7 @@ export class Outliner {
   private setHomeRequests: Setter<number>;
   private setToast: Setter<string | null>;
   private setSelectionSignal: Setter<Selection | null>;
-  private selectionCache: { selection: Selection; version: number; set: Set<NodeId>; roots: NodeId[] } | null = null;
+  private selectionCache: { selection: Selection; version: number; set: Set<RowKey>; roots: RowKey[] } | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSearch: number | null = null;
 
@@ -138,7 +142,7 @@ export class Outliner {
     [this.syncStatus, this.setSyncStatus] = createSignal<SyncStatus>({ phase: 'stopped', pending: 0, head: 0 });
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
-    [this.dragged, this.setDragged] = createSignal<ReadonlySet<NodeId>>(new Set());
+    [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     const hideDone = readSetting(HIDE_DONE) === '1';
     [this.showDone, this.setShowDone] = createSignal(!hideDone);
     if (hideDone) this.rows.setHideDone(true);
@@ -183,16 +187,21 @@ export class Outliner {
   }
 
   /** The selected rows: from anchor to head, widened to whole subtrees. Reactive. */
-  selectedSet(): ReadonlySet<NodeId> {
+  selectedSet(): ReadonlySet<RowKey> {
     return this.selectionInfo().set;
   }
 
-  /** Selected bullets not inside another selected one, in order: what block commands act on. */
-  selectionRoots(): NodeId[] {
+  /** Selected rows not inside another selected one, in order: what block commands act on. */
+  selectionRoots(): RowKey[] {
     return this.selectionInfo().roots;
   }
 
-  private selectionInfo(): { set: Set<NodeId>; roots: NodeId[] } {
+  /** What the row shows: its bullet, or a mirror's original (model/mirrors.ts). */
+  contentOf(key: RowKey) {
+    return this.doc.content(nodeOf(key));
+  }
+
+  private selectionInfo(): { set: Set<RowKey>; roots: RowKey[] } {
     const selection = this.selection();
     const version = this.rowsVersion();
     if (!selection) return { set: new Set(), roots: [] };
@@ -200,16 +209,22 @@ export class Outliner {
     if (cache && cache.selection === selection && cache.version === version) return cache;
     const a = this.rows.indexOf(selection.anchor);
     const h = this.rows.indexOf(selection.head);
-    const set = new Set<NodeId>();
-    const roots: NodeId[] = [];
+    const set = new Set<RowKey>();
+    const roots: RowKey[] = [];
     if (a >= 0 && h >= 0) {
       const start = Math.min(a, h);
       let end = Math.max(a, h) + 1;
+      // A root is a row outside the subtrees of the roots before it.
+      let rootEnd = start;
       for (let i = start; i < end; i++) {
-        end = Math.max(end, this.rows.subtreeEnd(i));
-        const id = this.rows.ids[i];
-        set.add(id);
-        if (!set.has(this.doc.get(id).parent!)) roots.push(id);
+        const sub = this.rows.subtreeEnd(i);
+        end = Math.max(end, sub);
+        const key = this.rows.ids[i];
+        set.add(key);
+        if (i >= rootEnd) {
+          roots.push(key);
+          rootEnd = sub;
+        }
       }
     }
     this.selectionCache = { selection, version, set, roots };
@@ -255,7 +270,8 @@ export class Outliner {
    * Zoom into a bullet: it becomes the title, its children the top level.
    * A search in progress is re-run within the new scope.
    */
-  zoomTo(id: NodeId | null): void {
+  zoomTo(key: RowKey | null): void {
+    let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
     if (id && this.doc.has(id)) id = this.doc.origin(id);
     const target = id && id !== this.doc.root && this.doc.has(id) ? id : null;
@@ -286,7 +302,7 @@ export class Outliner {
   }
 
   /** Alt+→: zoom into a bullet and edit its first child, or its title if it has none. */
-  zoomIn(id: NodeId): void {
+  zoomIn(id: RowKey): void {
     batch(() => {
       this.zoomTo(id);
       const first = this.rows.ids[0];
@@ -321,17 +337,17 @@ export class Outliner {
   }
 
   /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */
-  cycleTask(ids: NodeId[], keep?: Focus): void {
+  cycleTask(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => cycleTask(ctx, ids), ids, keep);
   }
 
   /** Ctrl+Shift+L: tasks become plain bullets again. */
-  untask(ids: NodeId[], keep?: Focus): void {
+  untask(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
   }
 
   /** A click on a task's checkbox: checked or unchecked. */
-  toggleDone(ids: NodeId[], keep?: Focus): void {
+  toggleDone(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => toggleDone(ctx, ids), ids, keep);
   }
 
@@ -339,8 +355,8 @@ export class Outliner {
    * A press on a bullet that did not drag: a task's checkbox toggles; a plain
    * bullet zooms in.
    */
-  pressBullet(id: NodeId): void {
-    if (!this.doc.content(id).todo) return this.zoomTo(id);
+  pressBullet(id: RowKey): void {
+    if (!this.contentOf(id).todo) return this.zoomTo(id);
     const cur = this.focus();
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }
@@ -350,7 +366,7 @@ export class Outliner {
    * one takes it out of the list, and the caret moves on to the row that
    * took its place.
    */
-  private changeTasks(cmd: (ctx: Ctx) => void, ids: NodeId[], keep?: Focus): void {
+  private changeTasks(cmd: (ctx: Ctx) => void, ids: RowKey[], keep?: Focus): void {
     if (!ids.length) return;
     const first = this.rows.indexOf(ids[0]);
     const last = this.rows.indexOf(ids[ids.length - 1]);
@@ -404,9 +420,9 @@ export class Outliner {
   }
 
   /** The first visible row that matches the search. */
-  firstMatch(): NodeId | null {
+  firstMatch(): RowKey | null {
     const f = this.filter();
-    return (f && this.rows.ids.find((id) => f.matches.has(id))) ?? null;
+    return (f && this.rows.ids.find((key) => f.matches.has(nodeOf(key)))) ?? null;
   }
 
   /**
@@ -414,7 +430,8 @@ export class Outliner {
    * path this only changes what the filter shows; otherwise it collapses the
    * bullet in the document, as an undoable command.
    */
-  fold(id: NodeId, folded?: boolean, keep?: Focus): void {
+  fold(key: RowKey, folded?: boolean, keep?: Focus): void {
+    const id = nodeOf(key);
     if (this.rows.onPath(id)) {
       batch(() => {
         this.rows.setOpen(id, folded === undefined ? !this.rows.isOpen(id) : !folded);
@@ -429,18 +446,24 @@ export class Outliner {
 
   /**
    * Runs a command as one transaction and one undo step, then focuses where
-   * it says, or `keep`. `keep` is also where undo will put the caret.
+   * it says, or `keep`. `keep` is also where undo will put the caret. A
+   * command that returns a row key moved the row there: the caret goes
+   * with it. A bullet named by the command is looked for nearest to where
+   * the caret was (`VisibleRows.locate`).
    */
-  run(cmd: (ctx: Ctx) => Focus | void, keep?: Focus): void {
+  run(cmd: (ctx: Ctx) => Focus | RowKey | void, keep?: Focus): void {
     if (this.readOnly) return;
     batch(() => {
       const current = this.focus();
       const before = keep ?? (current && 'caret' in current ? current : null);
-      let target = undefined as Focus | void;
+      let result = undefined as Focus | RowKey | void;
       const ops = this.doc.transact(() => {
-        target = cmd(this.ctx);
+        result = cmd(this.ctx);
       });
-      target ??= keep;
+      let target = typeof result === 'string' ? (before ? { ...before, id: result } : { id: result, caret: 0 }) : (result ?? keep);
+      const near = before?.id ?? this.selection()?.head;
+      const key = target && this.rows.locate(target.id, near);
+      if (target && key) target = { ...target, id: key };
       this.history.record({ ops, before, after: target ?? null });
       this.moveFocus(target ?? null);
     });
@@ -453,7 +476,7 @@ export class Outliner {
    */
   insert(at: Focus, text: string, back = 0): void {
     this.run((ctx) => {
-      const n = ctx.doc.content(at.id);
+      const n = ctx.doc.content(nodeOf(at.id));
       const old = at.note ? n.note : n.text;
       const start = Math.max(0, at.caret - back);
       const next = old.slice(0, start) + text + old.slice(at.caret);
@@ -470,7 +493,7 @@ export class Outliner {
    */
   format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
     if (this.readOnly) return null;
-    const n = this.doc.content(at.id);
+    const n = this.contentOf(at.id);
     const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
     const place = (caret: number): Focus => (at.note ? { id: at.id, caret, note: true } : { id: at.id, caret });
     this.run((ctx) => {
@@ -485,12 +508,12 @@ export class Outliner {
    * `((title))` completed (Suggest.tsx): the bullet becomes a mirror of
    * `target`, or a mirror goes in below it when the bullet holds other text.
    */
-  makeMirror(id: NodeId, target: NodeId, start: number, end: number): void {
+  makeMirror(id: RowKey, target: NodeId, start: number, end: number): void {
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
   }
 
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
-  type(id: NodeId, text: string): void {
+  type(id: RowKey, text: string): void {
     if (this.readOnly) return;
     batch(() => {
       const ops = this.doc.transact(() => setText(this.ctx, id, text));
@@ -499,7 +522,7 @@ export class Outliner {
   }
 
   /** Typing in a bullet's note: grouped into undo steps like `type`. */
-  typeNote(id: NodeId, note: string): void {
+  typeNote(id: RowKey, note: string): void {
     if (this.readOnly) return;
     batch(() => {
       const ops = this.doc.transact(() => setNote(this.ctx, id, note));
@@ -553,9 +576,10 @@ export class Outliner {
     this.setRowsVersion(this.rows.version);
   }
 
-  /** Focuses `target` if given; otherwise drops focus if the focused row got hidden or removed. */
+  /** Focuses `target` if given (its bullet's row nearest to it); otherwise drops focus if the focused row got hidden or removed. */
   private moveFocus(target: Focus | null): void {
-    if (target && this.rows.indexOf(target.id) >= 0) return this.setFocus(target);
+    const key = target && this.rows.locate(target.id);
+    if (target && key) return this.setFocus({ ...target, id: key });
     const cur = this.focus();
     if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
   }

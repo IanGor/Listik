@@ -2,6 +2,33 @@ import { spliceAll } from '../util/splice';
 import type { Doc, DocListener } from './doc';
 import type { NodeId, Op, OutlineNode } from './types';
 
+/**
+ * A row's key. A bullet shows once in the outline, and once more under every
+ * mirror of a bullet it is inside (model/mirrors.ts), so rows are keyed by
+ * where they show: outside any mirror the key is the bullet's id; inside a
+ * mirror, the mirror row's key, SEP, the id ("m/x", or "m/m2/x" for a
+ * mirror inside a mirror). Ids never hold SEP.
+ */
+export type RowKey = string;
+export const SEP = '/';
+
+/** The bullet a row shows. */
+export function nodeOf(key: RowKey): NodeId {
+  const i = key.lastIndexOf(SEP);
+  return i < 0 ? key : key.slice(i + 1);
+}
+
+/** The key of the mirror row the row shows under ('' outside any mirror). */
+export function contextOf(key: RowKey): RowKey {
+  const i = key.lastIndexOf(SEP);
+  return i < 0 ? '' : key.slice(0, i);
+}
+
+/** The key of bullet `id` shown under the mirror row `context`. */
+export const keyIn = (context: RowKey, id: NodeId): RowKey => (context ? context + SEP + id : id);
+
+const PLAIN: readonly RowKey[] = [''];
+
 export interface RowsListener {
   /** `removed` rows at `at` were dropped, then `inserted` rows now at `at` were added. */
   splice?(at: number, removed: number, inserted: number): void;
@@ -47,13 +74,19 @@ export function keepSet(doc: Doc, matches: Iterable<NodeId>, top: NodeId = doc.r
  * The outline flattened into visible rows in pre-order. A subtree always
  * occupies a contiguous range, so ops patch the list locally instead of
  * rebuilding it.
+ *
+ * A mirror's row shows the children of its original below it, as if they
+ * were its own, all the way down (keys: RowKey). A bullet changed is patched
+ * wherever it shows: outside any mirror and under each mirror row on the
+ * list (`mirrors`). A mirror inside what it mirrors would show itself
+ * without end: there it shows no children (`host`).
  */
 export class VisibleRows implements DocListener {
-  ids: NodeId[] = [];
+  ids: RowKey[] = [];
   depths: number[] = [];
   /** Bumped on every change; the view subscribes to this. */
   version = 0;
-  /** Whose children are the top-level rows: the root, or the zoomed-in bullet. */
+  /** Whose children are the top-level rows: the root, or the zoomed-in bullet (never a mirror). */
   top: NodeId;
   private doc: Doc;
   private filter: Filter | null = null;
@@ -64,6 +97,8 @@ export class VisibleRows implements DocListener {
   /** Ops patched in the current transaction, and whether patching gave up. */
   private patched = 0;
   private stale = false;
+  /** Keys of the mirror rows on the list: the contexts other rows may show in. */
+  private mirrors = new Set<RowKey>();
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
 
@@ -126,17 +161,46 @@ export class VisibleRows implements DocListener {
     if (!f || f.open.has(id) === open) return;
     if (open) f.open.add(id);
     else f.open.delete(id);
-    this.refreshChildren(id);
+    this.refreshAll(id);
     this.version++;
   }
 
-  /** Children of `n` shown below it, assuming `n` itself is shown. */
-  shownChildren(n: OutlineNode): NodeId[] {
+  /**
+   * The bullet whose children show under the row: the row's own, a mirror's
+   * original. Null for a mirror with nothing to show: its original gone, or
+   * the mirror inside its original, here or through the mirrors it shows in.
+   */
+  host(key: RowKey): OutlineNode | null {
+    const n = this.doc.nodes.get(nodeOf(key));
+    if (!n?.mirrorOf) return n ?? null;
+    const target = this.doc.host(n.id);
+    if (!target) return null;
+    for (let k = key; k; k = contextOf(k)) if (this.doc.within(nodeOf(k), target.id)) return null;
+    return target;
+  }
+
+  /** The key of bullet `id` shown right under the row `key` (`top` for the top level). */
+  childKey(key: RowKey, id: NodeId): RowKey {
+    return this.doc.get(nodeOf(key)).mirrorOf ? keyIn(key, id) : keyIn(contextOf(key), id);
+  }
+
+  /** The row the row `key` shows under; null at the top level. */
+  parentKey(key: RowKey): RowKey | null {
+    const n = this.doc.get(nodeOf(key));
+    const context = contextOf(key);
+    if (!context) return n.parent === this.top || n.parent === null ? null : n.parent;
+    return n.parent === this.host(context)?.id ? context : keyIn(context, n.parent!);
+  }
+
+  /** Children of the row `key` (`top` for the top level) shown below it, assuming the row itself is shown. */
+  shownChildren(key: RowKey): NodeId[] {
+    const n = this.doc.get(nodeOf(key));
+    const kids = this.host(key)?.children ?? [];
     const f = this.filter;
     let shown: NodeId[];
-    if (f?.keep.has(n.id)) shown = f.open.has(n.id) ? n.children : n.children.filter((c) => f.keep.has(c));
+    if (f?.keep.has(n.id)) shown = f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
-    else shown = n.collapsed && n.id !== this.top ? [] : n.children;
+    else shown = n.collapsed && key !== this.top ? [] : kids;
     return this.hideDone && shown.length ? shown.filter((c) => !this.doc.get(c).done) : shown;
   }
 
@@ -151,30 +215,49 @@ export class VisibleRows implements DocListener {
     this.rebuild();
   }
 
-  showsChildren(n: OutlineNode): boolean {
-    return this.shownChildren(n).length > 0;
+  showsChildren(key: RowKey): boolean {
+    return this.shownChildren(key).length > 0;
   }
 
   /** Has children that are not shown: drawn as a folded bullet. */
-  hasHiddenChildren(n: OutlineNode): boolean {
-    return n.children.length > this.shownChildren(n).length;
+  hasHiddenChildren(key: RowKey): boolean {
+    return (this.host(key)?.children.length ?? 0) > this.shownChildren(key).length;
   }
 
   /**
-   * Row of `id`, or -1. Without `from`, searches outward from the last row
+   * Row of `key`, or -1. Without `from`, searches outward from the last row
    * found: commands touch rows next to each other, so on a 200k-row list
    * this is usually a few steps instead of a scan.
    */
-  indexOf(id: NodeId, from?: number): number {
-    if (from !== undefined) return this.ids.indexOf(id, from);
+  indexOf(key: RowKey, from?: number): number {
+    if (from !== undefined) return this.ids.indexOf(key, from);
     const ids = this.ids;
     const n = ids.length;
     const h = Math.min(this.hint, n - 1);
     for (let d = 0; d <= h || h + d < n; d++) {
-      if (h + d < n && ids[h + d] === id) return (this.hint = h + d);
-      if (d > 0 && d <= h && ids[h - d] === id) return (this.hint = h - d);
+      if (h + d < n && ids[h + d] === key) return (this.hint = h + d);
+      if (d > 0 && d <= h && ids[h - d] === key) return (this.hint = h - d);
     }
     return -1;
+  }
+
+  /**
+   * The row showing `id` nearest to the row `near`: under the same mirror,
+   * then under the mirrors around it, then outside any, then under any
+   * other mirror. Commands name
+   * bullets; this finds the row of one where the caret was. A row key in
+   * `id` is taken as it is while it is on the list.
+   */
+  locate(id: RowKey, near: RowKey = id): RowKey | null {
+    if (this.indexOf(id) >= 0 && (id.includes(SEP) || !this.mirrors.size)) return id;
+    if (!this.mirrors.size) return null;
+    const node = nodeOf(id);
+    for (let c = near; c; c = contextOf(c)) {
+      if (this.mirrors.has(c) && this.indexOf(keyIn(c, node)) >= 0) return keyIn(c, node);
+    }
+    if (this.indexOf(node) >= 0) return node;
+    // Under some other mirror, if anywhere.
+    return this.ids.find((key) => nodeOf(key) === node) ?? null;
   }
 
   /** First row index after the subtree that starts at row `i`. */
@@ -188,7 +271,8 @@ export class VisibleRows implements DocListener {
   rebuild(): void {
     this.ids = [];
     this.depths = [];
-    for (const c of this.shownChildren(this.doc.get(this.top))) this.collect(c, 0, this.ids, this.depths);
+    this.mirrors.clear();
+    for (const c of this.shownChildren(this.top)) this.collect(c, 0, this.ids, this.depths);
     this.version++;
     for (const l of this.listeners) l.reset?.();
   }
@@ -207,16 +291,23 @@ export class VisibleRows implements DocListener {
     switch (op.t) {
       case 'insert':
         this.show(op.node.id);
+        this.refreshMirrorsOf(op.node.id);
         break;
       case 'remove':
         this.hide(op.node.id);
+        this.refreshMirrorsOf(op.node.id);
         break;
       case 'move':
         this.hide(op.id);
         this.show(op.id);
+        this.refreshMirrorsIn(op.id);
         break;
       case 'setCollapsed':
-        this.refreshChildren(op.id);
+        this.refreshAll(op.id);
+        break;
+      case 'setMirror':
+        this.refreshAll(op.id);
+        this.refreshMirrorsOf(op.id);
         break;
       case 'setDone':
         if (op.to) this.hide(op.id);
@@ -251,51 +342,82 @@ export class VisibleRows implements DocListener {
     this.rebuild();
   }
 
-  /** Appends rows for `id` and its shown descendants, in pre-order. */
-  private collect(id: NodeId, depth: number, ids: NodeId[], depths: number[]): void {
-    const stackIds = [id];
+  /** Contexts a bullet may show in: outside any mirror, and under each mirror row on the list. */
+  private contexts(): readonly RowKey[] {
+    return this.mirrors.size ? ['', ...this.mirrors] : PLAIN;
+  }
+
+  /** Appends rows for `key` and its shown descendants, in pre-order. */
+  private collect(key: RowKey, depth: number, ids: RowKey[], depths: number[]): void {
+    const stackKeys = [key];
     const stackDepths = [depth];
-    while (stackIds.length) {
-      const nid = stackIds.pop()!;
+    const stackContexts = [contextOf(key)];
+    while (stackKeys.length) {
+      const k = stackKeys.pop()!;
       const d = stackDepths.pop()!;
-      ids.push(nid);
+      let context = stackContexts.pop()!;
+      ids.push(k);
       depths.push(d);
-      const children = this.shownChildren(this.doc.get(nid));
-      for (let k = children.length - 1; k >= 0; k--) {
-        stackIds.push(children[k]);
+      if (this.doc.get(nodeOf(k)).mirrorOf) {
+        this.mirrors.add(k);
+        context = k;
+      }
+      const children = this.shownChildren(k);
+      for (let j = children.length - 1; j >= 0; j--) {
+        stackKeys.push(keyIn(context, children[j]));
         stackDepths.push(d + 1);
+        stackContexts.push(context);
       }
     }
   }
 
   private hide(id: NodeId): void {
-    const i = this.indexOf(id);
-    if (i < 0) return;
-    this.removeRows(i, this.subtreeEnd(i));
+    for (const context of this.contexts()) {
+      const i = this.indexOf(keyIn(context, id));
+      if (i >= 0) this.removeRows(i, this.subtreeEnd(i));
+    }
   }
 
-  /** Inserts rows for a node that is already in its final place in the doc. */
+  /** Inserts rows for a node that is already in its final place in the doc, wherever it shows. */
   private show(id: NodeId): void {
     const n = this.doc.get(id);
-    if (!this.contains(id)) return;
-    if (this.filter) {
+    if (this.filter && this.contains(id)) {
       const anchor = this.admit(n);
-      if (anchor !== n.parent) return this.refreshChildren(anchor);
+      if (anchor !== n.parent) {
+        this.refreshAll(anchor);
+        // Under a mirror the parent may show where the anchor does not.
+        for (const context of this.contexts()) if (context && this.indexOf(keyIn(context, id)) < 0) this.showIn(context, n);
+        return;
+      }
     }
-    const parent = this.doc.get(n.parent!);
+    for (const context of this.contexts()) this.showIn(context, n);
+  }
+
+  /** `show` under one mirror row (or outside any, for ''). */
+  private showIn(context: RowKey, n: OutlineNode): void {
+    const p = n.parent!;
+    let parentKey: RowKey;
+    if (!context) {
+      if (!this.contains(n.id)) return;
+      parentKey = p;
+    } else {
+      const host = this.host(context);
+      if (!host || !this.doc.within(p, host.id)) return;
+      parentKey = p === host.id ? context : keyIn(context, p);
+    }
     let parentRow = -1;
-    if (parent.id !== this.top) {
-      parentRow = this.indexOf(parent.id);
+    if (parentKey !== this.top) {
+      parentRow = this.indexOf(parentKey);
       if (parentRow < 0) return;
     }
-    const siblings = this.shownChildren(parent);
-    const k = siblings.indexOf(id);
+    const siblings = this.shownChildren(parentKey);
+    const k = siblings.indexOf(n.id);
     if (k < 0) return;
     const at = k === 0
       ? parentRow + 1
-      : this.subtreeEnd(this.indexOf(siblings[k - 1], parentRow + 1));
+      : this.subtreeEnd(this.indexOf(keyIn(context, siblings[k - 1]), parentRow + 1));
     const depth = parentRow < 0 ? 0 : this.depths[parentRow] + 1;
-    this.insertRows(at, id, depth);
+    this.insertRows(at, keyIn(context, n.id), depth);
   }
 
   /**
@@ -318,27 +440,76 @@ export class VisibleRows implements DocListener {
     return anchor;
   }
 
-  private refreshChildren(id: NodeId): void {
+  /** Re-lists the children of every row of bullet `id`. */
+  private refreshAll(id: NodeId): void {
     if (id === this.top) return this.rebuild();
-    const i = this.indexOf(id);
+    for (const context of this.contexts()) {
+      // Under a mirror, its original's children are the mirror row's.
+      this.refreshRow(context && this.host(context)?.id === id ? context : keyIn(context, id));
+    }
+  }
+
+  /**
+   * A mirror of a mirror shows the children of the bullet at the end of the
+   * chain (`Doc.host`): when a bullet on the way comes, goes or changes what
+   * it mirrors, the mirror rows that lead through it show other children.
+   */
+  private refreshMirrorsOf(id: NodeId): void {
+    for (const key of [...this.mirrors]) {
+      const seen = new Set<NodeId>();
+      for (let p = this.doc.nodes.get(nodeOf(key))?.mirrorOf; p && !seen.has(p); p = this.doc.nodes.get(p)?.mirrorOf) {
+        if (p === id) {
+          this.refreshRow(key);
+          break;
+        }
+        seen.add(p);
+      }
+    }
+  }
+
+  /**
+   * Whether a mirror row would show itself (`host`) depends on where the
+   * mirrors in its key stand: after a move of `id`, the mirror rows with one
+   * of those inside it are listed again.
+   */
+  private refreshMirrorsIn(id: NodeId): void {
+    for (const key of [...this.mirrors]) {
+      for (let k = key; k; k = contextOf(k)) {
+        if (this.doc.within(nodeOf(k), id)) {
+          this.refreshRow(key);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Re-lists the children of the row `key`, if it is on the list. */
+  private refreshRow(key: RowKey): void {
+    const i = this.indexOf(key);
     if (i < 0) return;
     this.removeRows(i + 1, this.subtreeEnd(i));
+    let inner = contextOf(key);
+    if (this.doc.get(nodeOf(key)).mirrorOf) {
+      this.mirrors.add(key);
+      inner = key;
+    } else this.mirrors.delete(key);
     let at = i + 1;
-    for (const c of this.shownChildren(this.doc.get(id))) at = this.insertRows(at, c, this.depths[i] + 1);
+    for (const c of this.shownChildren(key)) at = this.insertRows(at, keyIn(inner, c), this.depths[i] + 1);
   }
 
   private removeRows(from: number, to: number): void {
     if (to <= from) return;
+    if (this.mirrors.size) for (let j = from; j < to; j++) this.mirrors.delete(this.ids[j]);
     this.ids.splice(from, to - from);
     this.depths.splice(from, to - from);
     for (const l of this.listeners) l.splice?.(from, to - from, 0);
   }
 
-  /** Inserts the rows of subtree `id` at row `at`; returns the index after them. */
-  private insertRows(at: number, id: NodeId, depth: number): number {
-    const ids: NodeId[] = [];
+  /** Inserts the rows of subtree `key` at row `at`; returns the index after them. */
+  private insertRows(at: number, key: RowKey, depth: number): number {
+    const ids: RowKey[] = [];
     const depths: number[] = [];
-    this.collect(id, depth, ids, depths);
+    this.collect(key, depth, ids, depths);
     this.ids = spliceAll(this.ids, at, 0, ids);
     this.depths = spliceAll(this.depths, at, 0, depths);
     for (const l of this.listeners) l.splice?.(at, 0, ids.length);

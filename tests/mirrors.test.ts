@@ -10,7 +10,9 @@ import { toMarkdown } from '../src/model/outline-text';
 import { TextIndex } from '../src/model/search';
 import { TagIndex } from '../src/model/tags';
 import { deserialize, serialize } from '../src/persist/serialize';
-import { dump, dumpRows, setup } from './helpers';
+import { VisibleRows, nodeOf } from '../src/model/rows';
+import type { Focus, NodeId, Op } from '../src/model/types';
+import { dump, dumpRows, rng, setup, viewRows } from './helpers';
 
 describe('(( token and pair', () => {
   it('finds the mirror token the caret is in, through its closing brackets', () => {
@@ -84,22 +86,22 @@ describe('mirrors', () => {
     expect(() => doc.apply({ t: 'setMirror', id: 'a', from: null, to: 'a' })).toThrow();
   });
 
-  it('never holds children: Tab under it, moves into it and drops into it are refused; Enter makes a sibling', () => {
-    const { doc, ctx, rows, run } = setup(['a', '', 'c', 'd']);
-    const m = rows.ids[1];
-    run(() => cmd.makeMirror(ctx, m, 'a', 0, 0));
-    run(() => cmd.indent(ctx, 'c'));
-    expect(doc.get('c').parent).toBe('root');
+  it('takes children for its original: Tab under it, moves and drops into it go there; Enter at its end makes a sibling while it is folded', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', 'm', 'c', 'd'], { m: 'a' });
+    const m = 'm';
+    expect(run(() => cmd.indent(ctx, 'c'))).toBe(`${m}/c`);
+    expect(doc.get('c').parent).toBe('a');
+    expect(viewRows(rows, doc)).toEqual(['a', '  c', '◇ a', '  c', 'd']);
     run(() => cmd.moveManyTo(ctx, ['d'], m, null));
-    expect(doc.get('d').parent).toBe('root');
-    run(() => cmd.indent(ctx, 'd'));
-    run(() => cmd.moveUp(ctx, 'd')); // first child of c: would go to the end of the mirror above
-    expect(doc.get('d').parent).toBe('c');
+    expect(doc.get('a').children).toEqual(['d', 'c']);
+    run(() => cmd.setCollapsed(ctx, m, true));
+    expect(doc.get(m).collapsed).toBe(true);
+    expect(doc.get('a').collapsed).toBe(false);
     const f = run(() => cmd.split(ctx, m, 1));
     expect(doc.get('a').text).toBe('a');
     expect(doc.get(f.id).parent).toBe('root');
     expect(doc.get(f.id).mirrorOf).toBeNull();
-    expect(dumpRows(rows, doc)).toEqual(['a', '', '', 'c', '  d']);
+    expect(viewRows(rows, doc)).toEqual(['a', '  d', '  c', '◇ a [+]', '']);
     checkInvariants(doc);
   });
 
@@ -160,4 +162,168 @@ describe('mirrors', () => {
     expect(toMarkdown(doc)).toBe('- a\n  - b\n- a\n');
     expect(dump(doc)).toEqual(['a', '  b', '']);
   });
+});
+
+/** `setup` with some bullets made mirrors: { mirror: original }. */
+function mirrored(lines: string[], mirrors: Record<string, string>) {
+  const s = setup(lines);
+  s.run(() => {
+    for (const [m, target] of Object.entries(mirrors)) s.doc.apply({ t: 'setMirror', id: m, from: null, to: target });
+  });
+  return s;
+}
+
+describe('a mirror shows the subtree of its original', () => {
+  it('lists the original\'s children under the mirror, all the way down, keyed by the mirror row', () => {
+    const { doc, rows } = mirrored(['a', '  b', '    c', '  d', 'm'], { m: 'a' });
+    expect(rows.ids).toEqual(['a', 'b', 'c', 'd', 'm', 'm/b', 'm/c', 'm/d']);
+    expect(viewRows(rows, doc)).toEqual(['a', '  b', '    c', '  d', '◇ a', '  b', '    c', '  d']);
+    expect(rows.parentKey('m/c')).toBe('m/b');
+    expect(rows.parentKey('m/b')).toBe('m');
+    expect(rows.parentKey('m')).toBeNull();
+    expect(rows.showsChildren('m')).toBe(true);
+    expect(nodeOf('m/c')).toBe('c');
+  });
+
+  it('edits in the original show under the mirror, and edits under the mirror change the original', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', '  b', 'm'], { m: 'a' });
+    const f = run(() => cmd.split(ctx, 'm/b', 1));
+    // The new bullet is the original's; its row is found next to where the caret was.
+    expect(doc.get(f.id).parent).toBe('a');
+    expect(rows.locate(f.id, 'm/b')).toBe(`m/${f.id}`);
+    expect(rows.locate(f.id, 'b')).toBe(f.id);
+    run(() => cmd.setText(ctx, `m/${f.id}`, 'e'));
+    expect(viewRows(rows, doc)).toEqual(['a', '  b', '  e', '◇ a', '  b', '  e']);
+    run(() => cmd.deleteNode(ctx, 'b'));
+    expect(viewRows(rows, doc)).toEqual(['a', '  e', '◇ a', '  e']);
+    expect(rows.ids).toEqual(['a', f.id, 'm', `m/${f.id}`]);
+  });
+
+  it('Enter at the end of an open mirror makes the first child of the original, in the mirror', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', '  b', 'm'], { m: 'a' });
+    const f = run(() => cmd.split(ctx, 'm', 1));
+    expect(doc.get('a').children[0]).toBe(f.id);
+    expect(rows.locate(f.id, 'm')).toBe(`m/${f.id}`);
+  });
+
+  it('Shift+Tab right under a mirror puts the bullet after the mirror; ↑ past the top goes into the bullet above the mirror', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', '  b', '  c', 'w', 'm'], { m: 'a' });
+    expect(run(() => cmd.outdent(ctx, 'm/c'))).toBe('c');
+    expect(doc.get('root').children).toEqual(['a', 'w', 'm', 'c']);
+    expect(run(() => cmd.moveUp(ctx, 'm/b'))).toBe('b');
+    expect(doc.get('b').parent).toBe('w');
+    expect(viewRows(rows, doc)).toEqual(['a', 'w', '  b', '◇ a', 'c']);
+    checkInvariants(doc);
+  });
+
+  it('folds on its own; a bullet folded inside it folds in the original too (one bullet)', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', '  b', '    c', 'm'], { m: 'a' });
+    run(() => cmd.setCollapsed(ctx, 'm', true));
+    expect(rows.ids).toEqual(['a', 'b', 'c', 'm']);
+    expect(rows.hasHiddenChildren('m')).toBe(true);
+    run(() => cmd.setCollapsed(ctx, 'm', false));
+    run(() => cmd.setCollapsed(ctx, 'm/b', true));
+    expect(doc.get('b').collapsed).toBe(true);
+    expect(rows.ids).toEqual(['a', 'b', 'm', 'm/b']);
+  });
+
+  it('a mirror inside what it mirrors, directly or through another mirror, shows no children', () => {
+    const one = mirrored(['a', '  b', '  m'], { m: 'a' });
+    expect(one.rows.ids).toEqual(['a', 'b', 'm']);
+    expect(one.rows.host('m')).toBeNull();
+    expect(one.rows.hasHiddenChildren('m')).toBe(false);
+    const two = mirrored(['a', '  m1', 'b', '  m2'], { m1: 'b', m2: 'a' });
+    expect(two.rows.ids).toEqual(['a', 'm1', 'm1/m2', 'b', 'm2', 'm2/m1']);
+    // Nor can a bullet be put inside itself through a mirror.
+    const three = mirrored(['a', '  b', 'm'], { m: 'b' });
+    expect(three.run(() => cmd.moveManyTo(three.ctx, ['a'], 'm', null))).toBeUndefined();
+    expect(three.doc.get('a').parent).toBe('root');
+  });
+
+  it('a selection over a bullet and its mirror acts on each bullet once', () => {
+    const { doc, ctx, run } = mirrored(['a', '  b', 'm'], { m: 'a' });
+    const ops = doc.transact(() => { cmd.deleteMany(ctx, ['b', 'm/b']); });
+    expect(ops).toHaveLength(1);
+    expect(doc.get('b').parent).toBe(TRASH);
+    run(() => cmd.cycleTask(ctx, ['a', 'm']));
+    expect(doc.get('a').todo).toBe(true);
+    expect(doc.get('a').done).toBe(false);
+  });
+
+  for (const mode of ['plain', 'zoom', 'hide done', 'filter'] as const) {
+    it(`stays equal to a full rebuild under random editing through mirrors (${mode})`, () => {
+      let steps = 0;
+      const seeds = 20;
+      for (let seed = 1; seed <= seeds; seed++) {
+        const rand = rng(seed);
+        const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+        const { doc, rows, ctx } = mirrored(
+          ['top', '  a', '    b', '      c', '    d #x', '  e', '    f', '  m1', '  g', '    m2', 'h', '  m3'],
+          { m1: 'a', m2: 'e', m3: 'g' },
+        );
+        if (mode === 'zoom') rows.setTop('top');
+        if (mode === 'hide done') rows.setHideDone(true);
+        const filter = mode === 'filter' ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']) } : null;
+        if (filter) rows.setFilter(filter);
+        const initial = dump(doc);
+        const history: Op[][] = [];
+        const listed = [...rows.ids];
+        rows.subscribe({
+          splice: (at, removed, inserted) => listed.splice(at, removed, ...rows.ids.slice(at, at + inserted)),
+          reset: () => listed.splice(0, listed.length, ...rows.ids),
+        });
+        for (let step = 0; step < 200; step++) {
+          if (!rows.length) break;
+          steps++;
+          const key = pick(rows.ids);
+          const n = doc.get(nodeOf(key));
+          const other = pick([...doc.nodes.keys()].filter((id) => id !== doc.root && id !== TRASH));
+          const action = pick<() => Focus | string | void>([
+            () => cmd.split(ctx, key, Math.floor(rand() * (doc.content(n.id).text.length + 1))),
+            () => cmd.mergeUp(ctx, key),
+            () => (rows.length > 4 ? cmd.deleteNode(ctx, key) : undefined),
+            () => cmd.indent(ctx, key),
+            () => cmd.outdent(ctx, key),
+            () => cmd.moveUp(ctx, key),
+            () => cmd.moveDown(ctx, key),
+            () => cmd.setCollapsed(ctx, key, !n.collapsed),
+            () => cmd.makeMirror(ctx, key, other, 0, 0),
+            () => cmd.moveManyTo(ctx, [key], pick(rows.ids), null),
+            () => (rows.length > 4 ? cmd.toggleDone(ctx, [key]) : undefined),
+            () => doc.apply({ t: 'setMirror', id: n.id, from: n.mirrorOf, to: null }),
+          ]);
+          let focus: Focus | string | void;
+          history.push(doc.transact(() => { focus = action(); }));
+
+          checkInvariants(doc);
+          const fresh = new VisibleRows(doc);
+          fresh.setTop(rows.top);
+          fresh.setHideDone(rows.hidesDone);
+          if (filter) fresh.setFilter(filter);
+          fresh.dispose();
+          const at = `seed ${seed} step ${step}`;
+          expect(rows.ids, at).toEqual(fresh.ids);
+          expect(rows.depths, at).toEqual(fresh.depths);
+          expect(listed, at).toEqual(rows.ids);
+          expect(new Set(rows.ids).size, at).toBe(rows.length);
+          // Each row's parent row is the nearest row above it one level up.
+          const parents: string[] = [];
+          rows.ids.forEach((k, i) => {
+            const d = rows.depths[i];
+            expect(rows.parentKey(k), `${at}: parent of ${k}`).toBe(d === 0 ? null : parents[d - 1]);
+            parents[d] = k;
+          });
+          const f = focus!;
+          const target = typeof f === 'string' ? f : f?.id;
+          // The row a command names is found, unless the bullet is on no row at all.
+          if (target && !rows.locate(target, key)) expect(rows.ids.some((k) => nodeOf(k) === nodeOf(target)), at).toBe(false);
+        }
+        for (const ops of history.reverse()) {
+          doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+        }
+        expect(dump(doc)).toEqual(initial);
+      }
+      expect(steps).toBeGreaterThan(seeds * 100);
+    });
+  }
 });

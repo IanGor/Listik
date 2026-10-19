@@ -90,7 +90,7 @@ describe('zoom', () => {
         steps++;
         const id = pick(rows.ids);
         const n = doc.get(id);
-        const action = pick<() => Focus | void>([
+        const action = pick<() => Focus | string | void>([
           () => cmd.split(ctx, id, Math.floor(rand() * (n.text.length + 1))),
           () => cmd.mergeUp(ctx, id),
           () => cmd.deleteNode(ctx, id),

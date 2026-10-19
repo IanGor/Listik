@@ -1,5 +1,5 @@
 import { Doc } from '../src/model/doc';
-import { VisibleRows } from '../src/model/rows';
+import { VisibleRows, nodeOf } from '../src/model/rows';
 import type { Ctx } from '../src/model/commands';
 import type { NodeId } from '../src/model/types';
 
@@ -49,7 +49,15 @@ export function dump(doc: Doc): string[] {
 
 /** Only the visible rows, in `build` format. */
 export function dumpRows(rows: VisibleRows, doc: Doc): string[] {
-  return rows.ids.map((id, i) => line(doc, id, rows.depths[i]));
+  return rows.ids.map((id, i) => line(doc, nodeOf(id), rows.depths[i]));
+}
+
+/** The visible rows as they read: a mirror shows its original's text, after a diamond. */
+export function viewRows(rows: VisibleRows, doc: Doc): string[] {
+  return rows.ids.map((key, i) => {
+    const n = doc.get(nodeOf(key));
+    return '  '.repeat(rows.depths[i]) + (n.mirrorOf ? '◇ ' : '') + doc.content(n.id).text + (n.collapsed ? ' [+]' : '');
+  });
 }
 
 export function setup(lines: string[]) {

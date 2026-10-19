@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
+import { nodeOf } from '../model/rows';
 import { createDrag } from './drag';
 import { EditBar } from './EditBar';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
@@ -117,7 +118,7 @@ export function Outline(props: { o: Outliner }) {
     // --indent changes with the viewport (index.css), so it is measured, not assumed.
     const indent = indentProbe.getBoundingClientRect().width / ch;
     v.setEstimate((id, depth) => {
-      const n = o.doc.nodes.get(id);
+      const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
       const perLine = Math.max(10, Math.floor(cols - indent * depth - BULLET_GAP / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
@@ -247,7 +248,7 @@ export function Outline(props: { o: Outliner }) {
     if (e.target !== scroller && !(e.target as HTMLElement).classList.contains('spacer')) return;
     e.preventDefault();
     const last = o.rows.ids[o.rows.length - 1];
-    if (last) o.setFocus({ id: last, caret: o.doc.get(last).text.length });
+    if (last) o.setFocus({ id: last, caret: o.contentOf(last).text.length });
   };
 
   return (

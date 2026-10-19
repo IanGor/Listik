@@ -42,7 +42,7 @@ const ACTIONS: Action[] = [
     label: 'Заметка',
     icon: ['M5 7h14', 'M5 12h14', 'M5 17h8'],
     run: (o, h) => {
-      const n = o.doc.get(h.id);
+      const n = o.contentOf(h.id);
       o.setFocus(h.note ? { id: h.id, caret: n.text.length } : { id: h.id, caret: n.note.length, note: true });
     },
   },
