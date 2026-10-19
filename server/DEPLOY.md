@@ -40,7 +40,7 @@ git clone --depth 1 https://github.com/IanGor/Listik /opt/listik/src
 cp /opt/listik/src/server/index.js /opt/listik/src/server/package.json /opt/listik/
 ```
 
-Обновление впоследствии: `git -C /opt/listik/src pull && cp /opt/listik/src/server/index.js /opt/listik/ && systemctl restart listik-sync`.
+Обновление впоследствии — автоматически из GitHub Actions (шаг 9) или вручную: `sudo /usr/local/sbin/listik-deploy` (то же самое, с откатом), без скрипта — `git -C /opt/listik/src pull && cp /opt/listik/src/server/index.js /opt/listik/ && systemctl restart listik-sync`.
 
 ### 3. Настройки
 
@@ -187,13 +187,42 @@ curl -s -X PUT https://sync.example.com/docs/probeprobeprobe/keyslot \
 
 Существующие документы и подключение к ним новых устройств продолжают работать. Если понадобится ещё один документ, временно вернуть 1.
 
-### 9. Что сообщить обратно
+### 9. Автообновление из GitHub Actions
+
+Workflow `.github/workflows/server.yml` при изменении `server/index.js` или `server/package.json` в `master` прогоняет тесты и заходит на сервер по SSH. Ключ принадлежит отдельному пользователю, который может запустить только скрипт обновления `server/deploy.sh`: подтянуть `master`, проверить синтаксис, заменить `index.js`, перезапустить службу и откатиться, если `/health` не ответил за 10 секунд.
+
+```sh
+# Скрипт — копия, владелец root: git pull его не меняет. После правки server/deploy.sh повторить.
+install -o root -g root -m 755 /opt/listik/src/server/deploy.sh /usr/local/sbin/listik-deploy
+
+# Пользователь без пароля; ключ в authorized_keys (владелец root) запускает только скрипт.
+useradd --system --create-home --home-dir /var/lib/listik-deploy --shell /bin/sh listik-deploy
+usermod -p '*' listik-deploy
+install -d -o root -g root -m 755 /var/lib/listik-deploy/.ssh
+echo 'restrict,command="sudo -n /usr/local/sbin/listik-deploy" ssh-ed25519 AAAA… github-actions' \
+  > /var/lib/listik-deploy/.ssh/authorized_keys
+echo 'listik-deploy ALL=(root) NOPASSWD: /usr/local/sbin/listik-deploy ""' > /etc/sudoers.d/listik-deploy
+chmod 440 /etc/sudoers.d/listik-deploy && visudo -c
+
+# Репозиторий публичный: тянуть по HTTPS, без ключа.
+git -C /opt/listik/src remote set-url origin https://github.com/IanGor/Listik.git
+
+# Если sshd ограничен AllowUsers — добавить пользователя, проверить и перечитать.
+sshd -t && systemctl reload ssh
+```
+
+Секреты репозитория (Settings → Secrets and variables → Actions): `DEPLOY_SSH_KEY` — приватный ключ (ed25519, только для этого), `DEPLOY_KNOWN_HOSTS` — строка `[хост]:порт ssh-ed25519 …` из `/etc/ssh/ssh_host_ed25519_key.pub` сервера, `DEPLOY_HOST`, `DEPLOY_PORT`. Проверка: Actions → Server → Run workflow; в шаге Deploy будет `listik-deploy: <коммит> deployed` или `server code unchanged`.
+
+Отозвать доступ: удалить строку из `/var/lib/listik-deploy/.ssh/authorized_keys` (или пользователя) и секрет `DEPLOY_SSH_KEY`.
+
+### 10. Что сообщить обратно
 
 1. Публичный адрес сервера (его вводят в приложении в поле «Сервер»).
 2. Вывод `node -v`, `systemctl is-active listik-sync`, `curl -s https://…/health`.
 3. Результат проверки CORS из шага 6.
 4. Где лежат копии и как часто делаются.
 5. Выполнен ли шаг 8 (приём новых документов закрыт).
+6. Настроен ли шаг 9 и прошёл ли ручной запуск workflow Server.
 
 ## Если приложение решат раздавать с этого же сервера
 

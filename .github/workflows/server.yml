@@ -1,0 +1,59 @@
+# Deploys the sync server (server/index.js) to the VPS when it changes on
+# master: tests first, then one SSH call. The key in DEPLOY_SSH_KEY belongs to
+# the user listik-deploy, which may only run /usr/local/sbin/listik-deploy
+# (server/deploy.sh): pull master, restart, roll back if /health fails.
+# Host, port and host key are secrets too, so this public file names none.
+name: Server
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - server/index.js
+      - server/package.json
+      - .github/workflows/server.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Includes three devices syncing through a real server (tests/sync.test.ts).
+      - run: npm test
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH key and pinned host key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      # The server ignores the command: the key runs the deploy script only.
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: >
+          ssh -i ~/.ssh/deploy -p "$PORT"
+          -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=20
+          "listik-deploy@$HOST" deploy
+      - if: always()
+        run: rm -f ~/.ssh/deploy
