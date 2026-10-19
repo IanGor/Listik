@@ -5,7 +5,7 @@ import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
-import { TagIndex } from '../model/tags';
+import { TagIndex, tagText } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
 import type { Persistence } from '../persist/idb';
@@ -233,7 +233,7 @@ export class Outliner {
 
   /** A click on a tag: search for it. */
   filterByTag(tag: string): void {
-    this.setQuery(`#${tag}`, true);
+    this.setQuery(tagText(tag), true);
   }
 
   /**

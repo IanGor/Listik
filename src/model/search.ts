@@ -1,6 +1,6 @@
 import { walkSnapshot, type Doc, type DocListener } from './doc';
 import { BOLD, ITALIC, MARKER, formatFlags } from './format';
-import { content, splitTags, type TagIndex } from './tags';
+import { content, splitTags, tagKey, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
@@ -52,7 +52,7 @@ export interface Query {
 }
 
 const TOKEN = /(-?)"([^"]*)"|(\S+)/g;
-const TAG_TOKEN = /^#([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)$/u;
+const TAG_TOKEN = /^([#@])([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)$/u;
 const OR = /^(OR|ИЛИ|\|)$/;
 
 const emptyClause = (): Clause => ({ tags: [], terms: [], notTags: [], notTerms: [], is: [], notIs: [] });
@@ -91,7 +91,7 @@ export function parseQuery(text: string): Query {
     }
     const tag = TAG_TOKEN.exec(body);
     if (tag) {
-      add(negated ? clause.notTags : clause.tags, tag[1].toLowerCase());
+      add(negated ? clause.notTags : clause.tags, tagKey(tag[1], tag[2]));
       continue;
     }
     const word = body.replace(/^"+|"+$/g, ''); // a stray, unclosed quote

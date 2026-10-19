@@ -1,11 +1,13 @@
+import type { Sigil } from './tags';
+
 /**
- * Completion of `/commands` and `#tags` while typing (view/Suggest.tsx): what
+ * Completion of `/commands`, `#tags` and `@tags` while typing (view/Suggest.tsx): what
  * is being typed before the caret, and what it may become.
  */
 
-/** A `/command` or `#tag` being typed: the sigil, what follows it up to the caret, and the word's span. */
+/** A `/command`, `#tag` or `@tag` being typed: the sigil, what follows it up to the caret, and the word's span. */
 export interface Token {
-  kind: '/' | '#';
+  kind: '/' | Sigil;
   /** Typed after the sigil, up to the caret. */
   query: string;
   /** Where the sigil is. */
@@ -19,7 +21,7 @@ const WORD = /[\p{L}\p{N}_-]/u;
 /**
  * The token right before `caret`: a sigil, then word characters up to the
  * caret. The sigil starts the text or follows whitespace (a tag also "(",
- * as in tags.ts), so "a/b", URLs and "a#b" are not tokens.
+ * as in tags.ts), so "a/b", URLs, "a#b" and "a@mail.ru" are not tokens.
  */
 export function tokenBefore(text: string, caret: number): Token | null {
   let i = caret;
@@ -27,8 +29,8 @@ export function tokenBefore(text: string, caret: number): Token | null {
   const start = i - 1;
   if (start < 0) return null;
   const kind = text[start];
-  if (kind !== '/' && kind !== '#') return null;
-  if (start > 0 && !(kind === '#' ? /[\s(]/ : /\s/).test(text[start - 1])) return null;
+  if (kind !== '/' && kind !== '#' && kind !== '@') return null;
+  if (start > 0 && !(kind === '/' ? /\s/ : /[\s(]/).test(text[start - 1])) return null;
   let end = caret;
   while (end < text.length && WORD.test(text[end])) end++;
   return { kind, query: text.slice(i, caret), start, end };

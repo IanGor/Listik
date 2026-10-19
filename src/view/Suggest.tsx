@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from '../model/complete';
+import { tagKey, type Sigil } from '../model/tags';
 import { timeOfDay } from '../model/time';
 import type { NodeId } from '../model/types';
 import { selectionIn } from './caret';
@@ -83,8 +84,9 @@ function caretRect(el: HTMLElement): DOMRect {
 }
 
 /**
- * Suggestions while a `/command` or `#tag` is typed, in a bullet or its note:
- * commands that start with what is typed, or existing tags (model/complete.ts).
+ * Suggestions while a `/command`, `#tag` or `@tag` is typed, in a bullet or
+ * its note: commands that start with what is typed, or existing tags of the
+ * same sigil (model/complete.ts).
  * As many as fit about a third of the window, so fewer on a phone with its
  * keyboard up. Taking one replaces the whole word: it need not be typed out.
  * Follows the caret through `selectionchange`, which also fires on typing.
@@ -95,14 +97,24 @@ export function Suggest(props: { o: Outliner }) {
   const commands = (t: Token, limit: number): Item[] =>
     matchCommands(t.query).slice(0, limit).map((c) => ({ label: `/${c.name}`, hint: c.hint, text: RUN[c.name] }));
 
+  /** Tags of the token's own set (`#` or `@`), by name. */
   const tags = (id: NodeId, t: Token, text: string, limit: number): Item[] => {
+    const sigil = t.kind as Sigil;
     // The word being typed is already indexed as a tag, from this very
     // bullet: it counts only for the other bullets that carry it.
-    const typed = text.slice(t.start + 1, t.end).toLowerCase();
+    const typed = tagKey(sigil, text.slice(t.start + 1, t.end));
     const self = o.tags.nodesWith(typed).has(id) ? typed : null;
     const counts = new Map<string, number>();
-    for (const [tag, n] of o.tags.entries()) counts.set(tag, tag === self ? n - 1 : n);
-    return matchTags(counts, t.query, limit).map((tag) => ({ label: `#${tag}`, hint: String(counts.get(tag)), tag: true, text: () => `#${tag}` }));
+    for (const [key, n] of o.tags.entries()) {
+      if (key.startsWith('@') !== (sigil === '@')) continue;
+      counts.set(sigil === '@' ? key.slice(1) : key, key === self ? n - 1 : n);
+    }
+    return matchTags(counts, t.query, limit).map((name) => ({
+      label: sigil + name,
+      hint: String(counts.get(name)),
+      tag: true,
+      text: () => sigil + name,
+    }));
   };
 
   refresh = () => {
@@ -175,7 +187,7 @@ export function Suggest(props: { o: Outliner }) {
         <div
           class="suggest"
           role="listbox"
-          aria-label={s().token.kind === '#' ? 'Теги' : 'Команды'}
+          aria-label={s().token.kind === '/' ? 'Команды' : 'Теги'}
           style={place(s())}
           // Taking a suggestion must not take focus from the row: the keyboard stays.
           onMouseDown={(e) => e.preventDefault()}

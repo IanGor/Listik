@@ -7,6 +7,7 @@ describe('tokenBefore', () => {
     expect(tokenBefore('встреча /ti', 11)).toEqual({ kind: '/', query: 'ti', start: 8, end: 11 });
     expect(tokenBefore('план #', 6)).toEqual({ kind: '#', query: '', start: 5, end: 6 });
     expect(tokenBefore('(#война-и', 9)).toEqual({ kind: '#', query: 'война-и', start: 1, end: 9 });
+    expect(tokenBefore('звонок @ив', 10)).toEqual({ kind: '@', query: 'ив', start: 7, end: 10 });
   });
 
   it('spans the whole word when the caret is inside it', () => {
@@ -17,6 +18,7 @@ describe('tokenBefore', () => {
     expect(tokenBefore('a/ti', 4)).toBeNull();
     expect(tokenBefore('https://x.ru/time', 17)).toBeNull();
     expect(tokenBefore('a#b', 3)).toBeNull();
+    expect(tokenBefore('a@mail', 6)).toBeNull();
     expect(tokenBefore('(/ti', 4)).toBeNull();
     expect(tokenBefore('#тег ', 5)).toBeNull();
     expect(tokenBefore('слово', 5)).toBeNull();

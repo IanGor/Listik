@@ -22,6 +22,11 @@ describe('parseQuery', () => {
     expect(q.terms).toEqual(['пьер', 'анна павловна']);
   });
 
+  it('reads @tags as their own set', () => {
+    const q = parseQuery('@Иван -@отпуск #работа');
+    expect(q.clauses).toEqual([clause({ tags: ['@иван', 'работа'], notTags: ['@отпуск'] })]);
+  });
+
   it('treats a bare # or a broken tag as text and drops stray quotes and duplicates', () => {
     expect(parseQuery('# #- "" "незакрытая фраза пьер Пьер').clauses).toEqual([
       clause({ terms: ['#', '#-', 'незакрытая', 'фраза', 'пьер'] }),

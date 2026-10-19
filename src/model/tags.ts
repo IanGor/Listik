@@ -2,37 +2,53 @@ import { walkSnapshot, type Doc, type DocListener } from './doc';
 import type { NodeId, Op } from './types';
 
 /**
- * `#tag` at the start of the text or after whitespace / "(". Letters, digits
- * and `_` in any script, with inner hyphens: `#война-и-мир`. So "a#b" and
- * "#tag-" (trailing hyphen) are not tags, or not entirely.
+ * `#tag` or `@tag` at the start of the text or after whitespace / "(".
+ * Letters, digits and `_` in any script, with inner hyphens:
+ * `#война-и-мир`. So "a#b", "a@mail.ru" and "#tag-" (trailing hyphen) are
+ * not tags, or not entirely. The two sigils are two sets of tags that work
+ * alike, for telling kinds of things apart: `#работа` and `@работа` differ.
  */
-const TAG = /(?<=^|[\s(])#([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)/gu;
+const TAG = /(?<=^|[\s(])([#@])([\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*)/gu;
+
+/** The sigils a tag starts with. */
+export type Sigil = '#' | '@';
+
+/**
+ * A tag's key in the index and in queries, lowercased: `#name` is "name",
+ * as it always was, `@name` is "@name".
+ */
+export const tagKey = (sigil: string, name: string): string => (sigil === '@' ? '@' : '') + name.toLowerCase();
+
+/** How a tag key is written in text: "name" is `#name`, "@name" stays. */
+export const tagText = (key: string): string => (key.startsWith('@') ? key : `#${key}`);
+
+const mayHaveTags = (text: string) => text.includes('#') || text.includes('@');
 
 export interface Segment {
   text: string;
-  /** Lowercased tag name if this segment is a tag. */
+  /** The tag's key (tagKey) if this segment is a tag. */
   tag?: string;
 }
 
 /** Splits text into plain and tag segments, for highlighting. */
 export function splitTags(text: string): Segment[] {
-  if (!text.includes('#')) return text ? [{ text }] : [];
+  if (!mayHaveTags(text)) return text ? [{ text }] : [];
   const out: Segment[] = [];
   let last = 0;
   for (const m of text.matchAll(TAG)) {
     if (m.index > last) out.push({ text: text.slice(last, m.index) });
-    out.push({ text: m[0], tag: m[1].toLowerCase() });
+    out.push({ text: m[0], tag: tagKey(m[1], m[2]) });
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push({ text: text.slice(last) });
   return out;
 }
 
-/** Distinct lowercased tags of a text. */
+/** Distinct tag keys of a text. */
 export function parseTags(text: string): string[] {
-  if (!text.includes('#')) return [];
+  if (!mayHaveTags(text)) return [];
   const tags = new Set<string>();
-  for (const m of text.matchAll(TAG)) tags.add(m[1].toLowerCase());
+  for (const m of text.matchAll(TAG)) tags.add(tagKey(m[1], m[2]));
   return [...tags];
 }
 

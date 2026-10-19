@@ -15,6 +15,11 @@ describe('parseTags', () => {
     expect(parseTags('#хвост-')).toEqual(['хвост']);
   });
 
+  it('@tags are a set of their own beside #tags; e-mails are not tags', () => {
+    expect(parseTags('встреча @Иван и #иван, (@проект-1) a@mail.ru @')).toEqual(['@иван', 'иван', '@проект-1']);
+    expect(splitTags('@Иван!')).toEqual([{ text: '@Иван', tag: '@иван' }, { text: '!' }]);
+  });
+
   it('splits text into plain and tag segments that join back to the text', () => {
     const text = '#начало и середина #Тег, конец';
     const segments = splitTags(text);

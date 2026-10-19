@@ -1040,6 +1040,27 @@ test.describe('suggestions', () => {
     expect(await outline(page)).toHaveLength(DEMO.length);
   });
 
+  test('@ offers @tags only, and a click on one filters by it, apart from the #tag of the same name', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' @салон для встречи');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('встреча @');
+    await expect(list(page, 'Теги')).toBeVisible();
+    expect(await options(page)).toEqual(['@салон1']);
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('встреча @салон ');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    await page.locator('.row .tag', { hasText: '@салон' }).first().click();
+    await expect(page.locator('.search')).toHaveValue('@салон');
+    expect((await outline(page)).map((r) => r.trim())).toEqual(['Том второй @салон для встречи', 'встреча @салон']);
+    await page.locator('.search').fill('#салон');
+    await page.locator('.search').press('Enter');
+    await expect(page.locator('.row .text', { hasText: 'Eh bien' })).toBeVisible();
+    expect(await outline(page)).not.toContain('встреча @салон');
+  });
+
   test('↑/↓ choose, a click takes, Esc closes and Enter splits again', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.type(' #');
