@@ -46,17 +46,20 @@ function hostFor(doc: Doc, id: NodeId, moving?: NodeId): NodeId | null {
 }
 
 /**
- * A selection's rows, one per bullet and none whose bullet is inside
- * another's: a selection over a bullet and a mirror of it shows some
- * bullets twice.
+ * A selection's rows, one per bullet and none inside another: neither a
+ * bullet inside another's (a selection over a bullet and a mirror of it
+ * shows some bullets twice) nor a row under a selected mirror, whose
+ * bullets are the original's and stay with it.
  */
 function blockOf(doc: Doc, roots: RowKey[]): RowKey[] {
+  const keys = new Set(roots);
   const ids = new Set(roots.map(nodeOf));
   const seen = new Set<NodeId>();
   return roots.filter((key) => {
     const id = nodeOf(key);
     if (seen.has(id)) return false;
     seen.add(id);
+    for (let c = contextOf(key); c; c = contextOf(c)) if (keys.has(c)) return false;
     for (let p = doc.get(id).parent; p !== null; p = doc.get(p).parent) if (ids.has(p)) return false;
     return true;
   });
@@ -83,15 +86,23 @@ function expand(doc: Doc, id: NodeId): void {
   if (n.collapsed) doc.apply({ t: 'setCollapsed', id, from: true, to: false });
 }
 
-// Text, note and task state belong to the bullet a row shows (`Doc.content`):
-// through a mirror they change the original, and so every mirror of it.
+// Text, note and task state belong to the bullet a row shows (`Doc.content`).
+// A mirror's own row is a heading to read: its text and note change only
+// where the original is, so taking a mirror out or typing over it never
+// touches the original. Task state does change through it (the checkbox),
+// and so do the bullets below it, which are the original's.
+
+/** Is the row a mirror's own (its heading, not a bullet shown under it)? */
+const mirrorHeading = (doc: Doc, key: RowKey) => doc.get(nodeOf(key)).mirrorOf !== null;
 
 export function setText({ doc }: Ctx, id: RowKey, text: string): void {
+  if (mirrorHeading(doc, id)) return;
   const n = doc.content(nodeOf(id));
   if (n.text !== text) doc.apply({ t: 'setText', id: n.id, from: n.text, to: text, at: clock.now() });
 }
 
 export function setNote({ doc }: Ctx, id: RowKey, note: string): void {
+  if (mirrorHeading(doc, id)) return;
   const n = doc.content(nodeOf(id));
   if (n.note !== note) doc.apply({ t: 'setNote', id: n.id, from: n.note, to: note, at: clock.now() });
 }
@@ -181,7 +192,7 @@ export function appendChild({ doc }: Ctx, parent: NodeId): Focus {
 }
 
 /**
- * Enter: split the bullet at the caret. A mirror's text is the original's;
+ * Enter: split the bullet at the caret (a mirror's heading stays whole);
  * with children shown, the new bullet is the first of them (in a mirror:
  * of the original's), otherwise a plain sibling.
  */
@@ -194,7 +205,8 @@ export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
     insertNew(doc, parent, doc.index(id), '');
     return { id: key, caret: 0 };
   }
-  const after = c.text.slice(caret);
+  // A mirror's heading is not split: Enter anywhere in it adds an empty bullet.
+  const after = n.mirrorOf ? '' : c.text.slice(caret);
   setText({ doc, rows }, id, c.text.slice(0, caret));
   const host = rows.host(key);
   if (host && rows.showsChildren(key)) {
@@ -273,21 +285,26 @@ export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): 
 /**
  * Backspace at the start of a bullet: remove it if empty, otherwise append
  * its text to the previous visible row. Bullets with children or a note are
- * left alone so nothing gets lost.
+ * left alone so nothing gets lost. A mirror goes whatever it shows: only the
+ * link goes, the original stays.
  */
 export function mergeUp({ doc, rows }: Ctx, key: RowKey): Focus | void {
   const id = nodeOf(key);
   const n = doc.get(id);
   const c = doc.content(id);
-  if (n.children.length > 0 || c.note) return;
   const i = rows.indexOf(key);
   if (i <= 0) return;
   const prevKey = rows.ids[i - 1];
   const prevId = nodeOf(prevKey);
   const prev = doc.content(prevId);
   const caret = prev.text.length;
-  // A mirror's text belongs to the original, so a mirror only goes when it reads empty; nor is anything merged into one.
-  if (n.mirrorOf && c.text) return;
+  // A mirror is a link: Backspace at its start takes out the link alone; the original keeps its text, note and bullets.
+  if (n.mirrorOf) {
+    remove(doc, id);
+    return { id: prevKey, caret };
+  }
+  if (n.children.length > 0 || c.note) return;
+  // Nothing is merged into a mirror's heading: its text is the original's.
   if (c.text && doc.get(prevId).mirrorOf) return;
   // The row above may show the same bullet (a mirror right below its original): nothing to join.
   if (c.text && prev === c) return;

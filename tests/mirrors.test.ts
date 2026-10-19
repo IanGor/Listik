@@ -36,7 +36,7 @@ describe('(( token and pair', () => {
 });
 
 describe('mirrors', () => {
-  it('an empty bullet with ((title)) becomes a mirror; its text, note and task state are the original’s', () => {
+  it('an empty bullet with ((title)) becomes a mirror: it reads the original\'s text and note, edits to them stay with the original; the checkbox is shared', () => {
     const { doc, ctx, rows, run } = setup(['Пьер', 'Наташа', '']);
     run(() => cmd.setText(ctx, '', '((Пьер))'));
     const m = rows.ids[2];
@@ -45,12 +45,13 @@ describe('mirrors', () => {
     expect(doc.get(m).text).toBe('');
     expect(doc.content(m).text).toBe('Пьер');
     expect(isMirror(doc, m)).toBe(true);
-    // Typing in the mirror changes the original, and so what the mirror shows.
-    run(() => cmd.setText(ctx, m, 'Пьер Безухов'));
-    expect(doc.get('Пьер').text).toBe('Пьер Безухов');
+    // The mirror's heading takes no edits: the original's text and note change only where it is.
+    expect(doc.transact(() => cmd.setText(ctx, m, ''))).toEqual([]);
+    expect(doc.transact(() => { cmd.setNote(ctx, m, 'заметка'); })).toEqual([]);
+    expect(doc.transact(() => { cmd.split(ctx, m, 2); })).toHaveLength(1); // a new bullet, the heading stays whole
+    expect(doc.get('Пьер').text).toBe('Пьер');
+    run(() => cmd.setText(ctx, 'Пьер', 'Пьер Безухов'));
     expect(doc.content(m).text).toBe('Пьер Безухов');
-    run(() => cmd.setNote(ctx, m, 'заметка'));
-    expect(doc.get('Пьер').note).toBe('заметка');
     run(() => cmd.cycleTask(ctx, [m]));
     expect(doc.get('Пьер').todo).toBe(true);
     run(() => cmd.toggleDone(ctx, [m]));
@@ -105,16 +106,31 @@ describe('mirrors', () => {
     checkInvariants(doc);
   });
 
-  it('Backspace at the start: a mirror that reads empty goes, one with text stays; nothing merges into a mirror', () => {
-    const { doc, ctx, rows, run } = setup(['a', '', 'c']);
-    const m = rows.ids[1];
-    run(() => cmd.makeMirror(ctx, m, 'a', 0, 0));
-    expect(run(() => cmd.mergeUp(ctx, m))).toBeUndefined();
+  it('Backspace at the start of a mirror takes out the link alone; the original keeps its text, note and bullets; nothing merges into a mirror', () => {
+    const { doc, ctx, rows, run } = mirrored(['a', '  b', 'm', 'c'], { m: 'a' });
+    run(() => cmd.setNote(ctx, 'a', 'заметка'));
+    expect(run(() => cmd.mergeUp(ctx, 'm/b'))).toBeUndefined(); // b has text: nothing to join it to in the heading
+    run(() => cmd.setCollapsed(ctx, 'm', true));
     expect(run(() => cmd.mergeUp(ctx, 'c'))).toBeUndefined();
     expect(doc.get('c').text).toBe('c');
-    run(() => cmd.setText(ctx, 'a', ''));
-    expect(run(() => cmd.mergeUp(ctx, m))).toEqual({ id: 'a', caret: 0 });
-    expect(doc.get(m).parent).toBe(TRASH);
+    expect(run(() => cmd.mergeUp(ctx, 'm'))).toEqual({ id: 'b', caret: 1 });
+    expect(doc.get('m').parent).toBe(TRASH);
+    expect(dump(doc)).toEqual(['a', '  b', 'c']);
+    expect(doc.get('a').note).toBe('заметка');
+    expect(rows.ids).toEqual(['a', 'b', 'c']);
+  });
+
+  it('deleting a mirror, or a selection that holds it with what it shows, leaves the original whole', () => {
+    const one = mirrored(['a', '  b', 'm', 'c'], { m: 'a' });
+    one.run(() => cmd.deleteNode(one.ctx, 'm'));
+    expect(dump(one.doc)).toEqual(['a', '  b', 'c']);
+    const two = mirrored(['a', '  b', 'm', 'c'], { m: 'a' });
+    two.run(() => cmd.deleteMany(two.ctx, ['m', 'm/b']));
+    expect(dump(two.doc)).toEqual(['a', '  b', 'c']);
+    // Below the heading, adding and deleting is the original's.
+    const three = mirrored(['a', '  b', 'm'], { m: 'a' });
+    three.run(() => cmd.deleteNode(three.ctx, 'm/b'));
+    expect(dump(three.doc)).toEqual(['a', 'm']);
   });
 
   it('deleting the original keeps the mirror readable; the indexes see the original only', () => {

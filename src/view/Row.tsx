@@ -245,10 +245,10 @@ const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: stri
 
 /**
  * Before the browser edits the text: undo/redo from its menu (which bypasses
- * keydown), `]` stepping over a link's closing bracket, Backspace taking out
+ * keydown), no edits on a mirror's heading, `]` stepping over a link's closing bracket, Backspace taking out
  * an empty `[]` pair whole. `read`/`write` give the element's text.
  */
-function beforeInput(e: InputEvent, o: Outliner, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void): void {
+function beforeInput(e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void): void {
   if (e.inputType === 'historyUndo') {
     e.preventDefault();
     return o.undo();
@@ -256,6 +256,11 @@ function beforeInput(e: InputEvent, o: Outliner, el: HTMLElement, read: () => st
   if (e.inputType === 'historyRedo') {
     e.preventDefault();
     return o.redo();
+  }
+  // A mirror's heading takes no edits (model/commands.ts); what cannot be refused here, `restore` puts back.
+  if (o.isMirror(id)) {
+    if (e.cancelable) e.preventDefault();
+    return o.mirrorReadOnly();
   }
   if (e.isComposing || !e.cancelable) return;
   const sel = selectionIn(el);
@@ -272,6 +277,13 @@ function beforeInput(e: InputEvent, o: Outliner, el: HTMLElement, read: () => st
     setCaret(el, caret - 1);
     save(next);
   }
+}
+
+/** An edit the browser made anyway (a composing keyboard) in a mirror's heading: the DOM goes back to the model. */
+function restore(el: HTMLElement, text: string): void {
+  const caret = selectionIn(el)?.[0];
+  el.textContent = text;
+  setCaret(el, Math.min(caret ?? 0, text.length));
 }
 
 /** Places the caret for a focus request: at an offset, or at a horizontal position on the first/last line. */
@@ -321,6 +333,7 @@ function Editable(props: { o: Outliner; id: RowKey }) {
   });
 
   const onInput = (e: InputEvent) => {
+    if (o.isMirror(id)) return restore(el, text());
     const t = el.textContent ?? '';
     if (el.childNodes.length > 1 || el.firstElementChild || t.includes('\n')) {
       const caret = selectionIn(el)?.[0] ?? t.length;
@@ -336,6 +349,7 @@ function Editable(props: { o: Outliner; id: RowKey }) {
     const pasted = e.clipboardData?.getData('text/plain');
     if (pasted == null) return;
     e.preventDefault();
+    if (o.isMirror(id)) return o.mirrorReadOnly();
     const [start, end] = selectionIn(el) ?? [0, 0];
     // Several lines: an indented list (Markdown, Workflowy, plain) becomes a tree.
     if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));
@@ -351,7 +365,7 @@ function Editable(props: { o: Outliner; id: RowKey }) {
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
       onPaste={onPaste}
-      onBeforeInput={(e) => beforeInput(e, o, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t))}
+      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t))}
     />
   );
 }
@@ -393,6 +407,7 @@ function NoteEditable(props: { o: Outliner; id: RowKey }) {
   });
 
   const onInput = (e: InputEvent) => {
+    if (o.isMirror(id)) return restore(el, note().endsWith('\n') ? `${note()}\n` : note());
     // Other browsers may insert <br> for a new line: turn it back into text.
     if (el.querySelector('br')) {
       const caret = selectionIn(el)?.[0];
@@ -411,7 +426,7 @@ function NoteEditable(props: { o: Outliner; id: RowKey }) {
       onKeyDown={(e) => suggestKey(e) || onNoteKeyDown(e, o, id, el)}
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, read(), true)}
-      onBeforeInput={(e) => beforeInput(e, o, el, read, write, (t) => o.typeNote(id, t))}
+      onBeforeInput={(e) => beforeInput(e, o, id, el, read, write, (t) => o.typeNote(id, t))}
     />
   );
 }

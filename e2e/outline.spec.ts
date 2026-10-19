@@ -1170,7 +1170,7 @@ test.describe('mirrors', () => {
   const list = (page: Page) => page.getByRole('listbox', { name: 'Зеркала' });
   const crumbs = (page: Page) => page.locator('.crumbs .crumb');
 
-  test('(( offers bullets; taking one makes the bullet a mirror: a diamond, shared text, the dot leads to the original', async ({ page }) => {
+  test('(( offers bullets; taking one makes the bullet a mirror: a diamond, the original\'s text, the dot leads to the original', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await page.keyboard.type('((');
@@ -1184,13 +1184,17 @@ test.describe('mirrors', () => {
     await expect(mirror.locator('.bullet')).toHaveClass(/mirror/);
     await expect(editing(page)).toHaveText('Часть вторая');
 
-    // Typed in the mirror, the text changes in the original row too.
+    // The mirror's heading takes no edits: typing, erasing and pasting leave the original as it is.
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' (зеркало)');
-    await expect(page.locator('.row .text', { hasText: 'Часть вторая (зеркало)' })).toHaveCount(2);
-    // Typed in the original, it changes in the mirror.
-    await edit(page, 'Часть вторая (зеркало)');
     await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('Часть вторая');
+    await expect(page.locator('.toast')).toContainText('Заголовок зеркала правится в оригинале');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.row .text', { hasText: 'Часть вторая' })).toHaveCount(2);
+    // Typed in the original, it changes in the mirror.
+    await edit(page, 'Часть вторая');
+    await page.keyboard.type(' (зеркало');
     await page.keyboard.press('Escape');
     await expect(page.locator('.row .text', { hasText: 'Часть вторая (зеркало' })).toHaveCount(2);
     await expect(page.locator('.row.mirror .text')).toHaveText('Часть вторая (зеркало');
@@ -1224,6 +1228,27 @@ test.describe('mirrors', () => {
     await page.keyboard.press('Escape');
     await page.locator('.row.mirror .toggle').click();
     expect(await outline(page)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй', 'Том первый']);
+
+    // Backspace at the start of the mirror takes out the link alone: the original keeps its title and bullets.
+    await page.locator('.row.mirror .text').click();
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('Backspace');
+    await expect(page.locator('.row.mirror')).toHaveCount(0);
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй']);
+    await expect(editing(page)).toHaveText('Том второй');
+  });
+
+  test('deleting a mirror with what it shows selected leaves the original whole', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Том перв');
+    await page.keyboard.press('Enter');
+    // Shift+↓ from the mirror's heading selects it with the rows under it.
+    await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(page.locator('.row.selected')).toHaveCount(5);
+    await page.keyboard.press('Delete');
+    expect(await outline(page)).toEqual(DEMO);
   });
 
   test('(( with other text puts the mirror below; ) steps over; Backspace takes out an empty pair', async ({ page }) => {

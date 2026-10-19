@@ -196,6 +196,18 @@ export class Outliner {
     return this.selectionInfo().roots;
   }
 
+  /** Is the row a mirror's own (its heading takes no edits: model/commands.ts)? */
+  isMirror(key: RowKey): boolean {
+    return !!this.doc.nodes.get(nodeOf(key))?.mirrorOf;
+  }
+
+  /** An edit was tried on a mirror's heading: say where it can be made, and how the mirror goes. */
+  mirrorReadOnly(): void {
+    this.notify(touch()
+      ? 'Заголовок зеркала правится в оригинале — коснитесь ромбика'
+      : 'Заголовок зеркала правится в оригинале (клик по ромбику); удалить зеркало — Backspace в начале строки');
+  }
+
   /** What the row shows: its bullet, or a mirror's original (model/mirrors.ts). */
   contentOf(key: RowKey) {
     return this.doc.content(nodeOf(key));
@@ -475,6 +487,7 @@ export class Outliner {
    * which brings back what was replaced.
    */
   insert(at: Focus, text: string, back = 0): void {
+    if (this.isMirror(at.id)) return this.mirrorReadOnly();
     this.run((ctx) => {
       const n = ctx.doc.content(nodeOf(at.id));
       const old = at.note ? n.note : n.text;
@@ -493,6 +506,10 @@ export class Outliner {
    */
   format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
     if (this.readOnly) return null;
+    if (this.isMirror(at.id)) {
+      this.mirrorReadOnly();
+      return null;
+    }
     const n = this.contentOf(at.id);
     const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
     const place = (caret: number): Focus => (at.note ? { id: at.id, caret, note: true } : { id: at.id, caret });
