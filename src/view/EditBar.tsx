@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import * as cmd from '../model/commands';
+import { timeOfDay } from '../model/time';
 import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
 import type { Outliner } from './outliner';
@@ -35,6 +36,7 @@ const ACTIONS: Action[] = [
       o.setFocus(h.note ? { id: h.id, caret: n.text.length } : { id: h.id, caret: n.note.length, note: true });
     },
   },
+  { label: 'Вставить время', icon: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'M12 7v5l3 2'], run: (o, h) => o.insert(h, timeOfDay()) },
   { label: 'Отменить', icon: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'], run: (o) => o.undo() },
   { label: 'Повторить', icon: ['M15 14l5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'], run: (o) => o.redo() },
 ];

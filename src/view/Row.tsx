@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'sol
 import * as cmd from '../model/commands';
 import { parseIndented } from '../model/outline-text';
 import { decorate, type Piece } from '../model/search';
+import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
 import type { NodeId } from '../model/types';
 import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
@@ -176,6 +177,17 @@ export function Row(props: RowProps) {
   );
 }
 
+/**
+ * `/time` typed before the caret becomes the current time. While a word is
+ * being composed (Android keyboards compose every word) the text must not be
+ * touched, so there the check waits for the composition to end.
+ */
+const timeCommand = (o: Outliner, id: NodeId, el: HTMLElement, text: string, note: boolean) => {
+  const caret = selectionIn(el)?.[0];
+  if (caret === undefined || !timeCommandBefore(text, caret)) return;
+  o.insert(note ? { id, caret, note: true } : { id, caret }, timeOfDay(), TIME_COMMAND.length);
+};
+
 // Undo/redo from the browser's menu bypasses keydown.
 const historyInput = (o: Outliner) => (e: InputEvent) => {
   if (e.inputType === 'historyUndo') {
@@ -229,7 +241,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
     if (f?.id === id && !inNote(f)) placeCaret(el, f);
   });
 
-  const onInput = () => {
+  const onInput = (e: InputEvent) => {
     const t = el.textContent ?? '';
     if (el.childNodes.length > 1 || el.firstElementChild || t.includes('\n')) {
       const caret = selectionIn(el)?.[0] ?? t.length;
@@ -237,6 +249,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       setCaret(el, caret);
     }
     o.type(id, el.textContent ?? '');
+    if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
   };
 
   const onPaste = (e: ClipboardEvent) => {
@@ -256,6 +269,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       contentEditable="plaintext-only"
       onKeyDown={(e) => onEditorKeyDown(e, o, id, el)}
       onInput={onInput}
+      onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
       onPaste={onPaste}
       onBeforeInput={historyInput(o)}
     />
@@ -295,7 +309,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
     if (f?.id === id && inNote(f)) placeCaret(el, f);
   });
 
-  const onInput = () => {
+  const onInput = (e: InputEvent) => {
     // Other browsers may insert <br> for a new line: turn it back into text.
     if (el.querySelector('br')) {
       const caret = selectionIn(el)?.[0];
@@ -303,6 +317,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
       if (caret !== undefined) setCaret(el, caret);
     }
     o.typeNote(id, read());
+    if (!e.isComposing) timeCommand(o, id, el, read(), true);
   };
 
   return (
@@ -312,6 +327,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
       contentEditable="plaintext-only"
       onKeyDown={(e) => onNoteKeyDown(e, o, id, el)}
       onInput={onInput}
+      onCompositionEnd={() => timeCommand(o, id, el, read(), true)}
       onBeforeInput={historyInput(o)}
     />
   );

@@ -729,6 +729,17 @@ test.describe('touch screen', () => {
     await expect(action(page, 'Готово')).toHaveCount(0);
   });
 
+  test('the clock button puts the current time at the caret', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 19, 23, 40));
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await page.keyboard.press('Control+Home');
+    await action(page, 'Вставить время').tap();
+    await expect(editing(page)).toHaveText('23:40Том второй');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type(' ');
+    await expect(editing(page)).toHaveText('23:40 Том второй');
+  });
+
   test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await expect(editing(page)).toBeFocused();
@@ -804,6 +815,39 @@ test.describe('touch screen', () => {
     expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
     await toggle.tap();
     expect(await outline(page)).toEqual(DEMO);
+  });
+});
+
+test.describe('time', () => {
+  test('/time becomes the current time, in a bullet and in its note; undo brings /time back', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 19, 9, 5));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' a/time и /time');
+    await expect(editing(page)).toHaveText('Том второй a/time и 09:05');
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('Том второй a/time и /time');
+    await page.keyboard.press('Control+Shift+z');
+    await expect(editing(page)).toHaveText('Том второй a/time и 09:05');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' дальше');
+    await expect(editing(page)).toHaveText('Том второй a/time и 09:05 дальше');
+
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('/time');
+    await expect(page.locator('.note[contenteditable]')).toHaveText('09:05');
+  });
+
+  test('while a keyboard composes the word, /time waits for it to end', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 19, 9, 5));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' /');
+    // As Android keyboards do: the word is composed, then committed.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.imeSetComposition', { text: 'time', selectionStart: 4, selectionEnd: 4 });
+    await expect(editing(page)).toHaveText('Том второй /time');
+    await cdp.send('Input.insertText', { text: 'time' });
+    await expect(editing(page)).toHaveText('Том второй 09:05');
+    await cdp.detach();
   });
 });
 

@@ -40,6 +40,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **тольк
   - `commands.ts` — все команды правки;
   - `rows.ts` — `VisibleRows`: плоский pre-order список видимых строк, фильтр (`Filter{keep,open}`, `keepSet`), zoom (`top`), скрытие выполненных;
   - `tags.ts` — `TagIndex`, `content(n)` = текст + заметка;
+  - `time.ts` — `/time` → время устройства `ЧЧ:ММ` (`Outliner.insert`);
   - `search.ts` — `parseQuery` (Clause, OR, `-`, `is:`), `TextIndex` (ленивая нормализованная копия), `findMatches`, `decorate`;
   - `history.ts` — undo/redo, набор текста группируется по словам;
   - `outline-text.ts` — Markdown/OPML и `parseIndented`;

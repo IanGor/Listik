@@ -428,6 +428,23 @@ export class Outliner {
     });
   }
 
+  /**
+   * Puts `text` at the caret, in a bullet's text or its note, in place of the
+   * `back` characters before the caret (a typed command). One undo step,
+   * which brings back what was replaced.
+   */
+  insert(at: Focus, text: string, back = 0): void {
+    this.run((ctx) => {
+      const n = ctx.doc.get(at.id);
+      const old = at.note ? n.note : n.text;
+      const start = Math.max(0, at.caret - back);
+      const next = old.slice(0, start) + text + old.slice(at.caret);
+      if (at.note) setNote(ctx, at.id, next);
+      else setText(ctx, at.id, next);
+      return { ...at, caret: start + text.length };
+    }, at);
+  }
+
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: NodeId, text: string): void {
     if (this.readOnly) return;
