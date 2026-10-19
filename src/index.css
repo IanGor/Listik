@@ -377,6 +377,47 @@ kbd {
   border-color: var(--primary);
 }
 
+/* A mirror (model/mirrors.ts): a diamond of the dot's size, same coral; a task mirror keeps its checkbox and wears a small diamond at its corner. */
+.bullet.mirror::after {
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.bullet.mirror:hover::after {
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.45);
+}
+
+.bullet.mirror.todo::after {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  transform: translate(-50%, -50%);
+}
+
+.bullet.mirror.todo:hover::after {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.bullet.mirror.todo::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 10px);
+  left: calc(50% + 6px);
+  width: 5px;
+  height: 5px;
+  background: var(--primary);
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+
+/* A mirror whose original is gone (purged from the trash): an empty row that says so. */
+.row.orphan .text:empty::before {
+  content: 'Оригинал этого зеркала удалён';
+  color: var(--faint);
+}
+
 /* Hidden children: a round halo behind the bullet, as in Workflowy. */
 .bullet.collapsed::before {
   content: '';

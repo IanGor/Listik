@@ -1,4 +1,5 @@
 import { linkBefore } from './links';
+import { mirrorBefore } from './mirrors';
 import type { Sigil } from './tags';
 
 /**
@@ -12,7 +13,7 @@ import type { Sigil } from './tags';
  * follows it up to the caret, and the word's span (a link's, through its `]]`).
  */
 export interface Token {
-  kind: '/' | Sigil | '[[';
+  kind: '/' | Sigil | '[[' | '((';
   /** Typed after the sigil, up to the caret. */
   query: string;
   /** Where the sigil is. */
@@ -32,6 +33,8 @@ const WORD = /[\p{L}\p{N}_-]/u;
 export function tokenBefore(text: string, caret: number): Token | null {
   const link = linkBefore(text, caret);
   if (link) return { kind: '[[', ...link };
+  const mirror = mirrorBefore(text, caret);
+  if (mirror) return { kind: '((', ...mirror };
   let i = caret;
   while (i > 0 && WORD.test(text[i - 1])) i--;
   const start = i - 1;

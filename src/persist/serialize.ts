@@ -6,16 +6,17 @@ import { own } from '../util/own';
  * One node; `parent` is the index of the parent's row, -1 for the root and
  * -2 for the trash (v4). Version 1 rows end at `updated`; version 2 adds
  * `done` and `note`; version 3 adds `todo` (in v2, anything done was in
- * effect a task); version 4 adds the trash's rows after the outline's.
+ * effect a task); version 4 adds the trash's rows after the outline's;
+ * version 5 adds `mirror`, the id a mirror bullet points at ('' for none).
  */
 export type SnapshotRow = [
   id: NodeId, parent: number, order: string, text: string, collapsed: 0 | 1, created: number, updated: number,
-  done?: 0 | 1, note?: string, todo?: 0 | 1,
+  done?: 0 | 1, note?: string, todo?: 0 | 1, mirror?: string,
 ];
 
 /** Rows in pre-order, so children arrive already sorted. */
 export interface Snapshot {
-  v: 1 | 2 | 3 | 4;
+  v: 1 | 2 | 3 | 4 | 5;
   root: NodeId;
   rows: SnapshotRow[];
 }
@@ -37,10 +38,10 @@ export function serialize(doc: Doc): string {
     const n = doc.get(stackIds.pop()!);
     const parent = stackParents.pop()!;
     const index = rows.length;
-    rows.push([n.id, parent, n.order, n.text, n.collapsed ? 1 : 0, n.created, n.updated, n.done ? 1 : 0, n.note, n.todo ? 1 : 0]);
+    rows.push([n.id, parent, n.order, n.text, n.collapsed ? 1 : 0, n.created, n.updated, n.done ? 1 : 0, n.note, n.todo ? 1 : 0, n.mirrorOf ?? '']);
     pushChildren(n.children, index);
   }
-  const snapshot: Snapshot = { v: 4, root: doc.root, rows };
+  const snapshot: Snapshot = { v: 5, root: doc.root, rows };
   return JSON.stringify(snapshot);
 }
 
@@ -52,16 +53,17 @@ export function serialize(doc: Doc): string {
  */
 export function deserialize(json: string): Doc {
   const s = JSON.parse(json) as Snapshot;
-  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4) throw new Error(`Unsupported snapshot version ${s.v}`);
+  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5) throw new Error(`Unsupported snapshot version ${s.v}`);
   const doc = new Doc(s.root);
   const ids = new Array<NodeId>(s.rows.length);
-  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo], i) => {
+  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo, mirror], i) => {
     const parent = p === -1 ? s.root : p === -2 ? TRASH : ids[p];
     const id = own(rawId);
     ids[i] = id;
     doc.nodes.set(id, {
       id, parent, children: [], order: own(order), text: own(text), note: note ? own(note) : '',
       collapsed: collapsed === 1, todo: todo === 1 || done === 1, done: done === 1, created, updated,
+      mirrorOf: mirror ? own(mirror) : null,
     });
     doc.get(parent).children.push(id);
   });

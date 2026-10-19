@@ -13,6 +13,8 @@ interface Item {
   hint?: string;
   tag?: boolean;
   link?: boolean;
+  /** A `((mirror))`: the bullet to mirror; taking it changes the bullet, not the text. */
+  mirror?: NodeId;
   /** What replaces the typed token. */
   text: () => string;
 }
@@ -131,7 +133,7 @@ export function Suggest(props: { o: Outliner }) {
   let found: { key: string; items: Item[] } | null = null;
   let later = false;
   const links = (id: NodeId, t: Token, limit: number, now: boolean): Item[] | null => {
-    const key = `${id}\n${limit}\n${t.query}`;
+    const key = `${id}\n${limit}\n${t.kind}\n${t.query}`;
     if (found?.key !== key) {
       if (!now) {
         if (!later) {
@@ -143,12 +145,17 @@ export function Suggest(props: { o: Outliner }) {
         }
         return null;
       }
-      const items = findTargets(o.doc, o.text, t.query, id, limit).map((target) => ({
-        label: target.title,
-        hint: target.where,
-        link: true,
-        text: () => `[[${target.title}]]`,
-      }));
+      const mirror = t.kind === '((';
+      const items = findTargets(o.doc, o.text, t.query, id, limit)
+        // A bullet cannot mirror itself or the bullet it already mirrors.
+        .filter((target) => !mirror || o.doc.origin(target.id) !== o.doc.origin(id))
+        .map((target) => ({
+          label: target.title,
+          hint: target.where,
+          link: true,
+          ...(mirror ? { mirror: target.id } : {}),
+          text: () => (mirror ? `((${target.title}))` : `[[${target.title}]]`),
+        }));
       found = { key, items };
     }
     return found.items;
@@ -161,16 +168,18 @@ export function Suggest(props: { o: Outliner }) {
     const sel = selectionIn(el);
     const text = el.textContent ?? '';
     const token = sel && sel[0] === sel[1] ? tokenBefore(text, sel[0]) : null;
-    if (token?.kind !== '[[') found = null;
+    if (token?.kind !== '[[' && token?.kind !== '((') found = null;
     if (!token) {
       dismissed = '';
       return setOpen(null);
     }
     const note = el.classList.contains('note');
+    // A mirror is a bullet, not text: `((` in a note is just parentheses.
+    if (token.kind === '((' && note) return setOpen(null);
     if (keyOf(f.id, note, token) === dismissed) return setOpen(null);
     const limit = suggestLimit(innerHeight, rowHeight());
     const items =
-      token.kind === '/' ? commands(token, limit) : token.kind === '[[' ? links(f.id, token, limit, now) : tags(f.id, token, text, limit);
+      token.kind === '/' ? commands(token, limit) : token.kind === '[[' || token.kind === '((' ? links(f.id, token, limit, now) : tags(f.id, token, text, limit);
     if (!items) return;
     if (!items.length) return setOpen(null);
     const prev = open();
@@ -183,11 +192,12 @@ export function Suggest(props: { o: Outliner }) {
     const s = open();
     const item = s?.items[i];
     if (!s || !item) return;
-    const n = o.doc.get(s.id);
+    const n = o.doc.content(s.id);
     const text = s.note ? n.note : n.text;
     // A tag is followed by a space, so typing goes on after it.
     const insert = item.text() + (item.tag && !/\s/.test(text[s.token.end] ?? '') ? ' ' : '');
     setOpen(null);
+    if (item.mirror) return o.makeMirror(s.id, item.mirror, s.token.start, s.token.end);
     o.insert(s.note ? { id: s.id, caret: s.token.end, note: true } : { id: s.id, caret: s.token.end }, insert, s.token.end - s.token.start);
   };
 
@@ -228,7 +238,7 @@ export function Suggest(props: { o: Outliner }) {
         <div
           class="suggest"
           role="listbox"
-          aria-label={s().token.kind === '/' ? 'Команды' : s().token.kind === '[[' ? 'Ссылки' : 'Теги'}
+          aria-label={s().token.kind === '/' ? 'Команды' : s().token.kind === '[[' ? 'Ссылки' : s().token.kind === '((' ? 'Зеркала' : 'Теги'}
           style={place(s())}
           // Taking a suggestion must not take focus from the row: the keyboard stays.
           onMouseDown={(e) => e.preventDefault()}

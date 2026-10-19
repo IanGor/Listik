@@ -61,6 +61,10 @@ function mergeOp(doc: Doc, op: Exclude<Op, { t: 'insert' }>): Op[] {
       const n = doc.nodes.get(op.id);
       return n && n.done !== op.to ? [{ ...op, from: n.done }] : [];
     }
+    case 'setMirror': {
+      const n = doc.nodes.get(op.id);
+      return n && n.mirrorOf !== op.to && op.to !== op.id ? [{ ...op, from: n.mirrorOf }] : [];
+    }
   }
 }
 

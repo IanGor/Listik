@@ -94,7 +94,7 @@ export function toMarkdown(doc: Doc, root: NodeId = doc.root): string {
 export function markdownOf(doc: Doc, ids: NodeId[]): string {
   const out: string[] = [];
   walk(doc, ids, (id, depth) => {
-    const n = doc.get(id);
+    const n = doc.content(id); // a mirror exports as a copy of its original
     const pad = '  '.repeat(depth);
     out.push(`${pad}- ${n.todo || n.done ? (n.done ? '[x] ' : '[ ] ') : ''}${n.text}`);
     if (n.note) for (const line of n.note.split('\n')) out.push(line.trim() ? `${pad}  ${line}` : '');
@@ -114,7 +114,7 @@ export function toOpml(doc: Doc, title = 'Listik'): string {
     '  <body>',
   ];
   const emit = (id: NodeId, depth: number) => {
-    const n = doc.get(id);
+    const n = doc.content(id); // a mirror exports as a copy of its original
     const pad = '  '.repeat(depth + 2);
     const extra = (n.note ? ` _note="${escapeXml(n.note)}"` : '') + (n.todo ? ' _task="true"' : '') + (n.done ? ' _complete="true"' : '');
     const open = `${pad}<outline text="${escapeXml(n.text)}"${extra}`;

@@ -58,6 +58,8 @@ export function invert(op: Op): Op {
       return { t: 'setDone', id: op.id, from: op.to, to: op.from };
     case 'setNote':
       return { t: 'setNote', id: op.id, from: op.to, to: op.from, at: op.at };
+    case 'setMirror':
+      return { t: 'setMirror', id: op.id, from: op.to, to: op.from };
   }
 }
 
@@ -76,8 +78,29 @@ export class Doc {
     for (const id of [root, TRASH]) {
       this.nodes.set(id, {
         id, parent: null, children: [], order: '', text: '', note: '', collapsed: false, todo: false, done: false,
-        created: 0, updated: 0,
+        created: 0, updated: 0, mirrorOf: null,
       });
+    }
+  }
+
+  /**
+   * The bullet whose text, note and task state the row `id` shows: the
+   * mirrored bullet for a mirror (itself if that one is gone), else itself.
+   */
+  content(id: NodeId): OutlineNode {
+    const n = this.get(id);
+    return n.mirrorOf ? (this.nodes.get(n.mirrorOf) ?? n) : n;
+  }
+
+  /** The bullet behind a chain of mirrors: what a new mirror should point at, and where zoom goes. */
+  origin(id: NodeId): NodeId {
+    const seen = new Set<NodeId>();
+    let cur = id;
+    for (;;) {
+      const n = this.nodes.get(cur);
+      if (!n?.mirrorOf || seen.has(cur) || !this.nodes.has(n.mirrorOf)) return cur;
+      seen.add(cur);
+      cur = n.mirrorOf;
     }
   }
 
@@ -157,7 +180,7 @@ export class Doc {
     const n = this.get(id);
     return {
       id: n.id, order: n.order, text: n.text, note: n.note, collapsed: n.collapsed, todo: n.todo, done: n.done,
-      created: n.created, updated: n.updated,
+      created: n.created, updated: n.updated, ...(n.mirrorOf ? { mirrorOf: n.mirrorOf } : {}),
       children: n.children.map((c) => this.snapshot(c)),
     };
   }
@@ -244,6 +267,13 @@ export class Doc {
         if (op.at !== undefined) n.updated = op.at;
         break;
       }
+      case 'setMirror': {
+        const n = this.get(op.id);
+        if (n.mirrorOf !== op.from) throw new Error(`setMirror: stale target for ${op.id}`);
+        if (op.to === op.id) throw new Error(`setMirror: ${op.id} cannot mirror itself`);
+        n.mirrorOf = op.to;
+        break;
+      }
     }
     for (const l of this.listeners) l.op?.(op, this);
   }
@@ -257,6 +287,7 @@ export class Doc {
       const n: OutlineNode = {
         id: s.id, parent: p, children: [], order: s.order, text: s.text,
         note: s.note, collapsed: s.collapsed, todo: s.todo, done: s.done, created: s.created, updated: s.updated,
+        mirrorOf: s.mirrorOf && s.mirrorOf !== s.id ? s.mirrorOf : null,
       };
       this.nodes.set(n.id, n);
       this.attach(n);

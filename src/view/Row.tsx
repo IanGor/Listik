@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
 import { closesLink, opensLink } from '../model/links';
+import { closesMirror, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
 import { decorate, type Piece } from '../model/search';
 import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
@@ -72,6 +73,21 @@ export function Row(props: RowProps) {
     o.nodes.track(id);
     return o.doc.nodes.get(id);
   };
+  /** What the row shows: the mirrored bullet for a mirror (model/mirrors.ts), else the bullet itself. */
+  const content = () => {
+    const n = node();
+    if (!n?.mirrorOf) return n;
+    o.nodes.track(n.mirrorOf);
+    return o.doc.nodes.get(n.mirrorOf) ?? n;
+  };
+  // A mirror re-renders with its original: hold the original's signal while this row shows it.
+  createEffect(on(() => node()?.mirrorOf ?? null, (target) => {
+    if (!target) return;
+    o.nodes.acquire(target);
+    onCleanup(() => o.nodes.release(target));
+  }));
+  const mirror = () => !!node()?.mirrorOf;
+  const orphan = () => mirror() && !o.doc.nodes.has(node()!.mirrorOf!);
   const focused = () => !o.readOnly && o.focus()?.id === id;
   const editingText = () => focused() && !inNote(o.focus());
   const editingNote = () => focused() && inNote(o.focus());
@@ -87,8 +103,8 @@ export function Row(props: RowProps) {
     return !!n && o.rows.showsChildren(n);
   };
   const terms = () => o.filter()?.query.terms ?? [];
-  const pieces = createMemo(() => decorate(node()?.text ?? '', terms()));
-  const notePieces = createMemo(() => decorate(node()?.note ?? '', terms()));
+  const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
+  const notePieces = createMemo(() => decorate(content()?.note ?? '', terms()));
 
   /** A click in static text: a tag filters, a link leads to its bullet, anything else puts the caret there. */
   const onStaticMouseDown = (note: boolean) => (e: MouseEvent) => {
@@ -107,7 +123,7 @@ export function Row(props: RowProps) {
     }
     if (o.readOnly) return;
     const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
-    const length = (note ? node()?.note : node()?.text)?.length ?? 0;
+    const length = (note ? content()?.note : content()?.text)?.length ?? 0;
     o.setFocus(note ? { id, caret: caret ?? length, note: true } : { id, caret: caret ?? length });
     followDrag(note, caret ?? length);
   };
@@ -143,7 +159,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ done: !!node()?.done, selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
+      classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
       data-id={id}
       data-depth={props.depth}
       style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}
@@ -156,14 +172,15 @@ export function Row(props: RowProps) {
       <span
         ref={bullet}
         class="bullet"
-        classList={{ collapsed: folded(), todo: !!node()?.todo, checked: !!node()?.done }}
-        role={node()?.todo ? 'checkbox' : undefined}
-        aria-checked={node()?.todo ? !!node()?.done : undefined}
+        classList={{ collapsed: folded(), todo: !!content()?.todo, checked: !!content()?.done, mirror: mirror() }}
+        role={content()?.todo ? 'checkbox' : undefined}
+        aria-checked={content()?.todo ? !!content()?.done : undefined}
+        title={mirror() ? 'Зеркало: тот же пункт в другом месте; точка ведёт к оригиналу' : undefined}
         // No default on mousedown: DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
         // A held finger is a drag, not the browser's context menu.
         onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !node()?.todo && o.zoomTo(id)}
+        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !content()?.todo && o.zoomTo(id)}
       />
       <div class="body">
         <Show
@@ -179,7 +196,7 @@ export function Row(props: RowProps) {
         <Show
           when={editingNote()}
           fallback={
-            <Show when={node()?.note}>
+            <Show when={content()?.note}>
               <div class="note" onMouseDown={onStaticMouseDown(true)}>
                 <Pieces o={o} pieces={notePieces()} />
               </div>
@@ -206,13 +223,18 @@ const timeCommand = (o: Outliner, id: NodeId, el: HTMLElement, text: string, not
 
 /**
  * `[[` typed: closed with `]]` at once, the caret between, ready for the
- * title (and the suggestions, Suggest.tsx). Returns the text to keep.
+ * title (and the suggestions, Suggest.tsx). In a bullet's text `((` closes
+ * with `))` the same way (a mirror, model/mirrors.ts). Returns the text to keep.
  */
-const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: string) => void): string => {
-  if (e.isComposing || e.inputType !== 'insertText' || e.data !== '[') return text;
+const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: string) => void, mirrors = false): string => {
+  if (e.isComposing || e.inputType !== 'insertText') return text;
   const caret = selectionIn(el)?.[0];
-  if (caret === undefined || !opensLink(text, caret)) return text;
-  const next = `${text.slice(0, caret)}]]${text.slice(caret)}`;
+  if (caret === undefined) return text;
+  let closer: string;
+  if (e.data === '[' && opensLink(text, caret)) closer = ']]';
+  else if (mirrors && e.data === '(' && opensMirror(text, caret)) closer = '))';
+  else return text;
+  const next = `${text.slice(0, caret)}${closer}${text.slice(caret)}`;
   write(next);
   setCaret(el, caret);
   return next;
@@ -237,10 +259,10 @@ function beforeInput(e: InputEvent, o: Outliner, el: HTMLElement, read: () => st
   if (!sel || sel[0] !== sel[1]) return;
   const caret = sel[0];
   const text = read();
-  if (e.inputType === 'insertText' && e.data === ']' && closesLink(text, caret)) {
+  if (e.inputType === 'insertText' && ((e.data === ']' && closesLink(text, caret)) || (e.data === ')' && closesMirror(text, caret)))) {
     e.preventDefault();
     setCaret(el, caret + 1);
-  } else if (e.inputType === 'deleteContentBackward' && text[caret - 1] === '[' && text[caret] === ']') {
+  } else if (e.inputType === 'deleteContentBackward' && ((text[caret - 1] === '[' && text[caret] === ']') || (text[caret - 1] === '(' && text[caret] === ')'))) {
     e.preventDefault();
     const next = text.slice(0, caret - 1) + text.slice(caret + 1);
     write(next);
@@ -270,9 +292,12 @@ function Editable(props: { o: Outliner; id: NodeId }) {
   const o = props.o;
   const id = props.id;
   let el!: HTMLDivElement;
+  // Through a mirror, the original's text (model/mirrors.ts): tracked by both ids.
   const text = () => {
     o.nodes.track(id);
-    return o.doc.nodes.get(id)?.text ?? '';
+    const n = o.doc.nodes.get(id);
+    if (n?.mirrorOf) o.nodes.track(n.mirrorOf);
+    return n ? o.doc.content(id).text : '';
   };
 
   onMount(() => {
@@ -299,7 +324,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       setCaret(el, caret);
     }
     const write = (t: string) => (el.textContent = t);
-    o.type(id, closeLink(e, el, el.textContent ?? '', write));
+    o.type(id, closeLink(e, el, el.textContent ?? '', write, true));
     if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
   };
 
@@ -337,7 +362,9 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
   let el!: HTMLDivElement;
   const note = () => {
     o.nodes.track(id);
-    return o.doc.nodes.get(id)?.note ?? '';
+    const n = o.doc.nodes.get(id);
+    if (n?.mirrorOf) o.nodes.track(n.mirrorOf);
+    return n ? o.doc.content(id).note : '';
   };
   // An empty last line only shows with a placeholder "\n" after it (Chromium
   // adds one itself on Enter): the DOM holds the note plus that placeholder.

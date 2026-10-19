@@ -1,5 +1,5 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx } from '../model/commands';
+import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -256,6 +256,8 @@ export class Outliner {
    * A search in progress is re-run within the new scope.
    */
   zoomTo(id: NodeId | null): void {
+    // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
+    if (id && this.doc.has(id)) id = this.doc.origin(id);
     const target = id && id !== this.doc.root && this.doc.has(id) ? id : null;
     if (target === this.zoom()) return;
     batch(() => {
@@ -338,7 +340,7 @@ export class Outliner {
    * bullet zooms in.
    */
   pressBullet(id: NodeId): void {
-    if (!this.doc.get(id).todo) return this.zoomTo(id);
+    if (!this.doc.content(id).todo) return this.zoomTo(id);
     const cur = this.focus();
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }
@@ -451,7 +453,7 @@ export class Outliner {
    */
   insert(at: Focus, text: string, back = 0): void {
     this.run((ctx) => {
-      const n = ctx.doc.get(at.id);
+      const n = ctx.doc.content(at.id);
       const old = at.note ? n.note : n.text;
       const start = Math.max(0, at.caret - back);
       const next = old.slice(0, start) + text + old.slice(at.caret);
@@ -468,7 +470,7 @@ export class Outliner {
    */
   format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
     if (this.readOnly) return null;
-    const n = this.doc.get(at.id);
+    const n = this.doc.content(at.id);
     const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
     const place = (caret: number): Focus => (at.note ? { id: at.id, caret, note: true } : { id: at.id, caret });
     this.run((ctx) => {
@@ -477,6 +479,14 @@ export class Outliner {
       return place(next.end);
     }, place(end));
     return next;
+  }
+
+  /**
+   * `((title))` completed (Suggest.tsx): the bullet becomes a mirror of
+   * `target`, or a mirror goes in below it when the bullet holds other text.
+   */
+  makeMirror(id: NodeId, target: NodeId, start: number, end: number): void {
+    this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
   }
 
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */

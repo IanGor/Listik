@@ -15,7 +15,7 @@ export interface Ctx {
   rows: VisibleRows;
 }
 
-function insertNew(doc: Doc, parent: NodeId, index: number, text: string): NodeId {
+function insertNew(doc: Doc, parent: NodeId, index: number, text: string, mirrorOf?: NodeId): NodeId {
   const id = newId();
   const now = clock.now();
   doc.apply({
@@ -23,11 +23,14 @@ function insertNew(doc: Doc, parent: NodeId, index: number, text: string): NodeI
     parent,
     node: {
       id, order: doc.orderAt(parent, index), text, note: '', collapsed: false, todo: false, done: false,
-      created: now, updated: now, children: [],
+      created: now, updated: now, children: [], ...(mirrorOf ? { mirrorOf } : {}),
     },
   });
   return id;
 }
+
+/** A mirror never holds children of its own: they live with the original. */
+const holdsChildren = (doc: Doc, id: NodeId) => !doc.get(id).mirrorOf;
 
 function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
   const n = doc.get(id);
@@ -50,14 +53,40 @@ function expand(doc: Doc, id: NodeId): void {
   if (n.collapsed) doc.apply({ t: 'setCollapsed', id, from: true, to: false });
 }
 
+// Text, note and task state belong to the bullet a row shows (`Doc.content`):
+// through a mirror they change the original, and so every mirror of it.
+
 export function setText({ doc }: Ctx, id: NodeId, text: string): void {
-  const n = doc.get(id);
-  if (n.text !== text) doc.apply({ t: 'setText', id, from: n.text, to: text, at: clock.now() });
+  const n = doc.content(id);
+  if (n.text !== text) doc.apply({ t: 'setText', id: n.id, from: n.text, to: text, at: clock.now() });
 }
 
 export function setNote({ doc }: Ctx, id: NodeId, note: string): void {
+  const n = doc.content(id);
+  if (n.note !== note) doc.apply({ t: 'setNote', id: n.id, from: n.note, to: note, at: clock.now() });
+}
+
+/**
+ * `((title))` completed in a bullet: the bullet becomes a mirror of
+ * `target` when nothing else is written in it; otherwise the token leaves
+ * the text and the mirror goes in as the next sibling. A chain of mirrors
+ * is flattened to the original; a bullet never mirrors itself.
+ */
+export function makeMirror(ctx: Ctx, id: NodeId, target: NodeId, start: number, end: number): Focus | void {
+  const { doc } = ctx;
   const n = doc.get(id);
-  if (n.note !== note) doc.apply({ t: 'setNote', id, from: n.note, to: note, at: clock.now() });
+  const origin = doc.origin(target);
+  if (origin === id || origin === doc.root || origin === TRASH) return;
+  const rest = n.text.slice(0, start) + n.text.slice(end);
+  if (!rest.trim() && !n.mirrorOf && !n.note && !n.children.length) {
+    setText(ctx, id, '');
+    if (n.todo) untask(ctx, [id]);
+    doc.apply({ t: 'setMirror', id, from: null, to: origin });
+    return { id, caret: doc.content(id).text.length };
+  }
+  setText(ctx, id, rest);
+  const mirror = insertNew(doc, n.parent!, doc.index(id) + 1, '', origin);
+  return { id: mirror, caret: doc.content(mirror).text.length };
 }
 
 /**
@@ -65,9 +94,10 @@ export function setNote({ doc }: Ctx, id: NodeId, note: string): void {
  * already (for a selection: one press sets them all the same way).
  */
 export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
-  const value = !ids.every((id) => doc.get(id).done);
+  const value = !ids.every((id) => doc.content(id).done);
   for (const id of ids) {
-    if (doc.get(id).done !== value) doc.apply({ t: 'setDone', id, from: !value, to: value });
+    const n = doc.content(id);
+    if (n.done !== value) doc.apply({ t: 'setDone', id: n.id, from: !value, to: value });
   }
 }
 
@@ -78,17 +108,17 @@ export function toggleDone({ doc }: Ctx, ids: NodeId[]): void {
  */
 export function cycleTask(ctx: Ctx, ids: NodeId[]): void {
   const { doc } = ctx;
-  const plain = ids.filter((id) => !doc.get(id).todo);
-  if (plain.length) for (const id of plain) doc.apply({ t: 'setTodo', id, from: false, to: true });
+  const plain = ids.map((id) => doc.content(id)).filter((n) => !n.todo);
+  if (plain.length) for (const n of plain) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
   else toggleDone(ctx, ids);
 }
 
 /** Ctrl+Shift+L: tasks become plain bullets again (and so not done). */
 export function untask({ doc }: Ctx, ids: NodeId[]): void {
   for (const id of ids) {
-    const n = doc.get(id);
-    if (n.done) doc.apply({ t: 'setDone', id, from: true, to: false });
-    if (n.todo) doc.apply({ t: 'setTodo', id, from: true, to: false });
+    const n = doc.content(id);
+    if (n.done) doc.apply({ t: 'setDone', id: n.id, from: true, to: false });
+    if (n.todo) doc.apply({ t: 'setTodo', id: n.id, from: true, to: false });
   }
 }
 
@@ -119,16 +149,17 @@ export function appendChild({ doc }: Ctx, parent: NodeId): Focus {
   return { id: insertNew(doc, parent, doc.get(parent).children.length, ''), caret: 0 };
 }
 
-/** Enter: split the bullet at the caret. */
+/** Enter: split the bullet at the caret (a mirror's text is the original's; the new bullet is a plain sibling). */
 export function split({ doc, rows }: Ctx, id: NodeId, caret: number): Focus {
   const n = doc.get(id);
+  const c = doc.content(id);
   const parent = n.parent!;
-  if (caret === 0 && n.text.length > 0) {
+  if (caret === 0 && c.text.length > 0) {
     insertNew(doc, parent, doc.index(id), '');
     return { id, caret: 0 };
   }
-  const after = n.text.slice(caret);
-  setText({ doc, rows }, id, n.text.slice(0, caret));
+  const after = c.text.slice(caret);
+  setText({ doc, rows }, id, c.text.slice(0, caret));
   if (rows.showsChildren(n)) {
     return { id: insertNew(doc, id, 0, after), caret: 0 };
   }
@@ -155,14 +186,17 @@ function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
 export function insertTrees(ctx: Ctx, id: NodeId, start: number, end: number, trees: Tree[]): Focus {
   const { doc, rows } = ctx;
   const n = doc.get(id);
-  const before = n.text.slice(0, start);
-  const after = n.text.slice(end);
+  const text = doc.content(id).text;
+  const before = text.slice(0, start);
+  const after = text.slice(end);
   if (!trees.length) {
     setText(ctx, id, before + after);
     return { id, caret: start };
   }
   if (countTrees(trees) > 2) rows.expectMany();
   const now = clock.now();
+  // A mirror takes no children: the first tree's go in as bullets below it.
+  if (n.mirrorOf && trees[0].children.length) trees = [{ ...trees[0], children: [] }, ...trees[0].children, ...trees.slice(1)];
   const last = trees.length - 1;
   const [first] = trees;
   setText(ctx, id, before + first.text + (last === 0 ? after : ''));
@@ -204,13 +238,17 @@ export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): 
  */
 export function mergeUp({ doc, rows }: Ctx, id: NodeId): Focus | void {
   const n = doc.get(id);
-  if (n.children.length > 0 || n.note) return;
+  const c = doc.content(id);
+  if (n.children.length > 0 || c.note) return;
   const i = rows.indexOf(id);
   if (i <= 0) return;
   const prevId = rows.ids[i - 1];
-  const prev = doc.get(prevId);
+  const prev = doc.content(prevId);
   const caret = prev.text.length;
-  if (n.text) setText({ doc, rows }, prevId, prev.text + n.text);
+  // A mirror's text belongs to the original, so a mirror only goes when it reads empty; nor is anything merged into one.
+  if (n.mirrorOf && c.text) return;
+  if (c.text && doc.get(prevId).mirrorOf) return;
+  if (c.text) setText({ doc, rows }, prevId, prev.text + c.text);
   remove(doc, id);
   return { id: prevId, caret };
 }
@@ -232,6 +270,7 @@ export function indent({ doc }: Ctx, id: NodeId): void {
   const i = doc.index(id);
   if (i === 0) return;
   const prevId = doc.get(doc.get(id).parent!).children[i - 1];
+  if (!holdsChildren(doc, prevId)) return;
   expand(doc, prevId);
   moveTo(doc, id, prevId, doc.get(prevId).children.length);
 }
@@ -255,6 +294,7 @@ export function moveUp({ doc, rows }: Ctx, id: NodeId): void {
   const pi = doc.index(parent.id);
   if (pi === 0) return;
   const target = doc.get(parent.parent!).children[pi - 1];
+  if (!holdsChildren(doc, target)) return;
   expand(doc, target);
   moveTo(doc, id, target, doc.get(target).children.length);
 }
@@ -269,6 +309,7 @@ export function moveDown({ doc, rows }: Ctx, id: NodeId): void {
   const pi = uncles.indexOf(parent.id);
   if (pi === uncles.length - 1) return;
   const target = uncles[pi + 1];
+  if (!holdsChildren(doc, target)) return;
   expand(doc, target);
   moveTo(doc, id, target, 0);
 }
@@ -281,14 +322,17 @@ export function moveDown({ doc, rows }: Ctx, id: NodeId): void {
 function canMoveUp({ doc, rows }: Ctx, id: NodeId): boolean {
   const parent = doc.get(id).parent!;
   if (doc.index(id) > 0) return true;
-  return parent !== doc.root && parent !== rows.top && doc.index(parent) > 0;
+  if (parent === doc.root || parent === rows.top || doc.index(parent) === 0) return false;
+  return holdsChildren(doc, doc.get(doc.get(parent).parent!).children[doc.index(parent) - 1]);
 }
 
 function canMoveDown({ doc, rows }: Ctx, id: NodeId): boolean {
   const parent = doc.get(doc.get(id).parent!);
   if (doc.index(id) < parent.children.length - 1) return true;
   if (parent.id === doc.root || parent.id === rows.top) return false;
-  return doc.index(parent.id) < doc.get(parent.parent!).children.length - 1;
+  const uncles = doc.get(parent.parent!).children;
+  const pi = doc.index(parent.id);
+  return pi < uncles.length - 1 && holdsChildren(doc, uncles[pi + 1]);
 }
 
 /** Deletes the bullets with their subtrees; focuses the row above them, or below. */
@@ -341,6 +385,7 @@ export function moveDownMany(ctx: Ctx, roots: NodeId[]): void {
  * moving bullet still holds.
  */
 export function moveManyTo({ doc, rows }: Ctx, ids: NodeId[], parent: NodeId, after: NodeId | null): void {
+  if (!holdsChildren(doc, parent)) return;
   const moving = new Set(ids);
   for (let p: NodeId | null = parent; p !== null; p = doc.get(p).parent) if (moving.has(p)) return;
   const children = doc.get(parent).children;

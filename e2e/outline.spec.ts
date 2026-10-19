@@ -1166,6 +1166,66 @@ test.describe('links', () => {
   });
 });
 
+test.describe('mirrors', () => {
+  const list = (page: Page) => page.getByRole('listbox', { name: 'Зеркала' });
+  const crumbs = (page: Page) => page.locator('.crumbs .crumb');
+
+  test('(( offers bullets; taking one makes the bullet a mirror: a diamond, shared text, the dot leads to the original', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((');
+    await expect(editing(page)).toHaveText('(())');
+    await expect(list(page)).toBeVisible();
+    await page.keyboard.type('Часть втор');
+    await page.keyboard.press('Enter');
+    await expect(list(page)).toHaveCount(0);
+    const mirror = page.locator('.row.mirror');
+    await expect(mirror).toHaveCount(1);
+    await expect(mirror.locator('.bullet')).toHaveClass(/mirror/);
+    await expect(editing(page)).toHaveText('Часть вторая');
+
+    // Typed in the mirror, the text changes in the original row too.
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' (зеркало)');
+    await expect(page.locator('.row .text', { hasText: 'Часть вторая (зеркало)' })).toHaveCount(2);
+    // Typed in the original, it changes in the mirror.
+    await edit(page, 'Часть вторая (зеркало)');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.row .text', { hasText: 'Часть вторая (зеркало' })).toHaveCount(2);
+    await expect(page.locator('.row.mirror .text')).toHaveText('Часть вторая (зеркало');
+
+    // The mirror's dot leads to the original, where it stands in the outline.
+    await page.locator('.row.mirror .bullet').click();
+    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая (зеркало']);
+  });
+
+  test('(( with other text puts the mirror below; ) steps over; Backspace takes out an empty pair', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('см. ((Том перв');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.row.mirror')).toHaveCount(1);
+    await expect(page.locator('.row.mirror .text')).toHaveText('Том первый');
+    await expect(page.locator('.row .text', { hasText: /^см\.\s*$/ })).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    // Both ")" typed step over the brackets already there.
+    await page.keyboard.type('((x))!');
+    await expect(editing(page)).toHaveText('((x))!');
+    await page.keyboard.press('Escape');
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((');
+    await expect(editing(page)).toHaveText('(())');
+    await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('()');
+    await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('');
+  });
+});
+
 test.describe('bold and italic', () => {
   test('**bold** and *italic* show styled, markers hidden; editing shows the markers', async ({ page }) => {
     await edit(page, 'Том второй');

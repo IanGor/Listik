@@ -18,6 +18,12 @@ export interface OutlineNode {
   done: boolean;
   created: number;
   updated: number;
+  /**
+   * A mirror (typed as `((title))`): this bullet shows and edits the text,
+   * note and task state of the bullet `mirrorOf`, wherever it stands. Its
+   * own text, note and flags are unused; it never has children of its own.
+   */
+  mirrorOf: NodeId | null;
 }
 
 /** Self-contained copy of a subtree: enough to re-insert it after removal. */
@@ -31,6 +37,7 @@ export interface NodeSnapshot {
   done: boolean;
   created: number;
   updated: number;
+  mirrorOf?: NodeId;
   children: NodeSnapshot[];
 }
 
@@ -53,7 +60,9 @@ export type Op =
   | { t: 'setTodo'; id: NodeId; from: boolean; to: boolean }
   | { t: 'setDone'; id: NodeId; from: boolean; to: boolean }
   /** `at`: edit time, as for setText. */
-  | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number };
+  | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number }
+  /** Makes the bullet a mirror of `to` (or a plain bullet again with null). */
+  | { t: 'setMirror'; id: NodeId; from: NodeId | null; to: NodeId | null };
 
 /** Where the caret should go after a command. */
 export interface Focus {
