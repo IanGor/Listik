@@ -287,7 +287,8 @@ export class Outliner {
 
   /**
    * Zoom into a bullet: it becomes the title, its children the top level.
-   * A search in progress is re-run within the new scope.
+   * A search in progress is cleared: you went to a place found, so it shows
+   * whole (a search started inside a zoom covers only that bullet).
    */
   zoomTo(key: RowKey | null): void {
     let id = key && nodeOf(key);
@@ -296,9 +297,10 @@ export class Outliner {
     const target = id && id !== this.doc.root && this.doc.has(id) ? id : null;
     if (target === this.zoom()) return;
     batch(() => {
+      // The new top first: under the filter that rebuild lists only the paths, and the clear then lists the place.
       this.rows.setTop(target ?? this.doc.root);
       this.setZoomSignal(target);
-      if (this.filter()) this.applyQuery();
+      if (this.query() || this.filter()) this.setQuery('', true);
       this.syncRows();
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);

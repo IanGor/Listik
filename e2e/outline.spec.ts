@@ -380,6 +380,24 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '  Часть вторая (черновик)', '    первая мысль', DEMO[5]]);
   });
 
+  test('going into a bullet found by a search clears the search: the bullet shows whole', async ({ page }) => {
+    await page.keyboard.press('Control+f');
+    await page.locator('.search').fill('Часть первая');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    // Found folded, as matches are; its bullet leads inside.
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1]]);
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    await expect(title(page)).toHaveText('Часть первая');
+    await expect(page.locator('.search')).toHaveValue('');
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
+    expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+    // Leaving by the path does not bring the search back either.
+    await page.locator('.search').fill('шерер');
+    await crumbs(page).filter({ hasText: 'Главная' }).click();
+    await expect(page.locator('.search')).toHaveValue('');
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
   test('inside a zoom, search covers only the zoomed-in bullet and Shift+Tab cannot leave it', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('Том');
