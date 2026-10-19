@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import * as cmd from '../model/commands';
 import { timeOfDay } from '../model/time';
 import type { Focus } from '../model/types';
@@ -131,7 +131,8 @@ const SETS: SubSet[] = [
  * Several sets share its place (ACTIONS, SETS). A button with a set behind
  * it slides the main set out to the left and its set in from the right;
  * "Назад", or a pick in a set that does not stay, slides back. Another
- * bullet always starts on the main set.
+ * bullet always starts on the main set. A set too wide for the screen (a
+ * small phone, a wide system monospace) scrolls sideways.
  *
  * In the zoom title (or its note) the bar offers what applies there: the
  * note, formatting, the time, undo and redo.
@@ -184,22 +185,45 @@ export function EditBar(props: { o: Outliner }) {
 
   const actions = () => (inTitle() ? TITLE_ACTIONS : ROW_ACTIONS);
 
-  const button = (label: string, icon: string[], onClick: () => void) => (
-    <button type="button" tabIndex={-1} title={label} aria-label={label} onClick={onClick}>
+  const button = (label: string, icon: string[], onClick: () => void, cls?: string) => (
+    <button type="button" tabIndex={-1} class={cls} title={label} aria-label={label} onClick={onClick}>
       <Icon paths={icon} />
     </button>
   );
 
+  /**
+   * A set wider than the screen scrolls (index.css): it opens at its start,
+   * and while more of it lies to the right, that edge fades.
+   */
+  const scrolling = (el: HTMLElement, name: SetName) => {
+    const more = () => el.classList.toggle('more', el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    el.addEventListener('scroll', more, { passive: true });
+    const observer = new ResizeObserver(more);
+    observer.observe(el);
+    createEffect(on(shown, (s) => {
+      if (s !== name) return;
+      el.scrollLeft = 0;
+      more();
+    }));
+    onCleanup(() => observer.disconnect());
+  };
+
   return (
     <Show when={touch() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
-        <div class="editbar-set editbar-main" inert={shown() !== 'main'}>
+        <div ref={(el) => scrolling(el, 'main')} class="editbar-set editbar-main" inert={shown() !== 'main'}>
           <For each={actions()}>{(a) => button(a.label, a.icon, () => press(a))}</For>
         </div>
         <For each={SETS}>
           {(set) => (
-            <div class={`editbar-set editbar-sub editbar-${set.name}`} role="group" aria-label={set.label} inert={shown() !== set.name}>
-              {button('Назад', ['M15 6l-6 6 6 6'], () => setShown('main'))}
+            <div
+              ref={(el) => scrolling(el, set.name)}
+              class={`editbar-set editbar-sub editbar-${set.name}`}
+              role="group"
+              aria-label={set.label}
+              inert={shown() !== set.name}
+            >
+              {button('Назад', ['M15 6l-6 6 6 6'], () => setShown('main'), 'editbar-back')}
               <For each={set.items}>
                 {(item) => (
                   <button

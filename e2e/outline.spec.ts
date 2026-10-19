@@ -1106,14 +1106,33 @@ test.describe('touch screen', () => {
     await expect(action(page, 'Ссылка')).toBeEnabled();
   });
 
-  test('every set of the bar fits a small phone without scrolling', async ({ page }) => {
-    await page.setViewportSize({ width: 360, height: 800 });
+  test('the main set fits a small phone; a wider set scrolls under a finger, "Назад" staying put', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 19, 23, 40));
+    await page.setViewportSize({ width: 320, height: 800 });
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
-    await page.setViewportSize({ width: 360, height: 480 });
+    await page.setViewportSize({ width: 320, height: 480 });
     await expect(bar(page)).toBeVisible();
-    for (const set of await page.locator('.editbar-set').all()) {
-      expect(await set.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
-    }
+    const main = page.locator('.editbar-main');
+    expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await expect(main).not.toHaveClass(/more/);
+
+    await action(page, 'Вставить').tap();
+    const insert = page.locator('.editbar-insert');
+    expect(await insert.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+    await expect(insert).toHaveClass(/more/);
+    const back = insert.getByRole('button', { name: 'Назад' });
+    const left = async () => Math.round((await back.boundingBox())!.x - (await insert.boundingBox())!.x);
+    // Once the set has slid in: "Назад" at its left edge, before and after scrolling.
+    await expect.poll(left).toBe(0);
+    await insert.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+    await expect(insert).not.toHaveClass(/more/);
+    expect(await left()).toBe(0);
+    await page.keyboard.press('Control+Home');
+    await action(page, 'Время').tap();
+    await expect(editing(page)).toHaveText('23:40Том второй');
+    // Opened again, the set starts at its beginning.
+    await action(page, 'Вставить').tap();
+    expect(await insert.evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
   test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {

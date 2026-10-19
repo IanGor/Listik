@@ -1117,7 +1117,14 @@ mark,
   display: flex;
   gap: 2px;
   justify-content: space-around;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
   transition: transform 220ms var(--ease-out), opacity 160ms var(--ease-out);
+}
+
+.editbar-set::-webkit-scrollbar {
+  display: none;
 }
 
 .editbar-main[inert] {
@@ -1125,8 +1132,27 @@ mark,
   transform: translateX(-32px);
 }
 
+/* A set wider than the screen scrolls sideways under a finger, "Назад"
+   staying put at its left; with more of it to the right, that edge fades. */
 .editbar-sub {
   justify-content: flex-start;
+}
+
+.editbar-sub > button {
+  flex: none;
+}
+
+.editbar-sub > .editbar-back {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 44px;
+  background: var(--canvas);
+  box-shadow: 10px 0 8px var(--canvas);
+}
+
+.editbar-set.more {
+  mask-image: linear-gradient(to left, transparent, #000 40px);
 }
 
 .editbar-sub[inert] {
@@ -1173,13 +1199,6 @@ mark,
   font-size: 14px;
   font-weight: 600;
   color: var(--link);
-}
-
-/* A small phone: the insertions go by their brackets and icon alone. */
-@media (max-width: 380px) {
-  .editbar-insert .editbar-labelled > :last-child {
-    display: none;
-  }
 }
 
 /* Reduced motion: the arrow just shows its new state. */
