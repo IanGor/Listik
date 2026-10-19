@@ -12,7 +12,8 @@ import { Pieces } from './Row';
  * The path from the root to where you are, the place itself included:
  * "Главная" alone on the home page. It stays above the list while the
  * zoomed-in bullet's title (ZoomTitle) scrolls away with it, as in Workflowy.
- * One line; a long path scrolls sideways and shows its end.
+ * One line that never shortens a crumb: a long path scrolls sideways and
+ * stays at its end, so the bullets next to where you are show whole.
  */
 export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   const o = props.o;
@@ -27,13 +28,26 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
     return out;
   });
 
-  createEffect(on(path, () => {
+  /** Shows the end of the path; a faded left edge says there is more of it. */
+  const toEnd = () => {
     nav.scrollLeft = nav.scrollWidth;
-  }));
+    clip();
+  };
+  const clip = () => nav.classList.toggle('clipped', nav.scrollLeft > 1);
+  // Kept at the end when the path changes, a crumb is renamed or the bar is resized.
+  createEffect(on(() => path().map((id) => {
+    o.nodes.track(id);
+    return o.doc.nodes.get(id)?.text;
+  }).join('\n'), toEnd));
+  onMount(() => {
+    const observer = new ResizeObserver(toEnd);
+    observer.observe(nav);
+    onCleanup(() => observer.disconnect());
+  });
 
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
-      <nav ref={nav} class="crumbs" aria-label="Путь">
+      <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
         <Show
           when={path().length}
           fallback={<span class="crumb current" aria-current="page">Главная</span>}

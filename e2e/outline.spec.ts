@@ -285,6 +285,27 @@ test.describe('zoom', () => {
     await expect(page.locator('.crumbs [aria-current="page"]')).toBeVisible();
   });
 
+  test('a path wider than the screen scrolls instead of shortening crumbs, its end in view', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 600 });
+    await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
+    const nav = page.locator('.crumbs');
+    await expect(crumbs(page)).toHaveCount(4);
+    // Scrolled to the end: the parent shows whole, the start is out of view behind a faded edge.
+    await expect(nav).toHaveClass(/clipped/);
+    const box = (await nav.boundingBox())!;
+    const parent = (await crumbs(page).filter({ hasText: 'Часть первая' }).boundingBox())!;
+    expect(parent.x).toBeGreaterThanOrEqual(box.x);
+    expect(parent.x + parent.width).toBeLessThanOrEqual(box.x + box.width);
+    // No crumb above the current one is cut short.
+    for (const c of await crumbs(page).filter({ hasNotText: 'Eh bien' }).all()) {
+      expect(await c.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    }
+    await nav.evaluate((el) => (el.scrollLeft = 0));
+    await expect(nav).not.toHaveClass(/clipped/);
+    await crumbs(page).filter({ hasText: 'Главная' }).click();
+    await expect(title(page)).toHaveCount(0);
+  });
+
   test('the title shows tags like a row: a click on one filters, a click elsewhere edits there', async ({ page }) => {
     await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
     await expect(title(page).locator('.tag')).toHaveText('#салон');

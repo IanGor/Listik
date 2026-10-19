@@ -610,7 +610,9 @@ mark,
   box-shadow: 0 1px 0 var(--hairline);
 }
 
-/* One line: a long path scrolls sideways, its end in view. */
+/* One line: a long path scrolls sideways (by a finger too), its end in
+   view, so the bullets nearest to where you are show whole. With more of
+   the path to the left, that edge fades out. */
 .crumbs {
   display: flex;
   gap: 6px;
@@ -618,9 +620,18 @@ mark,
   padding: 2px 6px;
   margin: -2px -6px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   font-size: 14px;
   color: var(--muted);
   scrollbar-width: none;
+}
+
+.crumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.crumbs.clipped {
+  mask-image: linear-gradient(to right, transparent, #000 32px);
 }
 
 .zoomhead {
@@ -632,12 +643,10 @@ mark,
 }
 
 .crumb {
-  max-width: 28ch;
+  flex: none;
   padding: 2px 6px;
   margin: 0 -6px;
-  overflow: hidden;
   color: var(--muted);
-  text-overflow: ellipsis;
   white-space: nowrap;
   background: none;
   border: none;
@@ -651,10 +660,14 @@ mark,
   background: var(--surface);
 }
 
-/* Where you are: the end of the path, not a link. */
+/* Where you are: the end of the path, not a link. Its whole text is the
+   title just below, so a long one gives way to the bullets above it. */
 .crumb.current,
 .crumb.current:hover {
   flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text);
   background: none;
   cursor: default;
