@@ -926,10 +926,16 @@ test.describe('touch screen', () => {
     expect((await outline(page)).slice(-2)).toEqual(['Часть вторая', 'Том второй']);
     await expect(editing(page)).toBeFocused();
     await action(page, 'Вложить').tap();
-    await action(page, 'Переместить вверх').tap();
+    // Up and down share a set, which stays for a run of moves.
+    await action(page, 'Переместить').tap();
+    await action(page, 'Вверх').tap();
     expect((await outline(page))[1]).toBe('  Часть вторая');
-    await action(page, 'Переместить вниз').tap();
+    await action(page, 'Вниз').tap();
     expect(await outline(page)).toEqual(DEMO);
+    await action(page, 'Вверх').tap();
+    await action(page, 'Вниз').tap();
+    expect(await outline(page)).toEqual(DEMO);
+    await page.locator('.editbar-move').getByRole('button', { name: 'Назад' }).tap();
 
     await action(page, 'Задача: сделать, отметить, снять отметку').tap();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet.todo')).toHaveCount(1);
@@ -1031,6 +1037,8 @@ test.describe('touch screen', () => {
     await keyboard(page, true);
     const main = page.locator('.editbar-main');
     const formats = page.locator('.editbar-format');
+    // The main set fits the phone without scrolling.
+    expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await expect(formats).toHaveAttribute('inert', '');
     await action(page, 'Оформление').tap();
     await expect(main).toHaveAttribute('inert', '');
@@ -1050,7 +1058,7 @@ test.describe('touch screen', () => {
     await expect(main).not.toHaveAttribute('inert', '');
 
     await action(page, 'Оформление').tap();
-    await action(page, 'Назад').tap();
+    await formats.getByRole('button', { name: 'Назад' }).tap();
     await expect(main).not.toHaveAttribute('inert', '');
     await expect(editing(page)).toHaveText('Том **второй**');
   });
@@ -1060,11 +1068,52 @@ test.describe('touch screen', () => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await keyboard(page, true);
     await page.keyboard.press('Control+Home');
-    await action(page, 'Вставить время').tap();
+    await action(page, 'Вставить').tap();
+    await action(page, 'Время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');
     await expect(editing(page)).toBeFocused();
     await page.keyboard.type(' ');
     await expect(editing(page)).toHaveText('23:40 Том второй');
+  });
+
+  test('"Вставить" puts in a link or a mirror with the caret between the brackets, and the suggestions open', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await keyboard(page, true);
+    await action(page, 'Вставить').tap();
+    await action(page, 'Зеркало').tap();
+    await expect(editing(page)).toHaveText('(())');
+    const mirrors = page.getByRole('listbox', { name: 'Зеркала' });
+    await expect(mirrors).toBeVisible();
+    await page.keyboard.type('Часть втор');
+    await mirrors.getByRole('option').first().tap();
+    await expect(page.locator('.row.mirror')).toHaveCount(1);
+
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' см. ');
+    await action(page, 'Вставить').tap();
+    await action(page, 'Ссылка').tap();
+    await expect(editing(page)).toHaveText('Том второй см. [[]]');
+    await expect(page.getByRole('listbox', { name: 'Ссылки' })).toBeVisible();
+    // The set went back to the main one after the pick.
+    await expect(page.locator('.editbar-insert')).toHaveAttribute('inert', '');
+
+    // In a note a mirror is just brackets: its button is off there.
+    await action(page, 'Заметка').tap();
+    await action(page, 'Вставить').tap();
+    await expect(action(page, 'Зеркало')).toBeDisabled();
+    await expect(action(page, 'Ссылка')).toBeEnabled();
+  });
+
+  test('every set of the bar fits a small phone without scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await page.setViewportSize({ width: 360, height: 480 });
+    await expect(bar(page)).toBeVisible();
+    for (const set of await page.locator('.editbar-set').all()) {
+      expect(await set.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    }
   });
 
   test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {

@@ -493,9 +493,10 @@ export class Outliner {
   /**
    * Puts `text` at the caret, in a bullet's text or its note, in place of the
    * `back` characters before the caret (a typed command). One undo step,
-   * which brings back what was replaced.
+   * which brings back what was replaced. The caret goes after the text, or
+   * `caret` characters into it (between the brackets of `[[]]`).
    */
-  insert(at: Focus, text: string, back = 0): void {
+  insert(at: Focus, text: string, back = 0, caret = text.length): void {
     if (this.isMirror(at.id)) return this.mirrorReadOnly();
     this.run((ctx) => {
       const n = ctx.doc.content(nodeOf(at.id));
@@ -504,7 +505,7 @@ export class Outliner {
       const next = old.slice(0, start) + text + old.slice(at.caret);
       if (at.note) setNote(ctx, at.id, next);
       else setText(ctx, at.id, next);
-      return { ...at, caret: start + text.length };
+      return { ...at, caret: start + caret };
     }, at);
   }
 

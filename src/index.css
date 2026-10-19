@@ -1004,8 +1004,9 @@ mark,
   border-top: 1px solid var(--hairline);
 }
 
-/* Two sets in one place (EditBar.tsx): the one away slides off to its side
-   and fades, the other comes in from the opposite one. */
+/* Several sets in one place (EditBar.tsx): the main one and the sets its
+   buttons open. The one away slides off to its side and fades, the other
+   comes in from the opposite one. */
 .editbar-set {
   position: absolute;
   inset: 4px 8px auto;
@@ -1020,11 +1021,11 @@ mark,
   transform: translateX(-32px);
 }
 
-.editbar-format {
+.editbar-sub {
   justify-content: flex-start;
 }
 
-.editbar-format[inert] {
+.editbar-sub[inert] {
   opacity: 0;
   transform: translateX(32px);
 }
@@ -1049,19 +1050,37 @@ mark,
   background: var(--surface-2);
 }
 
-/* A format says what it does in its own style: "Жирный" bold, "Курсив" italic. */
+.editbar button:disabled {
+  opacity: 0.35;
+}
+
+/* In a set, a button says what it does: a format in its own style
+   ("Жирный" bold, "Курсив" italic), an insertion with the brackets it types. */
 .editbar .editbar-labelled {
   display: flex;
   flex: none;
   gap: 8px;
   max-width: none;
-  padding: 0 16px;
+  padding: 0 12px;
   font-size: 15px;
+}
+
+.editbar-glyph {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--link);
+}
+
+/* A small phone: the insertions go by their brackets and icon alone. */
+@media (max-width: 380px) {
+  .editbar-insert .editbar-labelled > :last-child {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .editbar-main[inert],
-  .editbar-format[inert] {
+  .editbar-sub[inert] {
     transform: none;
   }
 }
