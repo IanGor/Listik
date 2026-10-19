@@ -859,8 +859,13 @@ mark,
 
 /* --- Drag and drop ----------------------------------------------------------- */
 
+/* A finger on a bullet may still scroll the list up and down; held still,
+   it picks the bullet up (drag.ts). No text selection or callout on the hold. */
 .bullet {
-  touch-action: none;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body.is-dragging,

@@ -20,6 +20,10 @@ interface Elements {
 
 /** Pointer travel that turns a press on a bullet into a drag; less is a click (zoom in). */
 const THRESHOLD = 4;
+/** A finger held this long on a bullet picks it up, ms. */
+const LONG_PRESS = 350;
+/** A finger that travels this far before that scrolls or swipes instead, px. */
+const TOUCH_SLOP = 8;
 /** Distance from the scroller's edge where a drag scrolls the list, px. */
 const EDGE = 48;
 
@@ -28,6 +32,11 @@ const EDGE = 48;
  * zooms in. A drag moves the bullet, or the whole selection if the bullet is
  * part of it; the drop line shows the place and the level, which follows the
  * pointer's x within what is allowed there.
+ *
+ * A finger works the same way except how a drag starts: the finger is held
+ * still for LONG_PRESS first. Moving sooner is a scroll (the bullet allows
+ * vertical panning, index.css), and the browser then cancels the pointer.
+ * Once picked up, Row.tsx stops the panning, so the finger moves the bullet.
  */
 export function createDrag(o: Outliner, el: () => Elements) {
   const [target, setTarget] = createSignal<DropTarget | null>(null);
@@ -45,6 +54,14 @@ export function createDrag(o: Outliner, el: () => Elements) {
     let inside = new Set<NodeId>();
     let pointer = { x: startX, y: startY };
     let scrollFrame = 0;
+    const finger = e.pointerType === 'touch';
+    const hold = finger
+      ? window.setTimeout(() => {
+          begin();
+          navigator.vibrate?.(10);
+          setTarget(locate());
+        }, LONG_PRESS)
+      : 0;
 
     const begin = () => {
       dragging = true;
@@ -132,7 +149,10 @@ export function createDrag(o: Outliner, el: () => Elements) {
     const onMove = (ev: PointerEvent) => {
       pointer = { x: ev.clientX, y: ev.clientY };
       if (!dragging) {
-        if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < THRESHOLD) return;
+        const travel = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+        // A finger on the move before the hold is up: not a press at all.
+        if (finger) return void (travel > TOUCH_SLOP && finish(false));
+        if (travel < THRESHOLD) return;
         begin();
       }
       setTarget(locate());
@@ -143,6 +163,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
       handle.removeEventListener('pointerup', onUp);
       handle.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('keydown', onKey, true);
+      clearTimeout(hold);
       cancelAnimationFrame(scrollFrame);
       const t = target();
       setTarget(null);

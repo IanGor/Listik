@@ -735,6 +735,43 @@ test.describe('touch screen', () => {
     await expect(page.locator('[contenteditable]')).toHaveCount(0);
   });
 
+  /** A finger down on a row's bullet, optionally held, moved in steps to (x, y), and lifted. */
+  async function finger(page: Page, from: string, opts: { hold: number; to?: (b: { x: number; y: number }) => { x: number; y: number } }) {
+    const cdp = await page.context().newCDPSession(page);
+    const box = (await page.locator('.row', { hasText: from }).locator('.bullet').first().boundingBox())!;
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', p?: { x: number; y: number }) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
+    await touch('touchStart', start);
+    await page.waitForTimeout(opts.hold);
+    const end = opts.to?.(start);
+    if (end) {
+      for (let i = 1; i <= 8; i++) {
+        await touch('touchMove', { x: start.x + ((end.x - start.x) * i) / 8, y: start.y + ((end.y - start.y) * i) / 8 });
+      }
+    }
+    await touch('touchEnd');
+    await cdp.detach();
+  }
+
+  test('a tap on a bullet zooms in; a held bullet drags; a swipe from it does neither', async ({ page }) => {
+    // Swipe: the finger moves at once.
+    await finger(page, 'Часть вторая', { hold: 0, to: (s) => ({ x: s.x, y: s.y + 60 }) });
+    await expect(page.locator('.drop-line')).toHaveCount(0);
+    await expect(page.locator('.zoom-title')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+
+    // Hold, then carry it below "Том второй", one level in.
+    const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+    await finger(page, 'Часть первая', { hold: 500, to: () => ({ x: target.x + 10 + indent, y: target.y + target.height * 0.75 }) });
+    expect(await outline(page)).toEqual(['Том первый', '  Часть вторая', 'Том второй', '  Часть первая', ...DEMO.slice(2, 4)]);
+
+    // A short tap: in.
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').tap();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+  });
+
   test('fold arrows show without hover and fold at a tap', async ({ page }) => {
     const toggle = page.locator('.row', { hasText: 'Том первый' }).locator('.toggle');
     await expect(toggle).toHaveCSS('opacity', '1');

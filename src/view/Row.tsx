@@ -40,7 +40,17 @@ export function Row(props: RowProps) {
   const o = props.o;
   const id = props.id;
   let el!: HTMLDivElement;
+  let bullet!: HTMLSpanElement;
   onMount(() => onCleanup(props.observe(el)));
+  // A finger that picked the bullet up (drag.ts) moves it instead of
+  // scrolling the list. Must be a non-passive listener of its own.
+  onMount(() => {
+    const hold = (e: TouchEvent) => {
+      if (o.dragged().size && e.cancelable) e.preventDefault();
+    };
+    bullet.addEventListener('touchmove', hold, { passive: false });
+    onCleanup(() => bullet.removeEventListener('touchmove', hold));
+  });
   o.nodes.acquire(id);
   onCleanup(() => o.nodes.release(id));
 
@@ -127,12 +137,15 @@ export function Row(props: RowProps) {
         </span>
       </Show>
       <span
+        ref={bullet}
         class="bullet"
         classList={{ collapsed: folded(), todo: !!node()?.todo, checked: !!node()?.done }}
         role={node()?.todo ? 'checkbox' : undefined}
         aria-checked={node()?.todo ? !!node()?.done : undefined}
         // No default on mousedown: DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
+        // A held finger is a drag, not the browser's context menu.
+        onContextMenu={(e) => e.preventDefault()}
         onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !node()?.todo && o.zoomTo(id)}
       />
       <div class="body">
