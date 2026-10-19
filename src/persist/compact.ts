@@ -1,4 +1,5 @@
 import { TRASH_TTL, purgeTrash } from '../model/trash';
+import { plainCodec, type Codec } from './codec';
 import { done, readAll } from './db';
 import { deserialize, serialize } from './serialize';
 
@@ -9,19 +10,24 @@ import { deserialize, serialize } from './serialize';
  * new snapshot. Works on the database alone, so it can run in a worker.
  * Returns the number of ops folded.
  */
-export async function compactLog(db: IDBDatabase): Promise<number> {
+export async function compactLog(db: IDBDatabase, codec: Codec = plainCodec, force = false): Promise<number> {
   const { snapshot, batches, lastKey } = await readAll(db);
-  if (!snapshot || lastKey === undefined) return 0;
-  const doc = deserialize(snapshot);
+  if (!snapshot || (lastKey === undefined && !force)) return 0;
+  const doc = deserialize(await codec.decodeSnapshot(snapshot));
   let folded = 0;
-  for (const batch of batches) {
+  for (const record of batches) {
+    const batch = await codec.decodeBatch(record);
     for (const op of batch) doc.apply(op);
     folded += batch.length;
   }
   purgeTrash(doc, Date.now() - TRASH_TTL);
-  const json = serialize(doc);
+  const record = await codec.encodeSnapshot(serialize(doc));
   const tx = db.transaction(['meta', 'oplog'], 'readwrite');
-  tx.objectStore('meta').put(json, 'snapshot');
+  tx.objectStore('meta').put(record, 'snapshot');
+  if (lastKey === undefined) {
+    await done(tx);
+    return 0;
+  }
   tx.objectStore('oplog').delete(IDBKeyRange.upperBound(lastKey));
   await done(tx);
   return folded;

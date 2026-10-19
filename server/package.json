@@ -1,0 +1,9 @@
+{
+  "name": "listik-sync-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ordered log of encrypted batches per Listik document; no dependencies.",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node index.js" }
+}

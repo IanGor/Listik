@@ -1,5 +1,6 @@
 import { Doc, type DocListener } from '../model/doc';
 import type { Op } from '../model/types';
+import { plainCodec, type Codec } from './codec';
 import { compactLog } from './compact';
 import { done, openDb, readAll, writeSnapshot } from './db';
 import { coalesce, deserialize, serialize } from './serialize';
@@ -10,25 +11,26 @@ const FLUSH_DELAY = 300;
 const COMPACT_AFTER = 10_000;
 
 /** Folds the log into the snapshot; resolves to the number of ops folded. */
-type Compactor = () => Promise<number>;
+type Compactor = (codec: Codec, force: boolean) => Promise<number>;
 
 /** Runs compaction in a worker, so the main thread never serializes the whole doc. */
 function workerCompactor(name: string): Compactor {
   const worker = new Worker(new URL('./compact.worker.ts', import.meta.url), { type: 'module' });
-  return () => new Promise((resolve, reject) => {
+  return (codec, force) => new Promise((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<{ folded?: number; error?: string }>) =>
       e.data.error ? reject(new Error(e.data.error)) : resolve(e.data.folded ?? 0);
-    worker.postMessage({ name });
+    worker.postMessage({ name, key: codec.key, force });
   });
 }
 
 /** Snapshot plus replayed log; a new single-bullet doc if nothing is stored yet. */
-async function load(db: IDBDatabase): Promise<{ doc: Doc; logSize: number; stored: boolean }> {
+async function load(db: IDBDatabase, codec: Codec): Promise<{ doc: Doc; logSize: number; stored: boolean }> {
   const { snapshot, batches } = await readAll(db);
   if (!snapshot) return { doc: Doc.withEmptyBullet(), logSize: 0, stored: false };
-  const doc = deserialize(snapshot);
+  const doc = deserialize(await codec.decodeSnapshot(snapshot));
   let logSize = 0;
-  for (const batch of batches) {
+  for (const record of batches) {
+    const batch = await codec.decodeBatch(record);
     for (const op of batch) doc.apply(op);
     logSize += batch.length;
   }
@@ -43,11 +45,14 @@ const idle = (fn: () => void) =>
  * The page only ever appends: every commit adds its ops (batched for
  * FLUSH_DELAY), so the cost of saving an edit does not depend on the size
  * of the document. Once the log grows past COMPACT_AFTER ops, a worker folds
- * it into a new snapshot (compact.ts), off the main thread.
+ * it into a new snapshot (compact.ts), off the main thread. Records go
+ * through the codec: plain, or encrypted with the document's key.
  */
 export class Persistence implements DocListener {
   /** The last write error; writes keep being attempted. */
   error: unknown = null;
+  /** Called when `error` changes. */
+  onError: ((e: unknown) => void) | null = null;
   private pending: Op[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Appends run strictly one after another. */
@@ -57,21 +62,23 @@ export class Persistence implements DocListener {
   private logSize: number;
   private db: IDBDatabase;
   private compactor: Compactor;
+  private codec: Codec;
 
-  private constructor(db: IDBDatabase, doc: Doc, logSize: number, compactor: Compactor) {
+  private constructor(db: IDBDatabase, doc: Doc, logSize: number, compactor: Compactor, codec: Codec) {
     this.db = db;
     this.logSize = logSize;
     this.compactor = compactor;
+    this.codec = codec;
     doc.subscribe(this);
   }
 
   /** Loads the doc (snapshot + log replay), or starts a new one with a single empty bullet. */
-  static async open(name = 'listik'): Promise<{ doc: Doc; persistence: Persistence }> {
+  static async open(name = 'listik', codec: Codec = plainCodec): Promise<{ doc: Doc; persistence: Persistence }> {
     const db = await openDb(name);
-    const { doc, logSize, stored } = await load(db);
-    if (!stored) await writeSnapshot(db, serialize(doc));
-    const compactor = typeof Worker === 'function' ? workerCompactor(name) : () => compactLog(db);
-    const persistence = new Persistence(db, doc, logSize, compactor);
+    const { doc, logSize, stored } = await load(db, codec);
+    if (!stored) await writeSnapshot(db, await codec.encodeSnapshot(serialize(doc)));
+    const compactor: Compactor = typeof Worker === 'function' ? workerCompactor(name) : (c, force) => compactLog(db, c, force);
+    const persistence = new Persistence(db, doc, logSize, compactor, codec);
     if (logSize > COMPACT_AFTER) persistence.scheduleCompact();
     if (typeof window !== 'undefined') {
       const flush = () => void persistence.flush();
@@ -83,13 +90,18 @@ export class Persistence implements DocListener {
   }
 
   /** The doc as stored, without saving anything back: for a read-only tab. */
-  static async read(name = 'listik'): Promise<Doc> {
+  static async read(name = 'listik', codec: Codec = plainCodec): Promise<Doc> {
     const db = await openDb(name);
     try {
-      return (await load(db)).doc;
+      return (await load(db, codec)).doc;
     } finally {
       db.close();
     }
+  }
+
+  /** Is the document stored encrypted? */
+  get encrypted(): boolean {
+    return this.codec.encrypted;
   }
 
   commit(ops: Op[]): void {
@@ -105,9 +117,11 @@ export class Persistence implements DocListener {
     const batch = coalesce(this.pending);
     this.pending = [];
     this.logSize += batch.length;
+    const codec = this.codec;
     const written = this.enqueue(async () => {
+      const record = await codec.encodeBatch(batch);
       const tx = this.db.transaction('oplog', 'readwrite');
-      tx.objectStore('oplog').add(batch);
+      tx.objectStore('oplog').add(record);
       await done(tx);
     });
     if (this.logSize > COMPACT_AFTER) this.scheduleCompact();
@@ -115,9 +129,9 @@ export class Persistence implements DocListener {
   }
 
   /** Folds the log into a new snapshot (one compaction at a time). */
-  compact(): Promise<void> {
+  compact(force = false): Promise<void> {
     this.compacting ??= this.flush()
-      .then(() => this.compactor())
+      .then(() => this.compactor(this.codec, force))
       .then((folded) => {
         this.logSize -= folded;
       })
@@ -126,6 +140,18 @@ export class Persistence implements DocListener {
         this.compacting = null;
       });
     return this.compacting;
+  }
+
+  /**
+   * Switches to another codec: new writes use it at once, and a forced
+   * compaction rewrites the snapshot and folds the log, so nothing stays
+   * stored the old way. Turning encryption on (or off) is this.
+   */
+  async recode(codec: Codec): Promise<void> {
+    await this.flush();
+    this.codec = codec;
+    if (this.compacting) await this.compacting;
+    await this.compact(true);
   }
 
   close(): void {
@@ -150,5 +176,6 @@ export class Persistence implements DocListener {
   private fail(e: unknown): void {
     this.error = e;
     console.error('Saving failed', e);
+    this.onError?.(e);
   }
 }

@@ -154,3 +154,45 @@ describe('snapshot versions', () => {
     expect(deserialize(v1).get('x')).toMatchObject({ text: 'старый', done: false, note: '', created: 1, updated: 2 });
   });
 });
+
+describe('encrypted storage', () => {
+  it('stores ciphertext only, reads it back with the key, and refuses without', async () => {
+    const { dataKey } = await import('../src/sync/crypto');
+    const { encryptedCodec, plainCodec, LockedError } = await import('../src/persist/codec');
+    const { readAll } = await import('../src/persist/db');
+    const { isEncrypted } = await import('../src/sync/crypto');
+    const key = await dataKey(new Uint8Array(32).fill(7));
+    const codec = encryptedCodec(key);
+    const name = freshName();
+    // Starts plain, as every document did before sync.
+    const { doc, persistence } = await Persistence.open(name);
+    const ctx = { doc, rows: new VisibleRows(doc) };
+    doc.transact(() => cmd.setText(ctx, ctx.rows.ids[0], 'открыто'));
+    await persistence.flush();
+    expect(persistence.encrypted).toBe(false);
+    // Turning encryption on rewrites the snapshot and folds the log.
+    await persistence.recode(codec);
+    expect(persistence.encrypted).toBe(true);
+    doc.transact(() => { cmd.split(ctx, ctx.rows.ids[0], 7); });
+    doc.transact(() => cmd.setText(ctx, ctx.rows.ids[1], 'тайно'));
+    await persistence.flush();
+    persistence.close();
+
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open(name);
+      r.onsuccess = () => resolve(r.result);
+    });
+    const stored = await readAll(db);
+    db.close();
+    expect(isEncrypted(stored.snapshot)).toBe(true);
+    expect(stored.batches.length).toBe(1);
+    expect(stored.batches.every(isEncrypted)).toBe(true);
+    expect(JSON.stringify(stored, (_, v) => (v instanceof Uint8Array ? '<bytes>' : v))).not.toContain('тайно');
+
+    await expect(Persistence.read(name, plainCodec)).rejects.toBeInstanceOf(LockedError);
+    const other = encryptedCodec(await dataKey(new Uint8Array(32).fill(8)));
+    await expect(Persistence.read(name, other)).rejects.toThrow();
+    const back = await Persistence.read(name, codec);
+    expect(dump(back)).toEqual(['открыто', 'тайно']);
+  });
+});
