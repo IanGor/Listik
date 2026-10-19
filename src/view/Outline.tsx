@@ -11,16 +11,19 @@ import { ZoomHeader } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
 import { Virtualizer } from './virtualizer';
 
-/** Space above the first and below the last row, px. */
-const PAD = 32;
+/** Space above the first and below the last row, px; zoomed in, the list starts right under the title. */
+const PAD = 28;
+const ZOOM_PAD = 14;
 /** Rows rendered beyond the viewport on each side, px. */
 const OVERSCAN = 600;
 /** Vertical padding of `.row`, px. */
-const ROW_PAD = 10;
-/** Line height of a note relative to the text's: 14 px × 1.5 against 17 px × 1.6. */
-const NOTE_SCALE = 0.77;
+const ROW_PAD = 4;
+/** Line height of a note relative to the text's: 14 px × 1.5 against 17 px × 1.53. */
+const NOTE_SCALE = 0.81;
+/** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
+const BULLET_GAP = 26;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
-const ADD_HEIGHT = 44;
+const ADD_HEIGHT = 32;
 
 /**
  * The scrollable outline. Only rows near the viewport are in the DOM; they
@@ -42,10 +45,12 @@ export function Outline(props: { o: Outliner }) {
   const v = new Virtualizer(o.rows, () => 24);
   onCleanup(() => v.dispose());
 
+  const pad = () => (o.zoom() ? ZOOM_PAD : PAD);
+
   const range = createMemo(() => {
     o.rowsVersion();
     layout();
-    return v.range(scrollTop() - PAD, viewport(), OVERSCAN);
+    return v.range(scrollTop() - pad(), viewport(), OVERSCAN);
   });
   const ids = createMemo(() => {
     const [start, end] = range();
@@ -70,7 +75,7 @@ export function Outline(props: { o: Outliner }) {
       const k = current.indexOf((entry.target as HTMLElement).dataset.id!);
       if (k < 0) continue;
       const i = start + k;
-      const top = v.offsetOf(i) + PAD;
+      const top = v.offsetOf(i) + pad();
       const d = v.measure(i, entry.borderBoxSize[0].blockSize);
       if (!d) continue;
       changed = true;
@@ -96,7 +101,7 @@ export function Outline(props: { o: Outliner }) {
     const indent = indentProbe.getBoundingClientRect().width / ch;
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.get(id);
-      const perLine = Math.max(10, Math.floor(cols - indent * depth - 2)); // bullet + gap is 2ch
+      const perLine = Math.max(10, Math.floor(cols - indent * depth - BULLET_GAP / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each.
@@ -143,13 +148,13 @@ export function Outline(props: { o: Outliner }) {
   });
 
   const ensureVisible = (i: number) => {
-    const top = v.offsetOf(i) + PAD;
+    const top = v.offsetOf(i) + pad();
     const bottom = top + v.heightOf(i);
     const st = scroller.scrollTop;
     const vh = scroller.clientHeight;
     let next = st;
-    if (top < st) next = top - PAD;
-    else if (bottom > st + vh) next = bottom - vh + PAD;
+    if (top < st) next = top - pad();
+    else if (bottom > st + vh) next = bottom - vh + pad();
     if (next === st) return;
     scroller.scrollTop = next;
     setScrollTop(scroller.scrollTop);
@@ -210,10 +215,10 @@ export function Outline(props: { o: Outliner }) {
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
       <Show when={o.zoom()} keyed>{(id) => <ZoomHeader o={o} id={id} />}</Show>
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-        <div ref={spacer} class="spacer" style={{ height: `${total() + 2 * PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+        <div ref={spacer} class="spacer" style={{ height: `${total() + 2 * pad() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
           <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
-          <div ref={windowEl} class="window" style={{ transform: `translateY(${PAD + v.offsetOf(range()[0])}px)` }}>
+          <div ref={windowEl} class="window" style={{ transform: `translateY(${pad() + v.offsetOf(range()[0])}px)` }}>
             <For each={ids()}>
               {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
             </For>
@@ -226,7 +231,7 @@ export function Outline(props: { o: Outliner }) {
             <button
               type="button"
               class="add"
-              style={{ top: `${PAD + total()}px` }}
+              style={{ top: `${pad() + total()}px` }}
               title="Новый пункт"
               aria-label="Новый пункт"
               onClick={addBullet}

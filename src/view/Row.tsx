@@ -102,7 +102,7 @@ export function Row(props: RowProps) {
     >
       <Show when={hasChildren()}>
         <span class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} aria-hidden="true">
-          <svg width="12" height="12" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
         </span>
       </Show>
       <span

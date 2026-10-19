@@ -37,12 +37,14 @@
   /* Must stay explicit: a bare `monospace` family otherwise falls back to
      the browser's 13px default. */
   --font-size: 17px;
-  --line-height: 1.6;
-  /* Indent per nesting level and the text column, in character cells. The
-     height estimate in Outline.tsx reads --indent and assumes 2ch for
-     bullet + gap. */
-  --indent: 2.5ch;
+  --line-height: 1.53;
+  /* Indent per nesting level in px, after Workflowy; the text column in
+     character cells. The height estimate in Outline.tsx measures --indent and
+     assumes BULLET_GAP (--bullet + the row gap) before the text. */
+  --indent: 38px;
   --column: 72ch;
+  /* The bullet's box: its dot, halo, guide line and fold arrow centre on it. */
+  --bullet: 20px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -300,11 +302,12 @@ kbd {
 .row {
   position: relative;
   display: flex;
-  gap: 1ch;
-  padding: 5px 0;
+  gap: 6px;
+  padding: 2px 0;
 }
 
-/* Thin guide lines from each ancestor's bullet down through its children. */
+/* Thin guide lines from each ancestor's bullet down through its children,
+   through the bullet's centre. */
 .row::before {
   content: '';
   position: absolute;
@@ -312,14 +315,14 @@ kbd {
   bottom: 0;
   left: 0;
   width: calc(var(--indent) * var(--depth));
-  background: linear-gradient(to right, var(--guide) 1px, transparent 1px) 0.5ch 0 / var(--indent) 100% repeat-x;
+  background: linear-gradient(to right, var(--guide) 1px, transparent 1px) calc(var(--bullet) / 2 - 0.5px) 0 / var(--indent) 100% repeat-x;
   pointer-events: none;
 }
 
 .bullet {
   position: relative;
   flex: none;
-  width: 1ch;
+  width: var(--bullet);
   height: 1lh;
   cursor: pointer;
 }
@@ -329,8 +332,8 @@ kbd {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--faint);
   transform: translate(-50%, -50%);
@@ -377,21 +380,23 @@ kbd {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--halo);
   transform: translate(-50%, -50%);
 }
 
-/* Fold arrow, left of the bullet; shown on hover for bullets with children. */
+/* Fold arrow, 23px left of the bullet's centre. While the pointer is over the
+   list every bullet with children shows one, as in Workflowy; the row under
+   the pointer shows it brighter. */
 .toggle {
   position: absolute;
-  top: 5px;
-  left: calc(var(--indent) * var(--depth) - 2.5ch);
+  top: 2px;
+  left: calc(var(--indent) * var(--depth) + var(--bullet) / 2 - 31px);
   display: grid;
   place-items: center;
-  width: 2.5ch;
+  width: 16px;
   height: 1lh;
   color: var(--faint);
   cursor: pointer;
@@ -399,11 +404,16 @@ kbd {
   transition: opacity 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
-.row:hover .toggle {
+.scroller:hover .toggle {
   opacity: 1;
 }
 
-.toggle:hover {
+.row:hover .toggle {
+  color: var(--muted);
+}
+
+.toggle:hover,
+.row:hover .toggle:hover {
   color: var(--text);
 }
 
@@ -431,7 +441,6 @@ kbd {
 /* A note under the bullet: smaller, quieter, may span lines. Notes size is
    mirrored by NOTE_SCALE in Outline.tsx. */
 .note {
-  margin-top: 2px;
   font-size: 14px;
   line-height: 1.5;
   color: var(--muted);
@@ -462,20 +471,21 @@ kbd {
   text-decoration-color: var(--faint);
 }
 
-/* The edited row sits on a soft raised surface. Drawn with a spread shadow
-   so the text does not move by a pixel when editing starts. */
+/* The edited row sits on a soft raised surface. Drawn with shadows so the
+   text does not move by a pixel when editing starts; they reach 8px sideways
+   but only 2px up and down, which stays within the 4px between rows. */
 .note[contenteditable],
 .text[contenteditable] {
   background: var(--surface);
-  border-radius: 2px;
-  box-shadow: 0 0 0 7px var(--surface);
+  border-radius: 4px;
+  box-shadow: -6px 0 0 2px var(--surface), 6px 0 0 2px var(--surface);
 }
 
 /* Tags and hits are chips, also drawn outside the text box: no reflow. */
 .tag {
   color: var(--link);
   background: var(--chip);
-  border-radius: 2px;
+  border-radius: 3px;
   box-shadow: 0 0 0 2px var(--chip);
   cursor: pointer;
   transition: background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
@@ -512,7 +522,7 @@ mark,
   width: 100%;
   max-width: calc(var(--column) + 6ch);
   margin: 0 auto;
-  padding: 36px 2.5ch 0 3.5ch;
+  padding: 28px 2.5ch 0 3.5ch;
   box-sizing: border-box;
 }
 
@@ -553,8 +563,8 @@ mark,
 
 .zoom-title {
   min-height: 1lh;
-  margin-top: 14px;
-  font-size: 34px;
+  margin-top: 8px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.02em;
@@ -569,29 +579,28 @@ mark,
   color: var(--faint);
 }
 
-/* "+" under a zoomed-in list: a circle centred on the bullet column. */
+/* "+" under a zoomed-in list: a bare plus centred on the bullet column; the
+   circle behind it shows on hover. Height is mirrored by ADD_HEIGHT. */
 .add {
   position: absolute;
-  left: calc(3.5ch + 0.5ch - 14px);
+  left: calc(3.5ch + var(--bullet) / 2 - 12px);
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  margin-top: 6px;
+  width: 24px;
+  height: 24px;
+  margin-top: 4px;
   padding: 0;
-  color: var(--muted);
-  background: var(--canvas);
-  border: 1px solid var(--hairline);
+  color: var(--faint);
+  background: none;
+  border: none;
   border-radius: 50%;
-  box-shadow: var(--shadow);
   cursor: pointer;
-  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), border-color 160ms var(--ease-out), transform 160ms var(--ease-out);
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 
 .add:hover {
-  color: #fff;
-  background: var(--primary);
-  border-color: var(--primary);
+  color: var(--text);
+  background: var(--surface-2);
   transform: scale(1.08);
 }
 
@@ -604,7 +613,7 @@ mark,
 @media (max-width: 640px) {
   :root {
     --font-size: 16px;
-    --indent: 2ch;
+    --indent: 28px;
   }
 
   .topbar {
@@ -775,6 +784,8 @@ body.is-dragging * {
   z-index: 10;
   height: 2px;
   margin-top: -1px;
+  /* Starts at the bullet's centre, where the dropped bullet will be. */
+  margin-left: calc(var(--bullet) / 2);
   background: var(--primary);
   border-radius: 1px;
   pointer-events: none;
