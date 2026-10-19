@@ -209,7 +209,8 @@ export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
   const after = n.mirrorOf ? '' : c.text.slice(caret);
   setText({ doc, rows }, id, c.text.slice(0, caret));
   const host = rows.host(key);
-  if (host && rows.showsChildren(key)) {
+  // Open (even with all its children completed and hidden): the new bullet is its first child.
+  if (host && rows.unfolded(key)) {
     return { id: insertNew(doc, host.id, 0, after), caret: 0 };
   }
   return { id: insertNew(doc, parent, doc.index(id) + 1, after), caret: 0 };

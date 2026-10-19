@@ -103,7 +103,7 @@ export function Row(props: RowProps) {
   };
   const open = () => {
     o.rowsVersion();
-    return !!content() && o.rows.showsChildren(id);
+    return !!content() && o.rows.unfolded(id);
   };
   const terms = () => o.filter()?.query.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));

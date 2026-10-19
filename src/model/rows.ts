@@ -194,14 +194,18 @@ export class VisibleRows implements DocListener {
 
   /** Children of the row `key` (`top` for the top level) shown below it, assuming the row itself is shown. */
   shownChildren(key: RowKey): NodeId[] {
+    const shown = this.unfoldedChildren(key);
+    return this.hideDone && shown.length ? shown.filter((c) => !this.doc.get(c).done) : shown;
+  }
+
+  /** The children folding and the filter leave under the row: what shows, but for hidden completed bullets. */
+  private unfoldedChildren(key: RowKey): NodeId[] {
     const n = this.doc.get(nodeOf(key));
     const kids = this.host(key)?.children ?? [];
     const f = this.filter;
-    let shown: NodeId[];
-    if (f?.keep.has(n.id)) shown = f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
+    if (f?.keep.has(n.id)) return f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
-    else shown = n.collapsed && key !== this.top ? [] : kids;
-    return this.hideDone && shown.length ? shown.filter((c) => !this.doc.get(c).done) : shown;
+    return n.collapsed && key !== this.top ? [] : kids;
   }
 
   get hidesDone(): boolean {
@@ -219,9 +223,24 @@ export class VisibleRows implements DocListener {
     return this.shownChildren(key).length > 0;
   }
 
-  /** Has children that are not shown: drawn as a folded bullet. */
+  /**
+   * Is the row open: its arrow turned down, its children listed (or none,
+   * when all of them are completed and completed bullets are hidden: open,
+   * and empty)?
+   */
+  unfolded(key: RowKey): boolean {
+    return this.unfoldedChildren(key).length > 0;
+  }
+
+  /**
+   * Has children that folding or the filter keep out of view: drawn as a
+   * folded bullet. Completed bullets hidden by Ctrl+O do not count: there is
+   * nothing to unfold for them.
+   */
   hasHiddenChildren(key: RowKey): boolean {
-    return (this.host(key)?.children.length ?? 0) > this.shownChildren(key).length;
+    const kids = this.host(key)?.children ?? [];
+    const could = this.hideDone ? kids.filter((c) => !this.doc.get(c).done).length : kids.length;
+    return could > this.shownChildren(key).length;
   }
 
   /**

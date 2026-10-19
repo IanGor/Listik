@@ -118,7 +118,16 @@ describe('VisibleRows', () => {
     check();
     doc.transact(() => cmd.toggleDone(ctx, ['c1']));
     expect(dumpRows(rows, doc)).toEqual(['b', 'c']);
-    expect(rows.hasHiddenChildren('c')).toBe(true);
+    // Its only child is completed and hidden: "c" is open, and empty; no halo, nothing to unfold.
+    expect(rows.hasHiddenChildren('c')).toBe(false);
+    expect(rows.unfolded('c')).toBe(true);
+    expect(rows.showsChildren('c')).toBe(false);
+    // Folded, it is closed, still with no halo (only completed bullets under it); open again, empty.
+    doc.transact(() => cmd.setCollapsed(ctx, 'c', true));
+    expect(rows.unfolded('c')).toBe(false);
+    expect(rows.hasHiddenChildren('c')).toBe(false);
+    doc.transact(() => cmd.setCollapsed(ctx, 'c', false));
+    expect(rows.unfolded('c')).toBe(true);
     doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
     expect(dumpRows(rows, doc)).toEqual(['a', '  a1', 'b', 'c']);
     check();
