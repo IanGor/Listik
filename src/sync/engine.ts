@@ -243,10 +243,13 @@ export class SyncEngine implements DocListener {
     if (this.broken) return;
     this.set({ phase: 'syncing' });
     try {
-      // Seal the current outbox batches: new local ops open a new batch rather than changing one in flight.
-      for (const b of this.state.outbox) b.sealed = true;
       await this.pull();
-      while (this.state.outbox.length) {
+      // Each round seals what the outbox holds right now (ops typed meanwhile
+      // open a new batch rather than changing one in flight) and sends it;
+      // a round that sent nothing new ends the exchange.
+      for (;;) {
+        for (const b of this.state.outbox) b.sealed = true;
+        if (!this.state.outbox.length) break;
         if (!(await this.push())) await this.pull();
       }
       await this.save();
@@ -318,7 +321,7 @@ export class SyncEngine implements DocListener {
   /** Sends the sealed outbox as one batch on top of our head; false if the server moved on. */
   private async push(): Promise<boolean> {
     const sealed = this.state.outbox.filter((b) => b.sealed);
-    if (!sealed.length) return true;
+    if (!sealed.length) throw new Error('push without a sealed batch'); // the exchange loop seals first
     const ops = coalesce(sealed.flat());
     const seq = this.state.head + 1;
     const body: BatchBody = { device: this.state.device, prev: this.state.headHash, ops };

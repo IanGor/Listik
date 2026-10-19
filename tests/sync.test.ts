@@ -159,6 +159,28 @@ describe('sync', () => {
     expect(dump(c.doc)).toEqual(dump(reloaded.doc));
   });
 
+  it('an edit made while an exchange is running is sent by that exchange, which ends', { timeout: 10_000 }, async () => {
+    const { docId, token, a } = await createDoc();
+    const b = await device(docId, token, { bootstrap: true });
+    // Hook the transport: the first pull of the next exchange lands while the user presses Enter.
+    const inner = a.transport.getOps.bind(a.transport);
+    let hooked = false;
+    (a.transport as { getOps: typeof inner }).getOps = async (after) => {
+      const page = await inner(after);
+      if (!hooked) {
+        hooked = true;
+        a.run(() => { cmd.split(a.ctx, a.rows.ids[0], 0); });
+        a.run(() => cmd.setText(a.ctx, a.rows.ids[1], 'набрано во время обмена'));
+      }
+      return page;
+    };
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'до обмена'));
+    await a.engine.sync(); // used to spin forever here
+    expect(a.engine.status.pending).toBe(0);
+    await b.engine.sync();
+    expect(dump(b.doc)).toEqual(['', 'набрано во время обмена']);
+  });
+
   it('LISTIK_ALLOW_CREATE=0 refuses new documents but keeps serving existing ones', async () => {
     const { a } = await createDoc();
     process.env.LISTIK_ALLOW_CREATE = '0';
