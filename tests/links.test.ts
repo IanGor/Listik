@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { tokenBefore } from '../src/model/complete';
 import type { Doc } from '../src/model/doc';
 import { plainText } from '../src/model/format';
-import { closesLink, compareOrder, findTargets, linkBefore, opensLink, resolveLink, titleOf } from '../src/model/links';
+import { backlinks, closesLink, compareOrder, findTargets, linkBefore, linkEnd, opensLink, resolveLink, titleOf } from '../src/model/links';
 import { TextIndex, decorate } from '../src/model/search';
 import type { NodeId } from '../src/model/types';
 import { build } from './helpers';
@@ -163,5 +163,26 @@ describe('findTargets', () => {
     add(doc, doc.root, 'dup', 'Новый', 0);
     expect(titles(doc, '', '', 2)).toEqual(['Новый', 'Средний']);
     expect(titles(doc, '  ')).toEqual(['Новый', 'Средний', 'Старый']);
+  });
+});
+
+describe('backlinks', () => {
+  it('lists the bullets that link here, in document order, from text or note, any case', () => {
+    const doc = build(['Пьер', 'Война', '  см. [[пьер]] тут', '  второй', 'Мир', '  [[Пьер]] и [[Война]]', 'Без ссылки']);
+    doc.apply({ t: 'setNote', id: 'второй', from: '', to: 'а в заметке [[ПЬЕР]]' });
+    const index = new TextIndex(doc);
+    expect(backlinks(doc, index, 'Пьер')).toEqual(['  см. [[пьер]] тут'.trim(), 'второй', '[[Пьер]] и [[Война]]']);
+    expect(backlinks(doc, index, 'Война')).toEqual(['[[Пьер]] и [[Война]]']);
+    expect(backlinks(doc, index, 'Без ссылки')).toEqual([]);
+    expect(linkEnd('см. [[пьер]] тут', 'Пьер')).toBe(12);
+    expect(linkEnd('второй', 'Пьер')).toBe(-1);
+  });
+
+  it('a bullet sharing its title with an earlier one has none: links lead to the first', () => {
+    const doc = build(['Итоги', '  [[Итоги]]']);
+    add(doc, doc.root, 'second', 'Итоги');
+    const index = new TextIndex(doc);
+    expect(backlinks(doc, index, 'Итоги')).toEqual(['[[Итоги]]']);
+    expect(backlinks(doc, index, 'second')).toEqual([]);
   });
 });

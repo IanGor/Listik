@@ -713,6 +713,78 @@ mark,
   color: var(--faint);
 }
 
+/* Backlinks under a zoomed-in list (Backlinks.tsx): chips naming the places
+   that link here, the way back first. Sits under the "+"; Outline.tsx
+   measures it into the scrolled height. */
+.backlinks-slot {
+  position: absolute;
+  left: 3.5ch;
+  right: 2.5ch;
+}
+
+.backlinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 18px 0 4px;
+  font-size: 13px;
+}
+
+.backlinks-label {
+  margin-right: 4px;
+  color: var(--faint);
+}
+
+.backlink {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
+  color: var(--muted);
+  font: inherit;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 140ms var(--ease-out), border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+
+.backlink-label {
+  overflow: hidden;
+  max-width: 28ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backlink:hover {
+  color: var(--text);
+  border-color: var(--faint);
+}
+
+/* Where the link just followed came from: the way back, in the accent. */
+.backlink.back {
+  color: var(--link);
+  background: var(--chip);
+  border-color: transparent;
+}
+
+.backlink.more {
+  color: var(--faint);
+  background: none;
+  border-style: dashed;
+}
+
+/* A finger needs room. */
+@media (pointer: coarse) {
+  .backlink {
+    min-height: 36px;
+    padding: 0 12px;
+  }
+}
+
 /* "+" under a zoomed-in list: a bare plus centred on the bullet column; the
    circle behind it shows on hover. Height is mirrored by ADD_HEIGHT. */
 .add {

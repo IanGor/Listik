@@ -62,6 +62,35 @@ export function resolveLink(doc: Doc, index: TextIndex, title: string): NodeId |
   return found;
 }
 
+/**
+ * Backlinks: bullets whose text or note holds a `[[link]]` that leads to
+ * `target`, in document order. A link leads to the first bullet so titled
+ * (`resolveLink`), so a bullet that shares its title with an earlier one
+ * has none. One pass over the text index finds both the candidates (the
+ * normalized `[[title]]` in their text) and the first bullet titled so.
+ */
+export function backlinks(doc: Doc, index: TextIndex, target: NodeId): NodeId[] {
+  const key = normalize(titleOf(doc.get(target).text));
+  if (!linkable(key)) return [];
+  const needle = `[[${key}]]`;
+  const found: NodeId[] = [];
+  let first: NodeId | null = null;
+  for (const [id, t] of index.entries()) {
+    if (t.includes(needle) && id !== target) found.push(id);
+    const line = firstLine(t);
+    if (line.length >= key.length && titleOf(line) === key && (first === null || compareOrder(doc, id, first) < 0)) first = id;
+  }
+  if (first !== target) return [];
+  return found.sort((a, b) => compareOrder(doc, a, b));
+}
+
+/** Where in its text a bullet links to `target`'s title: the offset right after the link, or -1 (the link is in the note). */
+export function linkEnd(text: string, targetText: string): number {
+  const needle = `[[${normalize(titleOf(targetText))}]]`;
+  const at = normalize(text).indexOf(needle);
+  return at < 0 ? -1 : at + needle.length;
+}
+
 /** A link being typed: from its `[[` to its `]]` (or the caret, if not closed yet), and what is typed so far. */
 export interface LinkToken {
   start: number;

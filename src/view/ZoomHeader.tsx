@@ -128,7 +128,7 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
     const tag = target.dataset.tag;
     if (tag) return o.filterByTag(tag);
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
-    if (link !== undefined) return o.followLink(link);
+    if (link !== undefined) return o.followLink(link, id);
     if (o.readOnly) return;
     const at = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
     setEdit({ note: isNote, caret: at ?? (isNote ? note() : text()).length });

@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
 import { nodeOf } from '../model/rows';
+import { Backlinks } from './Backlinks';
 import { createDrag } from './drag';
 import { EditBar } from './EditBar';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
@@ -62,6 +63,17 @@ export function Outline(props: { o: Outliner }) {
     onCleanup(() => {
       headObserver.unobserve(el);
       setHead(0);
+    });
+  };
+  /** Height of the backlinks under a zoomed-in list (Backlinks.tsx), measured the same way. */
+  const [foot, setFoot] = createSignal(0);
+  const footObserver = new ResizeObserver(([entry]) => setFoot(entry.borderBoxSize[0].blockSize));
+  onCleanup(() => footObserver.disconnect());
+  const observeFoot = (el: HTMLElement) => {
+    footObserver.observe(el);
+    onCleanup(() => {
+      footObserver.unobserve(el);
+      setFoot(0);
     });
   };
   /** Where the first row starts in the scrolled area. */
@@ -276,7 +288,7 @@ export function Outline(props: { o: Outliner }) {
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
       <Crumbs o={o} scrolled={scrollTop() > 0} />
       <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
-        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
           <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
           <Show when={o.zoom()} keyed>
@@ -308,6 +320,14 @@ export function Outline(props: { o: Outliner }) {
                 <path d="M6 1.5v9M1.5 6h9" />
               </svg>
             </button>
+          </Show>
+          {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
+          <Show when={o.zoom()} keyed>
+            {(id) => (
+              <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+                <Backlinks o={o} id={id} />
+              </div>
+            )}
           </Show>
         </div>
       </div>

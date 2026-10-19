@@ -1372,6 +1372,51 @@ test.describe('links', () => {
   });
 });
 
+test.describe('backlinks', () => {
+  const chips = (page: Page) => page.getByRole('navigation', { name: 'Ссылки сюда' }).getByRole('button');
+  const title = (page: Page) => page.locator('.zoom-title');
+
+  test('under a bullet linked to: a chip per place, the way back first; a chip leads there, caret on the link', async ({ page }) => {
+    // Two places link to "Часть вторая": under "Том второй", and at the top level.
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('см. [[Часть вторая]]');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.locator('.add').click();
+    await page.keyboard.type('и [[Часть вторая]]');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    // Followed from "Том второй": that place comes first, marked as the way back.
+    await page.locator('.row', { hasText: 'см.' }).locator('.link').click();
+    await expect(title(page)).toHaveText('Часть вторая');
+    await expect(chips(page)).toHaveText(['←Том второй', 'Главная']);
+    await expect(chips(page).first()).toHaveClass(/back/);
+
+    // Another place: there, with the caret right after the link.
+    await chips(page).filter({ hasText: 'Главная' }).click();
+    await expect(title(page)).toHaveCount(0);
+    await expect(editing(page)).toHaveText('и [[Часть вторая]]');
+    expect(await editing(page).evaluate(() => getSelection()!.anchorOffset)).toBe('и [[Часть вторая]]'.length);
+    await page.keyboard.press('Escape');
+
+    // Followed from the top level now: the way back is "Главная".
+    await page.locator('.row', { hasText: 'и [[' }).locator('.link').click();
+    await expect(chips(page)).toHaveText(['←Главная', 'Том второй']);
+    await chips(page).filter({ hasText: 'Том второй' }).click();
+    await expect(title(page)).toHaveText('Том второй');
+    await expect(editing(page)).toHaveText('см. [[Часть вторая]]');
+  });
+
+  test('no links here, no backlinks', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    await expect(title(page)).toHaveText('Часть первая');
+    await expect(page.getByRole('navigation', { name: 'Ссылки сюда' })).toHaveCount(0);
+  });
+});
+
 test.describe('mirrors', () => {
   const list = (page: Page) => page.getByRole('listbox', { name: 'Зеркала' });
   const crumbs = (page: Page) => page.locator('.crumbs .crumb');

@@ -117,7 +117,7 @@ export function Row(props: RowProps) {
     const tag = target.dataset.tag;
     if (tag) return o.filterByTag(tag);
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
-    if (link !== undefined) return o.followLink(link);
+    if (link !== undefined) return o.followLink(link, id);
     // Shift+click selects the rows from the edited (or already selected) one to here.
     const anchor = o.selection()?.anchor ?? o.focus()?.id;
     if (e.shiftKey && anchor) {

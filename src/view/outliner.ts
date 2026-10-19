@@ -3,7 +3,7 @@ import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
-import { resolveLink } from '../model/links';
+import { linkEnd, resolveLink } from '../model/links';
 import { VisibleRows, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
@@ -80,6 +80,9 @@ export class Outliner {
   readonly zoom: Accessor<NodeId | null>;
   /** Bumped to move the caret into the zoomed-in bullet's title. */
   readonly titleRequests: Accessor<number>;
+  /** The last link followed: into which bullet, from which (its backlinks lead with that place). */
+  readonly cameFrom: Accessor<{ to: NodeId; from: NodeId } | null>;
+  private setCameFrom: Setter<{ to: NodeId; from: NodeId } | null>;
   /** The zoom title or its note being edited: the editing bar (EditBar.tsx) serves them too. */
   readonly titleEdit: Accessor<TitleEdit>;
   readonly editTitle: Setter<TitleEdit>;
@@ -143,6 +146,7 @@ export class Outliner {
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
     [this.titleEdit, this.editTitle] = createSignal<TitleEdit>(null);
+    [this.cameFrom, this.setCameFrom] = createSignal<{ to: NodeId; from: NodeId } | null>(null);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.helpRequests, this.setHelpRequests] = createSignal(0);
     [this.syncRequests, this.setSyncRequests] = createSignal(0);
@@ -273,15 +277,34 @@ export class Outliner {
 
   /**
    * A click on a `[[link]]`: zoom into the bullet it names, where it really
-   * is in the outline (model/links.ts). A search is cleared, so all of it shows.
+   * is in the outline (model/links.ts). A search is cleared, so all of it
+   * shows. `from`, the row clicked in, is remembered: its place leads the
+   * backlinks there (Backlinks.tsx), the way back.
    */
-  followLink(title: string): void {
+  followLink(title: string, from?: RowKey): void {
     const id = resolveLink(this.doc, this.text, title);
     if (!id) return this.notify(`Нет пункта «${title.trim()}»`);
     batch(() => {
       this.setQuery('', true);
       this.setFocus(null);
       this.zoomTo(id);
+      this.setCameFrom(from !== undefined && this.doc.has(nodeOf(from)) ? { to: this.doc.origin(id), from: this.contentOf(from).id } : null);
+    });
+  }
+
+  /**
+   * A backlink taken: to the place where the link stands (its bullet's
+   * parent, zoomed into, or the whole outline), the caret on that bullet
+   * right after the link.
+   */
+  goToBacklink(id: NodeId, target: NodeId): void {
+    if (!this.doc.has(id)) return;
+    const n = this.doc.get(id);
+    const end = linkEnd(n.text, this.doc.get(target).text);
+    batch(() => {
+      this.zoomTo(n.parent === this.doc.root ? null : n.parent);
+      const key = this.rows.locate(id);
+      if (key) this.setFocus({ id: key, caret: end < 0 ? 0 : end });
     });
   }
 
