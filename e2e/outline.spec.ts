@@ -701,11 +701,14 @@ test.describe('touch screen', () => {
 
   const bar = (page: Page) => page.getByRole('toolbar', { name: 'Правка пункта' });
   const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
+  /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
+  const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
 
   test('a bar under the list does what Tab, Ctrl+Enter and Ctrl+Z do; the keyboard stays', async ({ page }) => {
     await expect(bar(page)).toHaveCount(0);
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     await expect(editing(page)).toBeFocused();
+    await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
 
     await action(page, 'Вынести').tap();
@@ -730,13 +733,27 @@ test.describe('touch screen', () => {
     await action(page, 'Заметка').tap();
     await expect(editing(page)).toBeFocused();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.note')).toHaveText('с телефона');
-    // The keyboard has its own key to hide it.
+    // The keyboard has its own key to hide it, and the bar goes with it; the row is still edited.
     await expect(action(page, 'Готово')).toHaveCount(0);
+    await keyboard(page, false);
+    await expect(bar(page)).toHaveCount(0);
+    await expect(editing(page)).toBeFocused();
+    await keyboard(page, true);
+    await expect(bar(page)).toBeVisible();
+  });
+
+  test('no bar while the keyboard is down, nor for the address bar coming and going', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await expect(editing(page)).toBeFocused();
+    await expect(bar(page)).toHaveCount(0);
+    await page.setViewportSize({ width: 412, height: 859 });
+    await expect(bar(page)).toHaveCount(0);
   });
 
   test('the clock button puts the current time at the caret', async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 9, 19, 23, 40));
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
     await page.keyboard.press('Control+Home');
     await action(page, 'Вставить время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');

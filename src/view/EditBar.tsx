@@ -4,7 +4,7 @@ import { timeOfDay } from '../model/time';
 import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { keyboard, touch } from './screen';
 
 interface Action {
   label: string;
@@ -43,9 +43,10 @@ const ACTIONS: Action[] = [
 
 /**
  * A bar of editing actions at the bottom of a touch screen while a bullet is
- * edited: an on-screen keyboard has no Tab, Ctrl+Enter or Ctrl+Z. It sits in
- * the page's flow, so with the keyboard up (index.html) it rests right on it.
- * Its buttons never take focus: the keyboard stays open.
+ * edited and the on-screen keyboard is up: the keyboard has no Tab,
+ * Ctrl+Enter or Ctrl+Z. Hidden with the keyboard, even if the row is still
+ * being edited. It sits in the page's flow, so it rests right on the keyboard
+ * (index.html). Its buttons never take focus: the keyboard stays open.
  */
 export function EditBar(props: { o: Outliner }) {
   const o = props.o;
@@ -65,7 +66,7 @@ export function EditBar(props: { o: Outliner }) {
   };
 
   return (
-    <Show when={touch() && !o.readOnly && o.focus()}>
+    <Show when={touch() && keyboard() && !o.readOnly && o.focus()}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <For each={ACTIONS}>
           {(a) => (

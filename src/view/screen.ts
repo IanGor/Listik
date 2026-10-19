@@ -19,3 +19,27 @@ export const narrow = query('(max-width: 640px)');
  * so editing gets a bar of actions (EditBar.tsx).
  */
 export const touch = query('(pointer: coarse)');
+
+/** Shrinking the window by more than this is the keyboard, not the address bar, px. */
+const KEYBOARD_MIN = 150;
+
+/**
+ * The on-screen keyboard is up. It shrinks the window (index.html:
+ * interactive-widget=resizes-content), so the window is then notably shorter
+ * than it has been at this width. A new width (turned, resized) starts over.
+ */
+export const keyboard: Accessor<boolean> = (() => {
+  if (typeof window === 'undefined') return () => false;
+  let width = innerWidth;
+  let full = innerHeight;
+  const [up, setUp] = createSignal(false);
+  addEventListener('resize', () => {
+    if (innerWidth !== width) {
+      width = innerWidth;
+      full = innerHeight;
+    }
+    full = Math.max(full, innerHeight);
+    setUp(full - innerHeight > KEYBOARD_MIN);
+  });
+  return up;
+})();
