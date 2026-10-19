@@ -795,6 +795,35 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toBeFocused();
   });
 
+  test('"Оформление" swaps in bold and italic; picking one brings the main set back', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
+    const main = page.locator('.editbar-main');
+    const formats = page.locator('.editbar-format');
+    await expect(formats).toHaveAttribute('inert', '');
+    await action(page, 'Оформление').tap();
+    await expect(main).toHaveAttribute('inert', '');
+    await expect(formats).not.toHaveAttribute('inert', '');
+
+    await editing(page).evaluate((el) => {
+      const range = document.createRange();
+      range.setStart(el.firstChild!, 4);
+      range.setEnd(el.firstChild!, 10);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+    });
+    await action(page, 'Жирный').tap();
+    await expect(editing(page)).toHaveText('Том **второй**');
+    await expect(editing(page)).toBeFocused();
+    await expect(formats).toHaveAttribute('inert', '');
+    await expect(main).not.toHaveAttribute('inert', '');
+
+    await action(page, 'Оформление').tap();
+    await action(page, 'Назад').tap();
+    await expect(main).not.toHaveAttribute('inert', '');
+    await expect(editing(page)).toHaveText('Том **второй**');
+  });
+
   test('the clock button puts the current time at the caret', async ({ page }) => {
     await page.clock.setFixedTime(new Date(2026, 9, 19, 23, 40));
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
@@ -988,6 +1017,38 @@ test.describe('suggestions', () => {
     await expect(page.getByRole('option').first()).toHaveText('#тема01');
     await page.keyboard.press('Enter');
     await expect(editing(page)).toHaveText('#тема0 ');
+  });
+});
+
+test.describe('bold and italic', () => {
+  test('**bold** and *italic* show styled, markers hidden; editing shows the markers', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' **жирное** и *курсив*');
+    await page.keyboard.press('Escape');
+    const row = page.locator('.row', { hasText: 'Том второй' });
+    await expect(row.locator('.md-bold')).toHaveText('жирное');
+    await expect(row.locator('.md-italic')).toHaveText('курсив');
+    await expect(row.locator('.md-marker').first()).toBeHidden();
+    expect(await row.locator('.md-bold').evaluate((el) => getComputedStyle(el).fontWeight)).toBe('700');
+    expect(await row.locator('.md-italic').evaluate((el) => getComputedStyle(el).fontStyle)).toBe('italic');
+    // Visible text reads without the markers; the model keeps them.
+    expect(await row.locator('.text').innerText()).toBe('Том второй жирное и курсив');
+    await row.locator('.md-italic').click();
+    await expect(editing(page)).toHaveText('Том второй **жирное** и *курсив*');
+  });
+
+  test('Ctrl+B and Ctrl+I wrap the selection, and unwrap it again', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Control+ArrowLeft');
+    await page.keyboard.press('Control+b');
+    await expect(editing(page)).toHaveText('Том **второй**');
+    await page.keyboard.press('Control+i');
+    await expect(editing(page)).toHaveText('Том ***второй***');
+    await page.keyboard.press('Control+i');
+    await page.keyboard.press('Control+b');
+    await expect(editing(page)).toHaveText('Том второй');
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('Том **второй**');
   });
 });
 

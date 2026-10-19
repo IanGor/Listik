@@ -1,13 +1,32 @@
 import * as cmd from '../model/commands';
 import { markdownOf } from '../model/outline-text';
 import type { NodeId } from '../model/types';
-import { caretOnFirstLine, caretOnLastLine, caretX, selectionIn } from './caret';
+import { caretOnFirstLine, caretOnLastLine, caretX, selectRange, selectionIn } from './caret';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 
+/**
+ * Ctrl+B / Ctrl+I in a bullet's text or note (by physical key, any layout):
+ * bold or italic around the selection, which stays selected. Returns whether
+ * the key was one of them.
+ */
+export function formatKeys(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTMLElement, note: boolean): boolean {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || (e.code !== 'KeyB' && e.code !== 'KeyI')) return false;
+  e.preventDefault();
+  formatSelection(o, id, el, note, e.code === 'KeyB' ? '**' : '*');
+  return true;
+}
+
+/** Bold or italic around the selection in `el`, the bullet's text or note editor; the selection stays on the words. */
+export function formatSelection(o: Outliner, id: NodeId, el: HTMLElement, note: boolean, marker: '**' | '*'): void {
+  const [start, end] = selectionIn(el) ?? [0, 0];
+  const r = o.format(note ? { id, note: true } : { id }, start, end, marker);
+  if (r) selectRange(el, r.start, r.end);
+}
+
 /** Keyboard handling for the row being edited (`el` is its contenteditable). */
 export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTMLElement): void {
-  if (e.isComposing) return;
+  if (e.isComposing || formatKeys(e, o, id, el, false)) return;
   const mod = e.ctrlKey || e.metaKey;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const collapsed = start === end;
@@ -144,7 +163,7 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
 
 /** Keyboard handling in a bullet's note: Enter makes a new line; the rest leads back out. */
 export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTMLElement): void {
-  if (e.isComposing) return;
+  if (e.isComposing || formatKeys(e, o, id, el, true)) return;
   const mod = e.ctrlKey || e.metaKey;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const toText = () => o.setFocus({ id, caret: o.doc.get(id).text.length });

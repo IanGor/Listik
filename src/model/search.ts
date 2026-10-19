@@ -1,4 +1,5 @@
 import { walkSnapshot, type Doc, type DocListener } from './doc';
+import { BOLD, ITALIC, MARKER, formatFlags } from './format';
 import { content, splitTags, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
@@ -278,39 +279,48 @@ export interface Piece {
   tag?: string;
   /** Part of a search hit. */
   hit?: true;
+  /** Inside `**bold**` or `*italic*` (model/format.ts). */
+  bold?: true;
+  italic?: true;
+  /** A formatting marker itself: hidden in the static view. */
+  marker?: true;
 }
 
-/** Splits text into pieces for display: tags, search hits, and plain text. */
+const HIT = 8;
+
+/** Splits text into pieces for display: tags, search hits, bold, italic, formatting markers, plain text. */
 export function decorate(text: string, terms: string[]): Piece[] {
   const segments = splitTags(text);
-  if (!terms.length || !text) return segments;
-  const norm = normalize(text);
-  const hits: [number, number][] = [];
-  for (const term of terms) {
-    for (let i = norm.indexOf(term); i >= 0; i = norm.indexOf(term, i + 1)) hits.push([i, i + term.length]);
+  const flags = formatFlags(text);
+  let marks = flags;
+  if (terms.length && text) {
+    const norm = normalize(text);
+    for (const term of terms) {
+      for (let i = norm.indexOf(term); i >= 0; i = norm.indexOf(term, i + 1)) {
+        marks ??= new Uint8Array(text.length);
+        for (let k = i; k < i + term.length; k++) marks[k] |= HIT;
+      }
+    }
   }
-  if (!hits.length) return segments;
-  hits.sort((a, b) => a[0] - b[0]);
-  const ranges: [number, number][] = [];
-  for (const h of hits) {
-    const last = ranges[ranges.length - 1];
-    if (last && h[0] <= last[1]) last[1] = Math.max(last[1], h[1]);
-    else ranges.push([h[0], h[1]]);
-  }
+  if (!marks) return segments;
 
+  // Within each tag or plain segment, a new piece wherever the marks change.
   const out: Piece[] = [];
   let pos = 0;
-  let r = 0;
   for (const s of segments) {
     const end = pos + s.text.length;
     for (let cur = pos; cur < end;) {
-      while (r < ranges.length && ranges[r][1] <= cur) r++;
-      const range = ranges[r];
-      const hit = !!range && range[0] <= cur;
-      const next = !range || range[0] >= end ? end : hit ? Math.min(range[1], end) : range[0];
+      const m = marks[cur];
+      let next = cur + 1;
+      while (next < end && marks[next] === m) next++;
       const piece: Piece = { text: text.slice(cur, next) };
       if (s.tag) piece.tag = s.tag;
-      if (hit) piece.hit = true;
+      if (m & HIT) piece.hit = true;
+      if (m & MARKER) piece.marker = true;
+      else {
+        if (m & BOLD) piece.bold = true;
+        if (m & ITALIC) piece.italic = true;
+      }
       out.push(piece);
       cur = next;
     }

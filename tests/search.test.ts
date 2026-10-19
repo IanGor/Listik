@@ -154,6 +154,22 @@ describe('decorate', () => {
     expect(decorate('Ёлка', ['елк'])).toEqual([{ text: 'Ёлк', hit: true }, { text: 'а' }]);
     expect(decorate('без совпадений', ['пьер'])).toEqual([{ text: 'без совпадений' }]);
   });
+
+  it('splits out bold, italic and their markers, with hits and tags inside', () => {
+    const text = '**Пьер** и *про #салон*';
+    const pieces = decorate(text, ['пьер']);
+    expect(pieces).toEqual([
+      { text: '**', marker: true },
+      { text: 'Пьер', hit: true, bold: true },
+      { text: '**', marker: true },
+      { text: ' и ' },
+      { text: '*', marker: true },
+      { text: 'про ', italic: true },
+      { text: '#салон', tag: 'салон', italic: true },
+      { text: '*', marker: true },
+    ]);
+    expect(pieces.map((p) => p.text).join('')).toBe(text);
+  });
 });
 
 describe('notes in search', () => {

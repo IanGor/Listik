@@ -1,6 +1,7 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx } from '../model/commands';
 import type { Doc } from '../model/doc';
+import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { VisibleRows, keepSet } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
@@ -443,6 +444,24 @@ export class Outliner {
       else setText(ctx, at.id, next);
       return { ...at, caret: start + text.length };
     }, at);
+  }
+
+  /**
+   * Ctrl+B / Ctrl+I: bold or italic on or off around start..end, in a
+   * bullet's text or note (model/format.ts). One undo step. Returns where the
+   * selection goes, inside the markers, for the editor to select again.
+   */
+  format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
+    if (this.readOnly) return null;
+    const n = this.doc.get(at.id);
+    const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
+    const place = (caret: number): Focus => (at.note ? { id: at.id, caret, note: true } : { id: at.id, caret });
+    this.run((ctx) => {
+      if (at.note) setNote(ctx, at.id, next.text);
+      else setText(ctx, at.id, next.text);
+      return place(next.end);
+    }, place(end));
+    return next;
   }
 
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */

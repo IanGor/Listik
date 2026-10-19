@@ -22,13 +22,21 @@ interface RowProps {
 
 const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
 
-/** Tags and search hits within a text, as rendered spans. */
+/**
+ * Tags, search hits, bold and italic within a text, as rendered spans.
+ * Formatting markers stay in the DOM, hidden, so offsets in the element
+ * are offsets in the text (a click puts the caret where it belongs).
+ */
 function Pieces(props: { o: Outliner; pieces: Piece[] }) {
   return (
     <For each={props.pieces}>
-      {(p) => p.tag
-        ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
-        : p.hit ? <mark>{p.text}</mark> : p.text}
+      {(p) => {
+        if (p.marker) return <span class="md-marker">{p.text}</span>;
+        const inner = p.tag
+          ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+          : p.hit ? <mark>{p.text}</mark> : p.text;
+        return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
+      }}
     </For>
   );
 }

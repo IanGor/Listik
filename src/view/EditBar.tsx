@@ -1,8 +1,9 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createEffect, createSignal, on } from 'solid-js';
 import * as cmd from '../model/commands';
 import { timeOfDay } from '../model/time';
 import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
+import { formatSelection } from './keymap';
 import type { Outliner } from './outliner';
 import { keyboard, touch } from './screen';
 
@@ -12,6 +13,15 @@ interface Action {
   icon: string[];
   run: (o: Outliner, here: Focus) => void;
 }
+
+/** What the formatting set offers: bold or italic around the selection (Ctrl+B / Ctrl+I). */
+const FORMATS = [
+  { label: 'Жирный', icon: ['M7 5h6a3.5 3.5 0 0 1 0 7H7z', 'M7 12h7a3.5 3.5 0 0 1 0 7H7z'], marker: '**', class: 'md-bold' },
+  { label: 'Курсив', icon: ['M10 5h8', 'M6 19h8', 'M15 5l-6 14'], marker: '*', class: 'md-italic' },
+] as const;
+
+/** The button that brings the formatting set in: a drawn "T". */
+const FORMAT_ICON = ['M5 7V5h14v2', 'M12 5v14', 'M9 19h6'];
 
 function Icon(props: { paths: string[] }) {
   return (
@@ -47,6 +57,10 @@ const ACTIONS: Action[] = [
  * Ctrl+Enter or Ctrl+Z. Hidden with the keyboard, even if the row is still
  * being edited. It sits in the page's flow, so it rests right on the keyboard
  * (index.html). Its buttons never take focus: the keyboard stays open.
+ *
+ * Two sets share its place. "Оформление" slides the main set out to the left
+ * and the formatting set in from the right; picking a format, or "Назад",
+ * slides back. Another bullet always starts on the main set.
  */
 export function EditBar(props: { o: Outliner }) {
   const o = props.o;
@@ -60,21 +74,46 @@ export function EditBar(props: { o: Outliner }) {
     return 'note' in f && f.note ? { id: f.id, caret, note: true } : { id: f.id, caret };
   };
 
+  const [formatting, setFormatting] = createSignal(false);
+  createEffect(on(() => o.focus()?.id, () => setFormatting(false)));
+
   const press = (action: Action) => {
     const h = here();
     if (h) action.run(o, h);
   };
 
+  const format = (marker: '**' | '*') => {
+    const h = here();
+    const el = document.activeElement as HTMLElement | null;
+    if (h && el?.isContentEditable) formatSelection(o, h.id, el, !!h.note, marker);
+    setFormatting(false);
+  };
+
+  const button = (label: string, icon: string[], onClick: () => void) => (
+    <button type="button" tabIndex={-1} title={label} aria-label={label} onClick={onClick}>
+      <Icon paths={icon} />
+    </button>
+  );
+
   return (
     <Show when={touch() && keyboard() && !o.readOnly && o.focus()}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
-        <For each={ACTIONS}>
-          {(a) => (
-            <button type="button" tabIndex={-1} title={a.label} aria-label={a.label} onClick={() => press(a)}>
-              <Icon paths={a.icon} />
-            </button>
-          )}
-        </For>
+        <div class="editbar-set editbar-main" inert={formatting()}>
+          <For each={ACTIONS.slice(0, 6)}>{(a) => button(a.label, a.icon, () => press(a))}</For>
+          {button('Оформление', FORMAT_ICON, () => setFormatting(true))}
+          <For each={ACTIONS.slice(6)}>{(a) => button(a.label, a.icon, () => press(a))}</For>
+        </div>
+        <div class="editbar-set editbar-format" inert={!formatting()}>
+          {button('Назад', ['M15 6l-6 6 6 6'], () => setFormatting(false))}
+          <For each={FORMATS}>
+            {(f) => (
+              <button type="button" tabIndex={-1} class="editbar-labelled" aria-label={f.label} onClick={() => format(f.marker)}>
+                <Icon paths={[...f.icon]} />
+                <span class={f.class}>{f.label}</span>
+              </button>
+            )}
+          </For>
+        </div>
       </div>
     </Show>
   );

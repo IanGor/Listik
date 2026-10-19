@@ -26,6 +26,10 @@
   --link: light-dark(#a9583e, #e3997e);
   --chip: light-dark(rgb(204 120 92 / 0.1), rgb(204 120 92 / 0.16));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
+  /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
+     darker on cream, for contrast. */
+  --bold: light-dark(#2f6497, #8cb4dc);
+  --italic: light-dark(#55702f, #a3b886);
   --ring: rgb(204 120 92 / 0.22);
   --selection: rgb(204 120 92 / 0.24);
   --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
@@ -510,6 +514,26 @@ mark,
   color: var(--link);
 }
 
+/* Formatting (model/format.ts): markers hidden, what they enclose coloured. */
+.md-marker {
+  display: none;
+}
+
+.md-bold {
+  font-weight: 700;
+  color: var(--bold);
+}
+
+.md-italic {
+  font-style: italic;
+  color: var(--italic);
+}
+
+.row.done .md-bold,
+.row.done .md-italic {
+  color: inherit;
+}
+
 .message {
   max-width: var(--column);
   margin: 2rem auto;
@@ -849,12 +873,38 @@ mark,
 /* --- Editing bar on touch screens (EditBar.tsx) ------------------------------ */
 
 .editbar {
-  display: flex;
+  position: relative;
   flex: none;
-  justify-content: space-around;
-  padding: 4px 8px max(4px, env(safe-area-inset-bottom));
+  height: 52px;
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
   background: var(--canvas);
   border-top: 1px solid var(--hairline);
+}
+
+/* Two sets in one place (EditBar.tsx): the one away slides off to its side
+   and fades, the other comes in from the opposite one. */
+.editbar-set {
+  position: absolute;
+  inset: 4px 8px auto;
+  display: flex;
+  gap: 2px;
+  justify-content: space-around;
+  transition: transform 220ms var(--ease-out), opacity 160ms var(--ease-out);
+}
+
+.editbar-main[inert] {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.editbar-format {
+  justify-content: flex-start;
+}
+
+.editbar-format[inert] {
+  opacity: 0;
+  transform: translateX(32px);
 }
 
 .editbar button {
@@ -875,6 +925,23 @@ mark,
 .editbar button:active {
   color: var(--text);
   background: var(--surface-2);
+}
+
+/* A format says what it does in its own style: "Жирный" bold, "Курсив" italic. */
+.editbar .editbar-labelled {
+  display: flex;
+  flex: none;
+  gap: 8px;
+  max-width: none;
+  padding: 0 16px;
+  font-size: 15px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editbar-main[inert],
+  .editbar-format[inert] {
+    transform: none;
+  }
 }
 
 /* --- Suggestions for /commands and #tags (Suggest.tsx) --------------------- */

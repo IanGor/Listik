@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
+import { plainText } from '../model/format';
 import type { NodeId } from '../model/types';
 import { caretOnLastLine, selectionIn, setCaret } from './caret';
 import { onGlobalKeys } from './keymap';
@@ -59,7 +60,7 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   onCleanup(() => o.nodes.release(id));
   const text = () => {
     o.nodes.track(id);
-    return o.doc.nodes.get(id)?.text || '…';
+    return plainText(o.doc.nodes.get(id)?.text ?? '') || '…';
   };
   return (
     <Show
