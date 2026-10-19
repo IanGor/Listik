@@ -3,6 +3,7 @@ import { markdownOf } from '../model/outline-text';
 import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, caretX, selectionIn } from './caret';
 import type { Outliner } from './outliner';
+import { touch } from './screen';
 
 /** Keyboard handling for the row being edited (`el` is its contenteditable). */
 export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: HTMLElement): void {
@@ -34,8 +35,11 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: NodeId, el: H
 
     case 'Backspace':
       if (mod && e.shiftKey) return handle(() => o.run((ctx) => cmd.deleteNode(ctx, id)));
-      if (collapsed && start === 0) return handle(() => o.run((ctx) => cmd.mergeUp(ctx, id), here));
-      return;
+      if (!collapsed || start !== 0) return;
+      // On a touch screen a held Backspace runs on into the bullet above:
+      // there it only removes an empty bullet, never joins two texts.
+      if (touch() && o.doc.get(id).text) return;
+      return handle(() => o.run((ctx) => cmd.mergeUp(ctx, id), here));
 
     case 'Delete': {
       if (!collapsed || start !== o.doc.get(id).text.length) return;

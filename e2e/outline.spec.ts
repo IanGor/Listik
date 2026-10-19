@@ -733,6 +733,23 @@ test.describe('touch screen', () => {
     await expect(action(page, 'Готово')).toHaveCount(0);
   });
 
+  test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveText('Том второй');
+
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual([...DEMO, '']);
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveText('Том второй');
+  });
+
   /** A finger down on a row's bullet, optionally held, moved in steps to (x, y), and lifted. */
   async function finger(page: Page, from: string, opts: { hold: number; to?: (b: { x: number; y: number }) => { x: number; y: number } }) {
     const cdp = await page.context().newCDPSession(page);
