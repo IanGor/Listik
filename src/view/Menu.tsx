@@ -5,7 +5,7 @@ import type { BackupStatus } from '../persist/backup';
 import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
-import { narrow } from './screen';
+import { narrow, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { theme, toggleTheme } from './theme';
 
@@ -101,10 +101,11 @@ export function DocumentMenu(props: { o: Outliner }) {
             Скачать как OPML <span class="hint">для Workflowy</span>
           </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
-            Горячие клавиши <span class="hint">?</span>
+            <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
           </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.toggleShowDone(); }}>
-            {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'} <span class="hint">Ctrl+O</span>
+            {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'}
+            <Show when={!touch()}><span class="hint">Ctrl+O</span></Show>
           </button>
           <Show when={narrow()}>
             <button

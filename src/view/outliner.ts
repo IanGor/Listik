@@ -11,6 +11,7 @@ import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { NodeSignals } from './node-signals';
+import { touch } from './screen';
 
 const HIDE_DONE = 'listik-hide-done';
 
@@ -298,7 +299,7 @@ export class Outliner {
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
     });
-    this.notify(show ? 'Выполненные показаны' : 'Выполненные скрыты — Ctrl+O, чтобы показать');
+    this.notify(show ? 'Выполненные показаны' : `Выполненные скрыты — ${touch() ? 'показать можно в меню «⋯»' : 'Ctrl+O, чтобы показать'}`);
   }
 
   /** Ctrl+Enter: plain bullets become tasks; tasks are checked or unchecked. */

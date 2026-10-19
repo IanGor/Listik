@@ -1,9 +1,20 @@
-import { For, createEffect, on } from 'solid-js';
+import { For, Show, createEffect, on } from 'solid-js';
 import type { Outliner } from './outliner';
+import { touch } from './screen';
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 const MOD = MAC ? '⌘' : 'Ctrl';
 const ALT = MAC ? '⌥' : 'Alt';
+
+/** What a finger does on a touch screen: [gesture, what it does]. */
+const GESTURES: [gesture: string, action: string][] = [
+  ['касание точки', 'войти в пункт; у задачи — отметить'],
+  ['удержание точки', 'поднять пункт и перетащить'],
+  ['стрелка слева', 'свернуть / развернуть'],
+  ['касание #тега', 'искать этот тег'],
+  ['панель внизу', 'при правке: вынести, вложить, вверх, вниз, задача, заметка, отменить, повторить, готово'],
+  ['знак Listik', 'на главную, всё свернуть'],
+];
 
 /** [keys, what they do]; keys separated by spaces render as separate keycaps. */
 const GROUPS: [title: string, rows: [keys: string, action: string][]][] = [
@@ -44,9 +55,14 @@ const GROUPS: [title: string, rows: [keys: string, action: string][]][] = [
   ]],
 ];
 
-/** The keyboard shortcuts, grouped by task (`?`, Ctrl+/ or the menu). */
+/**
+ * The keyboard shortcuts, grouped by task (`?`, Ctrl+/ or the menu). On a
+ * touch screen the gestures come first; the keys still work with a keyboard
+ * attached.
+ */
 export function Shortcuts(props: { o: Outliner }) {
   let dialog!: HTMLDialogElement;
+  const title = () => (touch() ? 'Жесты и клавиши' : 'Горячие клавиши');
   createEffect(on(props.o.helpRequests, () => {
     if (!dialog.open) dialog.showModal();
   }, { defer: true }));
@@ -55,14 +71,14 @@ export function Shortcuts(props: { o: Outliner }) {
     <dialog
       ref={dialog}
       class="shortcuts"
-      aria-label="Горячие клавиши"
+      aria-label={title()}
       // A click on the backdrop (the dialog element itself, outside its content) closes it.
       onClick={(e) => e.target === dialog && dialog.close()}
     >
       {/* Focus lands on the panel itself, not on the close button. */}
       <div class="shortcuts-body" tabIndex={-1} autofocus>
         <div class="shortcuts-head">
-          <h2>Горячие клавиши</h2>
+          <h2>{title()}</h2>
           <button type="button" class="icon-button" aria-label="Закрыть" onClick={() => dialog.close()}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
               <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
@@ -70,6 +86,21 @@ export function Shortcuts(props: { o: Outliner }) {
           </button>
         </div>
         <div class="shortcuts-groups">
+          <Show when={touch()}>
+            <section>
+              <h3>Касания</h3>
+              <dl>
+                <For each={GESTURES}>
+                  {([gesture, action]) => (
+                    <>
+                      <dt class="gesture">{gesture}</dt>
+                      <dd>{action}</dd>
+                    </>
+                  )}
+                </For>
+              </dl>
+            </section>
+          </Show>
           <For each={GROUPS}>
             {([title, rows]) => (
               <section>

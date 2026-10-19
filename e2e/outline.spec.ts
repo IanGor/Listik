@@ -772,6 +772,18 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('the menu speaks of gestures, not keys', async ({ page }) => {
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    await expect(page.locator('.menu .hint', { hasText: /Ctrl|\?/ })).toHaveCount(0);
+    await page.getByRole('menuitem', { name: 'Жесты и клавиши' }).tap();
+    const panel = page.getByRole('dialog', { name: 'Жесты и клавиши' });
+    await expect(panel.locator('h3').first()).toHaveText('Касания');
+    await expect(panel).toContainText('поднять пункт и перетащить');
+    // The keys are still listed, for a keyboard attached to the phone.
+    await expect(panel).toContainText('вложить / вынести');
+    expect(await panel.evaluate((d) => d.scrollWidth <= d.clientWidth)).toBe(true);
+  });
+
   test('fold arrows show without hover and fold at a tap', async ({ page }) => {
     const toggle = page.locator('.row', { hasText: 'Том первый' }).locator('.toggle');
     await expect(toggle).toHaveCSS('opacity', '1');

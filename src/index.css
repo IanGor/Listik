@@ -974,6 +974,11 @@ body.is-dragging * {
   color: var(--muted);
 }
 
+/* A gesture is said in words, not keycaps. */
+.shortcuts dt.gesture {
+  white-space: normal;
+}
+
 
 /* --- Sheets (dialogs with forms) and the unlock screen ----------------------- */
 
