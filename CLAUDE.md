@@ -63,7 +63,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **тольк
   - `virtualizer.ts` + `fenwick.ts`;
   - `keymap.ts` — клавиши в строке, в заметке, при выделении, глобальные;
   - `drag.ts`;
-  - `TopBar.tsx` (с облаком синхронизации), `SearchBar.tsx`, `Menu.tsx`, `ZoomHeader.tsx`, `zoom-hash.ts`, `Shortcuts.tsx`, `SyncDialog.tsx`, `Unlock.tsx`, `theme.ts` (`toggleTheme`), `screen.ts` (`narrow` — экран ≤ 640 px: тема и облако уходят в меню), `caret.ts`, `files.ts`, `node-signals.ts`.
+  - `TopBar.tsx` (с облаком синхронизации), `SearchBar.tsx`, `Menu.tsx`, `ZoomHeader.tsx`, `zoom-hash.ts`, `Shortcuts.tsx`, `SyncDialog.tsx`, `Unlock.tsx`, `theme.ts` (`toggleTheme`), `screen.ts` (`narrow` — экран ≤ 640 px: тема и облако уходят в меню; `touch` — `pointer: coarse`), `EditBar.tsx` (панель действий над клавиатурой), `caret.ts`, `files.ts`, `node-signals.ts`.
 - **Прочее:**
   - `src/util/` — `own.ts`, `splice.ts`, `rng.ts`, `plural.ts`;
   - `src/dev/sample.ts` — демо и синтетика;

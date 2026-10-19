@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
 import { createDrag } from './drag';
+import { EditBar } from './EditBar';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
@@ -252,6 +253,7 @@ export function Outline(props: { o: Outliner }) {
           </Show>
         </div>
       </div>
+      <EditBar o={o} />
     </div>
   );
 }

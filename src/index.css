@@ -809,6 +809,43 @@ mark,
   color: var(--link);
 }
 
+/* --- Editing bar on touch screens (EditBar.tsx) ------------------------------ */
+
+.editbar {
+  display: flex;
+  flex: none;
+  justify-content: space-around;
+  padding: 4px 8px max(4px, env(safe-area-inset-bottom));
+  background: var(--canvas);
+  border-top: 1px solid var(--hairline);
+}
+
+.editbar button {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  max-width: 56px;
+  height: 44px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.editbar button:active {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* "Done" closes the keyboard: set apart from the edits by a hairline. */
+.editbar .editbar-done {
+  border-left: 1px solid var(--hairline);
+  border-radius: 0 10px 10px 0;
+}
+
 /* --- Drag and drop ----------------------------------------------------------- */
 
 .bullet {

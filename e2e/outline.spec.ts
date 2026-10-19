@@ -694,6 +694,53 @@ test.describe('phone screen', () => {
   });
 });
 
+test.describe('touch screen', () => {
+  // A OnePlus 8: no hardware keyboard, the pointer is a finger.
+  test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
+
+  const bar = (page: Page) => page.getByRole('toolbar', { name: 'Правка пункта' });
+  const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
+
+  test('a bar under the list does what Tab, Ctrl+Enter and Ctrl+Z do; the keyboard stays', async ({ page }) => {
+    await expect(bar(page)).toHaveCount(0);
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await expect(editing(page)).toBeFocused();
+    await expect(bar(page)).toBeVisible();
+
+    await action(page, 'Вынести').tap();
+    expect((await outline(page)).slice(-2)).toEqual(['Часть вторая', 'Том второй']);
+    await expect(editing(page)).toBeFocused();
+    await action(page, 'Вложить').tap();
+    await action(page, 'Переместить вверх').tap();
+    expect((await outline(page))[1]).toBe('  Часть вторая');
+    await action(page, 'Переместить вниз').tap();
+    expect(await outline(page)).toEqual(DEMO);
+
+    await action(page, 'Задача: сделать, отметить, снять отметку').tap();
+    await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet.todo')).toHaveCount(1);
+    await action(page, 'Отменить').tap();
+    await expect(page.locator('.bullet.todo')).toHaveCount(0);
+    await action(page, 'Повторить').tap();
+    await expect(page.locator('.bullet.todo')).toHaveCount(1);
+
+    await action(page, 'Заметка').tap();
+    await expect(page.locator('.note[contenteditable]')).toBeFocused();
+    await page.keyboard.type('с телефона');
+    await action(page, 'Заметка').tap();
+    await expect(editing(page)).toBeFocused();
+    await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.note')).toHaveText('с телефона');
+
+    await action(page, 'Готово').tap();
+    await expect(bar(page)).toHaveCount(0);
+    await expect(page.locator('[contenteditable]')).toHaveCount(0);
+  });
+});
+
+test('no editing bar with a mouse and a keyboard', async ({ page }) => {
+  await edit(page, 'Том второй');
+  await expect(page.locator('.editbar')).toHaveCount(0);
+});
+
 test.describe('persistence', () => {
   test('edits survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e');
