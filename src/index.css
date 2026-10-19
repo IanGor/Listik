@@ -664,10 +664,21 @@ mark,
   }
 }
 
-/* Touch screens have no Ctrl+F to hint at. */
+/* Touch screens have no Ctrl+F to hint at, and no hover: the fold arrows
+   show at all times, with a finger-sized target that stops short of the bullet. */
 @media (pointer: coarse) {
   .searchbar kbd {
     display: none;
+  }
+
+  .toggle {
+    opacity: 1;
+  }
+
+  .toggle::before {
+    content: '';
+    position: absolute;
+    inset: -6px -4px -6px -10px;
   }
 }
 

@@ -734,6 +734,17 @@ test.describe('touch screen', () => {
     await expect(bar(page)).toHaveCount(0);
     await expect(page.locator('[contenteditable]')).toHaveCount(0);
   });
+
+  test('fold arrows show without hover and fold at a tap', async ({ page }) => {
+    const toggle = page.locator('.row', { hasText: 'Том первый' }).locator('.toggle');
+    await expect(toggle).toHaveCSS('opacity', '1');
+    // The finger lands a little beside the 16px arrow: still the arrow.
+    const box = (await toggle.boundingBox())!;
+    await page.touchscreen.tap(box.x - 6, box.y + box.height / 2);
+    expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
+    await toggle.tap();
+    expect(await outline(page)).toEqual(DEMO);
+  });
 });
 
 test('no editing bar with a mouse and a keyboard', async ({ page }) => {
