@@ -320,6 +320,21 @@ test.describe('zoom', () => {
     await expect(page.locator('.search')).toHaveValue('#салон');
   });
 
+  test('every active piece of the title works as in a row: @tags and [[links]] too', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await title(page).click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' @иван [[Том второй]]');
+    await page.keyboard.press('Escape');
+    await expect(title(page).locator('.tag')).toHaveText('@иван');
+    await expect(title(page).locator('.link')).toHaveText('Том второй');
+    await title(page).locator('.tag').click();
+    await expect(page.locator('.search')).toHaveValue('@иван');
+    await page.locator('.searchbar .clear').click();
+    await title(page).locator('.link').click();
+    await expect(title(page)).toHaveText('Том второй');
+  });
+
   test('Alt+→ zooms into the edited bullet, Alt+← zooms out back to it', async ({ page }) => {
     await edit(page, 'Часть первая');
     await page.keyboard.press('Alt+ArrowRight');
