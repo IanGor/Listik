@@ -246,7 +246,8 @@ export class TextIndex implements DocListener {
 
 /**
  * Bullets matching the query: any clause, each with all its tags and terms,
- * none of its exclusions. Tags narrow first (from the tag index), so words
+ * none of its exclusions. A tag matches by its start, as a word does
+ * (`TagIndex.nodesWithPrefix`). Tags narrow first (from the tag index), so words
  * are only checked in tagged bullets; a clause of exclusions alone scans all.
  */
 export function findMatches(q: Query, tags: TagIndex, text: TextIndex, doc: Doc): ReadonlySet<NodeId> {
@@ -254,14 +255,14 @@ export function findMatches(q: Query, tags: TagIndex, text: TextIndex, doc: Doc)
   for (const c of q.clauses) {
     let candidates: Iterable<NodeId>;
     if (c.tags.length) {
-      const sets = c.tags.map((t) => tags.nodesWith(t)).sort((a, b) => a.size - b.size);
+      const sets = c.tags.map((t) => tags.nodesWithPrefix(t)).sort((a, b) => a.size - b.size);
       const within = new Set<NodeId>();
       for (const id of sets[0]) if (sets.every((s) => s.has(id))) within.add(id);
       candidates = c.terms.length ? text.find(c.terms, within) : within;
     } else {
       candidates = c.terms.length ? text.find(c.terms) : text.ids();
     }
-    const excluded = c.notTags.map((t) => tags.nodesWith(t));
+    const excluded = c.notTags.map((t) => tags.nodesWithPrefix(t));
     for (const id of candidates) {
       if (excluded.some((s) => s.has(id))) continue;
       if (c.is.length || c.notIs.length) {

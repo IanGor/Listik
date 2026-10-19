@@ -156,6 +156,22 @@ test('undo works in any keyboard layout and without an editing row', async ({ pa
 });
 
 test.describe('tag filter', () => {
+  test('a tag typed in the search box narrows with every character, as a word does', async ({ page }) => {
+    const search = page.locator('.search');
+    await search.click();
+    await search.pressSequentially('#');
+    await expect(page.locator('.searchbar .count')).toHaveText(/^2 /);
+    await search.pressSequentially('с');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
+    await expect(page.locator('.tag.active')).toHaveText('#салон');
+    await search.press('Backspace');
+    await search.pressSequentially('ш');
+    await expect.poll(() => outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
+    await search.pressSequentially('х');
+    await expect(page.locator('.searchbar .count')).toHaveText(/^0 /);
+  });
+
   test('clicking a tag shows only tagged bullets with their path; Esc clears', async ({ page }) => {
     await expect(page.locator('.tag')).toHaveText(['#салон', '#шерер']);
     await page.locator('.tag', { hasText: '#салон' }).click();
@@ -917,6 +933,27 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toBeFocused();
     await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
+  });
+
+  test('in the zoom title the bar offers the note: made if there is none, and back to the title', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').tap();
+    const title = page.locator('.zoom-title');
+    await title.tap();
+    await expect(title).toBeFocused();
+    await keyboard(page, true);
+    await expect(bar(page)).toBeVisible();
+    // Only what applies to the title: no moving it about.
+    await expect(action(page, 'Вложить')).toHaveCount(0);
+    await action(page, 'Заметка').tap();
+    const note = page.locator('.zoom-note');
+    await expect(note).toBeFocused();
+    await page.keyboard.type('с телефона');
+    await action(page, 'Заметка').tap();
+    await expect(title).toBeFocused();
+    await expect(note).toHaveText('с телефона');
+    // Undo takes typing back a word at a time.
+    await action(page, 'Отменить').tap();
+    await expect(note).toHaveText('с ');
   });
 
   test('typing at the bottom keeps the line, descenders and air, above the bar', async ({ page }) => {

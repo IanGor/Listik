@@ -82,6 +82,28 @@ export class TagIndex implements DocListener {
     return this.byTag.get(tag.toLowerCase()) ?? EMPTY;
   }
 
+  /**
+   * Bullets with a tag that starts with `prefix`: a tag in the search box
+   * narrows with every character typed, like a word (`#n` finds #next and
+   * #note, `#ne` only #next). `#` and `@` tags stay apart: an `@` tag's key
+   * starts with `@`.
+   */
+  nodesWithPrefix(prefix: string): ReadonlySet<NodeId> {
+    const p = prefix.toLowerCase();
+    let first: ReadonlySet<NodeId> | null = null;
+    let union: Set<NodeId> | null = null;
+    for (const [tag, ids] of this.byTag) {
+      if (!tag.startsWith(p)) continue;
+      if (!first) {
+        first = ids;
+        continue;
+      }
+      union ??= new Set(first);
+      for (const id of ids) union.add(id);
+    }
+    return union ?? first ?? EMPTY;
+  }
+
   /** All tags with their bullet counts. */
   counts(): Map<string, number> {
     return new Map([...this.byTag].map(([tag, ids]) => [tag, ids.size]));

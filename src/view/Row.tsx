@@ -38,7 +38,7 @@ export function Pieces(props: { o: Outliner; pieces: Piece[] }) {
         const inner = p.link !== undefined
           ? <span class="link" data-link={p.link}>{plain}</span>
           : p.tag
-            ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+            ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
             : plain;
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
       }}

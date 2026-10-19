@@ -1,11 +1,11 @@
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
 import { plainText } from '../model/format';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
 import { formatKeys, onGlobalKeys } from './keymap';
-import type { Outliner } from './outliner';
+import type { Outliner, TitleEdit } from './outliner';
 import { Pieces } from './Row';
 
 /**
@@ -90,9 +90,6 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   );
 }
 
-/** What of the title is being edited, and where the caret goes; null while it only shows. */
-type TitleEdit = { note: boolean; caret: number } | null;
-
 /**
  * The zoomed-in bullet's text and, under it, its whole note. Both show like
  * a row's: tags filter on a click, links lead to their bullet, bold and
@@ -111,7 +108,11 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   };
   const text = () => node()?.text ?? '';
   const note = () => node()?.note ?? '';
-  const [edit, setEdit] = createSignal<TitleEdit>(null);
+  // Kept by the Outliner, so the editing bar on a touch screen sees it too.
+  const edit = o.titleEdit;
+  const setEdit = o.editTitle;
+  setEdit(null);
+  onCleanup(() => setEdit(null));
   /** An editor lost focus: editing ends, unless it has moved to the other part already. */
   const leave = (isNote: boolean) => edit()?.note === isNote && setEdit(null);
   const terms = () => o.filter()?.query.terms ?? [];

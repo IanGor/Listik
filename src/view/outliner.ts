@@ -41,6 +41,9 @@ function writeSetting(key: string, value: string | null): void {
  */
 export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'last'; note?: true };
 
+/** What of the zoom title is being edited (ZoomHeader.tsx) and where the caret goes; null when neither. */
+export type TitleEdit = { note: boolean; caret: number } | null;
+
 /** Several rows selected: from `anchor` (where it started) to `head` (the moving end). */
 export interface Selection {
   anchor: RowKey;
@@ -77,6 +80,9 @@ export class Outliner {
   readonly zoom: Accessor<NodeId | null>;
   /** Bumped to move the caret into the zoomed-in bullet's title. */
   readonly titleRequests: Accessor<number>;
+  /** The zoom title or its note being edited: the editing bar (EditBar.tsx) serves them too. */
+  readonly titleEdit: Accessor<TitleEdit>;
+  readonly editTitle: Setter<TitleEdit>;
   /** Bumped to open the keyboard shortcuts panel. */
   readonly helpRequests: Accessor<number>;
   private setHelpRequests: Setter<number>;
@@ -136,6 +142,7 @@ export class Outliner {
     [this.searchRequests, this.setSearchRequests] = createSignal(0);
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
+    [this.titleEdit, this.editTitle] = createSignal<TitleEdit>(null);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.helpRequests, this.setHelpRequests] = createSignal(0);
     [this.syncRequests, this.setSyncRequests] = createSignal(0);

@@ -12,6 +12,8 @@ interface Action {
   /** SVG paths of its icon, drawn by `Icon`. */
   icon: string[];
   run: (o: Outliner, here: Focus) => void;
+  /** For the zoom title too (`here.id` is then the zoomed-in bullet), and how, if not as for a row. */
+  title?: true | ((o: Outliner, here: Focus) => void);
 }
 
 /** What the formatting set offers: bold or italic around the selection (Ctrl+B / Ctrl+I). */
@@ -46,10 +48,15 @@ const ACTIONS: Action[] = [
       const n = o.contentOf(h.id);
       o.setFocus(h.note ? { id: h.id, caret: n.text.length } : { id: h.id, caret: n.note.length, note: true });
     },
+    // In the zoom title: to its note (made if there is none) and back.
+    title: (o, h) => {
+      const n = o.doc.get(h.id);
+      o.editTitle(h.note ? { note: false, caret: n.text.length } : { note: true, caret: n.note.length });
+    },
   },
-  { label: 'Вставить время', icon: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'M12 7v5l3 2'], run: (o, h) => o.insert(h, timeOfDay()) },
-  { label: 'Отменить', icon: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'], run: (o) => o.undo() },
-  { label: 'Повторить', icon: ['M15 14l5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'], run: (o) => o.redo() },
+  { label: 'Вставить время', icon: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'M12 7v5l3 2'], run: (o, h) => o.insert(h, timeOfDay()), title: true },
+  { label: 'Отменить', icon: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'], run: (o) => o.undo(), title: true },
+  { label: 'Повторить', icon: ['M15 14l5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'], run: (o) => o.redo(), title: true },
 ];
 
 /**
@@ -62,26 +69,42 @@ const ACTIONS: Action[] = [
  * Two sets share its place. "Оформление" slides the main set out to the left
  * and the formatting set in from the right; picking a format, or "Назад",
  * slides back. Another bullet always starts on the main set.
+ *
+ * In the zoom title (or its note) the bar offers what applies there: the
+ * note, formatting, the time, undo and redo.
  */
 export function EditBar(props: { o: Outliner }) {
   const o = props.o;
 
+  /** The zoom title or its note is being edited, not a row. */
+  const inTitle = () => !o.focus() && !!o.titleEdit() && o.zoom() !== null;
+
   /** Where the caret is now: the command keeps it there, and undo returns to it. */
   const here = (): Focus | null => {
-    const f = o.focus();
-    if (!f) return null;
     const el = document.activeElement as HTMLElement | null;
     const caret = el?.isContentEditable ? (selectionIn(el)?.[0] ?? 0) : 0;
-    return 'note' in f && f.note ? { id: f.id, caret, note: true } : { id: f.id, caret };
+    const f = o.focus();
+    if (f) return 'note' in f && f.note ? { id: f.id, caret, note: true } : { id: f.id, caret };
+    const t = o.titleEdit();
+    const z = o.zoom();
+    if (!t || !z) return null;
+    return t.note ? { id: z, caret, note: true } : { id: z, caret };
   };
 
   const [formatting, setFormatting] = createSignal(false);
-  createEffect(on(() => o.focus()?.id, () => setFormatting(false)));
+  createEffect(on(() => o.focus()?.id ?? o.titleEdit()?.note, () => setFormatting(false)));
 
   const press = (action: Action) => {
     const h = here();
-    if (h) action.run(o, h);
+    if (!h) return;
+    if (inTitle()) return typeof action.title === 'function' ? action.title(o, h) : action.run(o, h);
+    action.run(o, h);
   };
+
+  /** The main set: everything for a row, what applies for the title. */
+  const actions = () => (inTitle() ? ACTIONS.filter((a) => a.title) : ACTIONS);
+  /** Where "Оформление" goes among them: after the note. */
+  const split = () => actions().findIndex((a) => a.label === 'Заметка') + 1;
 
   const format = (marker: '**' | '*') => {
     const h = here();
@@ -97,12 +120,12 @@ export function EditBar(props: { o: Outliner }) {
   );
 
   return (
-    <Show when={touch() && keyboard() && !o.readOnly && o.focus()}>
+    <Show when={touch() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <div class="editbar-set editbar-main" inert={formatting()}>
-          <For each={ACTIONS.slice(0, 6)}>{(a) => button(a.label, a.icon, () => press(a))}</For>
+          <For each={actions().slice(0, split())}>{(a) => button(a.label, a.icon, () => press(a))}</For>
           {button('Оформление', FORMAT_ICON, () => setFormatting(true))}
-          <For each={ACTIONS.slice(6)}>{(a) => button(a.label, a.icon, () => press(a))}</For>
+          <For each={actions().slice(split())}>{(a) => button(a.label, a.icon, () => press(a))}</For>
         </div>
         <div class="editbar-set editbar-format" inert={!formatting()}>
           {button('Назад', ['M15 6l-6 6 6 6'], () => setFormatting(false))}

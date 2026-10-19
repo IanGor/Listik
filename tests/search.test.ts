@@ -72,6 +72,17 @@ describe('findMatches', () => {
     expect(find('#нет')).toEqual([]);
   });
 
+  it('matches a tag by its start, so it narrows with every character typed, as a word does', () => {
+    expect(find('#б')).toEqual(['Пьер и Андрей #война #бал', 'Пьер на балу #бал'].sort());
+    expect(find('#в')).toEqual(['Князь Андрей #война', 'Пьер и Андрей #война #бал'].sort());
+    expect(find('#во')).toEqual(['Князь Андрей #война', 'Пьер и Андрей #война #бал'].sort());
+    expect(find('#вой #б')).toEqual(['Пьер и Андрей #война #бал']);
+    expect(find('#войнаа')).toEqual([]);
+    expect(find('андрей -#б')).toEqual(['Князь Андрей #война']);
+    // # and @ tags stay apart.
+    expect(find('@в')).toEqual([]);
+  });
+
   it('excludes words, phrases and tags, filters by completion, and joins alternatives with OR', () => {
     expect(find('пьер -балу')).toEqual(['Пьер и Андрей #война #бал']);
     expect(find('андрей -#бал')).toEqual(['Князь Андрей #война']);
