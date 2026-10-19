@@ -1,13 +1,18 @@
+import { linkBefore } from './links';
 import type { Sigil } from './tags';
 
 /**
- * Completion of `/commands`, `#tags` and `@tags` while typing (view/Suggest.tsx): what
- * is being typed before the caret, and what it may become.
+ * Completion of `/commands`, `#tags`, `@tags` and `[[links]]` while typing
+ * (view/Suggest.tsx): what is being typed before the caret, and what it may
+ * become.
  */
 
-/** A `/command`, `#tag` or `@tag` being typed: the sigil, what follows it up to the caret, and the word's span. */
+/**
+ * A `/command`, `#tag`, `@tag` or `[[link` being typed: the sigil, what
+ * follows it up to the caret, and the word's span (a link's, through its `]]`).
+ */
 export interface Token {
-  kind: '/' | Sigil;
+  kind: '/' | Sigil | '[[';
   /** Typed after the sigil, up to the caret. */
   query: string;
   /** Where the sigil is. */
@@ -19,11 +24,14 @@ export interface Token {
 const WORD = /[\p{L}\p{N}_-]/u;
 
 /**
- * The token right before `caret`: a sigil, then word characters up to the
- * caret. The sigil starts the text or follows whitespace (a tag also "(",
- * as in tags.ts), so "a/b", URLs, "a#b" and "a@mail.ru" are not tokens.
+ * The token right before `caret`: the link the caret is in (model/links.ts),
+ * or else a sigil, then word characters up to the caret. The sigil starts
+ * the text or follows whitespace (a tag also "(", as in tags.ts), so "a/b",
+ * URLs, "a#b" and "a@mail.ru" are not tokens.
  */
 export function tokenBefore(text: string, caret: number): Token | null {
+  const link = linkBefore(text, caret);
+  if (link) return { kind: '[[', ...link };
   let i = caret;
   while (i > 0 && WORD.test(text[i - 1])) i--;
   const start = i - 1;

@@ -1115,6 +1115,57 @@ test.describe('suggestions', () => {
   });
 });
 
+test.describe('links', () => {
+  const list = (page: Page) => page.getByRole('listbox', { name: 'Ссылки' });
+  const options = (page: Page) => page.getByRole('option').allTextContents();
+  const crumbs = (page: Page) => page.locator('.crumbs .crumb');
+
+  test('[[ closes itself and offers bullets by title; a click on the link zooms into the bullet where it is', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('см. [[');
+    await expect(editing(page)).toHaveText('см. [[]]');
+    await expect(list(page)).toBeVisible();
+    await page.keyboard.type('втор');
+    // Shorter titles first; the hint is where the bullet is.
+    expect(await options(page)).toEqual(['Том второй', 'Часть втораяТом первый']);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(list(page)).toHaveCount(0);
+    await expect(editing(page)).toHaveText('см. [[Часть вторая]]');
+    await page.keyboard.type(' и дальше');
+    await expect(editing(page)).toHaveText('см. [[Часть вторая]] и дальше');
+    await page.keyboard.press('Escape');
+
+    const link = page.locator('.row .link');
+    await expect(link).toHaveText('Часть вторая');
+    await link.click();
+    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая']);
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+    await page.goBack();
+    await expect(crumbs(page)).toHaveText(['Главная']);
+    await expect(page.locator('.row .link')).toHaveText('Часть вторая');
+  });
+
+  test('] steps over the closing brackets, Backspace takes out an empty pair, a link to nothing says so', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('[[');
+    await expect(editing(page)).toHaveText('[[]]');
+    await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('[]');
+    await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('');
+
+    await page.keyboard.type('[[Нет такого]]!');
+    await expect(editing(page)).toHaveText('[[Нет такого]]!');
+    await page.keyboard.press('Escape');
+    await page.locator('.row .link').click();
+    await expect(page.locator('.toast')).toContainText('Нет пункта «Нет такого»');
+    await expect(crumbs(page)).toHaveText(['Главная']);
+  });
+});
+
 test.describe('bold and italic', () => {
   test('**bold** and *italic* show styled, markers hidden; editing shows the markers', async ({ page }) => {
     await edit(page, 'Том второй');

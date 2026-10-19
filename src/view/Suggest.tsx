@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from '../model/complete';
+import { findTargets } from '../model/links';
 import { tagKey, type Sigil } from '../model/tags';
 import { timeOfDay } from '../model/time';
 import type { NodeId } from '../model/types';
@@ -11,6 +12,7 @@ interface Item {
   label: string;
   hint?: string;
   tag?: boolean;
+  link?: boolean;
   /** What replaces the typed token. */
   text: () => string;
 }
@@ -34,7 +36,8 @@ const [open, setOpen] = createSignal<Open | null>(null);
 /** The token Esc closed: it stays closed until another one is typed. */
 let dismissed = '';
 let accept: (i: number) => void = () => {};
-let refresh = () => {};
+/** Follows the caret; `now` computes link suggestions on the spot rather than after the next frame. */
+let refresh = (_now?: boolean) => {};
 
 const rowHeight = () => (touch() ? 40 : 32);
 const keyOf = (id: NodeId, note: boolean, t: Token) => `${id}\n${note}\n${t.start}`;
@@ -46,7 +49,7 @@ const keyOf = (id: NodeId, note: boolean, t: Token) => `${id}\n${note}\n${t.star
 export function suggestKey(e: KeyboardEvent): boolean {
   // `selectionchange` comes as a task of its own: a key pressed right after
   // typing would see the list as it was a character ago.
-  refresh();
+  refresh(true);
   const s = open();
   if (!s || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return false;
   const move = (d: number) => setOpen({ ...s, active: (s.active + d + s.items.length) % s.items.length });
@@ -84,9 +87,10 @@ function caretRect(el: HTMLElement): DOMRect {
 }
 
 /**
- * Suggestions while a `/command`, `#tag` or `@tag` is typed, in a bullet or
- * its note: commands that start with what is typed, or existing tags of the
- * same sigil (model/complete.ts).
+ * Suggestions while a `/command`, `#tag`, `@tag` or `[[link` is typed, in a
+ * bullet or its note: commands that start with what is typed, existing tags
+ * of the same sigil (model/complete.ts), or bullets to link to by title
+ * (model/links.ts).
  * As many as fit about a third of the window, so fewer on a phone with its
  * keyboard up. Taking one replaces the whole word: it need not be typed out.
  * Follows the caret through `selectionchange`, which also fires on typing.
@@ -117,13 +121,47 @@ export function Suggest(props: { o: Outliner }) {
     }));
   };
 
-  refresh = () => {
+  /**
+   * Bullets to link to, with where each one is. A pass over every bullet
+   * (tens of ms on 200k): kept while the query stays the same, since the
+   * list is refreshed on every caret move and scroll as well. A new query is
+   * looked up after the next frame unless `now`, so the typed character
+   * shows first; meanwhile null, and the list stays as it was.
+   */
+  let found: { key: string; items: Item[] } | null = null;
+  let later = false;
+  const links = (id: NodeId, t: Token, limit: number, now: boolean): Item[] | null => {
+    const key = `${id}\n${limit}\n${t.query}`;
+    if (found?.key !== key) {
+      if (!now) {
+        if (!later) {
+          later = true;
+          requestAnimationFrame(() => setTimeout(() => {
+            later = false;
+            refresh(true);
+          }));
+        }
+        return null;
+      }
+      const items = findTargets(o.doc, o.text, t.query, id, limit).map((target) => ({
+        label: target.title,
+        hint: target.where,
+        link: true,
+        text: () => `[[${target.title}]]`,
+      }));
+      found = { key, items };
+    }
+    return found.items;
+  };
+
+  refresh = (now = false) => {
     const el = document.activeElement as HTMLElement | null;
     const f = o.focus();
     if (!f || o.readOnly || !el?.isContentEditable || !el.closest('.row')) return setOpen(null);
     const sel = selectionIn(el);
     const text = el.textContent ?? '';
     const token = sel && sel[0] === sel[1] ? tokenBefore(text, sel[0]) : null;
+    if (token?.kind !== '[[') found = null;
     if (!token) {
       dismissed = '';
       return setOpen(null);
@@ -131,7 +169,9 @@ export function Suggest(props: { o: Outliner }) {
     const note = el.classList.contains('note');
     if (keyOf(f.id, note, token) === dismissed) return setOpen(null);
     const limit = suggestLimit(innerHeight, rowHeight());
-    const items = token.kind === '/' ? commands(token, limit) : tags(f.id, token, text, limit);
+    const items =
+      token.kind === '/' ? commands(token, limit) : token.kind === '[[' ? links(f.id, token, limit, now) : tags(f.id, token, text, limit);
+    if (!items) return;
     if (!items.length) return setOpen(null);
     const prev = open();
     const same = prev?.id === f.id && prev.note === note && prev.token.start === token.start && prev.token.query === token.query;
@@ -152,14 +192,15 @@ export function Suggest(props: { o: Outliner }) {
   };
 
   onMount(() => {
-    document.addEventListener('selectionchange', refresh);
-    addEventListener('resize', refresh);
+    const follow = () => refresh();
+    document.addEventListener('selectionchange', follow);
+    addEventListener('resize', follow);
     // The list hangs from the caret: it follows when the outline scrolls.
-    document.addEventListener('scroll', refresh, true);
+    document.addEventListener('scroll', follow, true);
     onCleanup(() => {
-      document.removeEventListener('selectionchange', refresh);
-      removeEventListener('resize', refresh);
-      document.removeEventListener('scroll', refresh, true);
+      document.removeEventListener('selectionchange', follow);
+      removeEventListener('resize', follow);
+      document.removeEventListener('scroll', follow, true);
       accept = () => {};
       refresh = () => {};
       setOpen(null);
@@ -187,7 +228,7 @@ export function Suggest(props: { o: Outliner }) {
         <div
           class="suggest"
           role="listbox"
-          aria-label={s().token.kind === '/' ? 'Команды' : 'Теги'}
+          aria-label={s().token.kind === '/' ? 'Команды' : s().token.kind === '[[' ? 'Ссылки' : 'Теги'}
           style={place(s())}
           // Taking a suggestion must not take focus from the row: the keyboard stays.
           onMouseDown={(e) => e.preventDefault()}
@@ -197,7 +238,7 @@ export function Suggest(props: { o: Outliner }) {
               <div
                 role="option"
                 class="suggest-item"
-                classList={{ current: i() === s().active, 'suggest-tag': !!item.tag }}
+                classList={{ current: i() === s().active, 'suggest-tag': !!item.tag, 'suggest-link': !!item.link }}
                 aria-selected={i() === s().active}
                 onPointerMove={() => i() !== s().active && setOpen({ ...s(), active: i() })}
                 onClick={() => accept(i())}

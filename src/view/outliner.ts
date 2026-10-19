@@ -3,6 +3,7 @@ import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
+import { resolveLink } from '../model/links';
 import { VisibleRows, keepSet } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
@@ -234,6 +235,20 @@ export class Outliner {
   /** A click on a tag: search for it. */
   filterByTag(tag: string): void {
     this.setQuery(tagText(tag), true);
+  }
+
+  /**
+   * A click on a `[[link]]`: zoom into the bullet it names, where it really
+   * is in the outline (model/links.ts). A search is cleared, so all of it shows.
+   */
+  followLink(title: string): void {
+    const id = resolveLink(this.doc, this.text, title);
+    if (!id) return this.notify(`Нет пункта «${title.trim()}»`);
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      this.zoomTo(id);
+    });
   }
 
   /**

@@ -511,6 +511,19 @@ mark,
   color: var(--link);
 }
 
+/* [[Links]] to other bullets (model/links.ts): the title, underlined. */
+.link {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
 /* Formatting (model/format.ts): markers hidden, what they enclose coloured. */
 .md-marker {
   display: none;
@@ -1017,8 +1030,18 @@ mark,
   text-overflow: ellipsis;
 }
 
-.suggest-tag .suggest-label {
+.suggest-tag .suggest-label,
+.suggest-link .suggest-label {
   color: var(--link);
+}
+
+/* A link's hint is where the bullet is: it gives way to the title. */
+.suggest-link .suggest-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .suggest-hint {

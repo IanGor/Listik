@@ -1,5 +1,5 @@
 import { walkSnapshot, type Doc, type DocListener } from './doc';
-import { BOLD, ITALIC, MARKER, formatFlags } from './format';
+import { BOLD, ITALIC, LINK, LINK_RE, MARKER, formatFlags } from './format';
 import { content, splitTags, tagKey, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
@@ -179,6 +179,11 @@ export class TextIndex implements DocListener {
     return this.warmUp().keys();
   }
 
+  /** Every bullet with its normalized text and note. */
+  entries(): Iterable<[NodeId, string]> {
+    return this.warmUp();
+  }
+
   /** A bullet's normalized text and note. */
   textOf(id: NodeId): string {
     return this.warmUp().get(id) ?? '';
@@ -284,9 +289,11 @@ export interface Piece {
   italic?: true;
   /** A formatting marker itself: hidden in the static view. */
   marker?: true;
+  /** Part of a `[[link]]` (model/links.ts): the title it leads to. Tags inside a link are just text. */
+  link?: string;
 }
 
-const HIT = 8;
+const HIT = 16;
 
 /** Splits text into pieces for display: tags, search hits, bold, italic, formatting markers, plain text. */
 export function decorate(text: string, terms: string[]): Piece[] {
@@ -306,6 +313,8 @@ export function decorate(text: string, terms: string[]): Piece[] {
 
   // Within each tag or plain segment, a new piece wherever the marks change.
   const out: Piece[] = [];
+  const links = flags && text.includes('[[') ? [...text.matchAll(LINK_RE)] : [];
+  let link = 0;
   let pos = 0;
   for (const s of segments) {
     const end = pos + s.text.length;
@@ -314,7 +323,10 @@ export function decorate(text: string, terms: string[]): Piece[] {
       let next = cur + 1;
       while (next < end && marks[next] === m) next++;
       const piece: Piece = { text: text.slice(cur, next) };
-      if (s.tag) piece.tag = s.tag;
+      if (m & LINK) {
+        while (links[link].index + links[link][0].length <= cur) link++;
+        piece.link = links[link][1];
+      } else if (s.tag) piece.tag = s.tag;
       if (m & HIT) piece.hit = true;
       if (m & MARKER) piece.marker = true;
       else {

@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
+import { closesLink, opensLink } from '../model/links';
 import { parseIndented } from '../model/outline-text';
 import { decorate, type Piece } from '../model/search';
 import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
@@ -32,9 +33,12 @@ function Pieces(props: { o: Outliner; pieces: Piece[] }) {
     <For each={props.pieces}>
       {(p) => {
         if (p.marker) return <span class="md-marker">{p.text}</span>;
-        const inner = p.tag
-          ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
-          : p.hit ? <mark>{p.text}</mark> : p.text;
+        const plain = p.hit ? <mark>{p.text}</mark> : p.text;
+        const inner = p.link !== undefined
+          ? <span class="link" data-link={p.link}>{plain}</span>
+          : p.tag
+            ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.includes(p.tag), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+            : plain;
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
       }}
     </For>
@@ -86,12 +90,15 @@ export function Row(props: RowProps) {
   const pieces = createMemo(() => decorate(node()?.text ?? '', terms()));
   const notePieces = createMemo(() => decorate(node()?.note ?? '', terms()));
 
-  /** A click in static text: a tag filters, anything else puts the caret there. */
+  /** A click in static text: a tag filters, a link leads to its bullet, anything else puts the caret there. */
   const onStaticMouseDown = (note: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    const tag = (e.target as HTMLElement).dataset.tag;
+    const target = e.target as HTMLElement;
+    const tag = target.dataset.tag;
     if (tag) return o.filterByTag(tag);
+    const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
+    if (link !== undefined) return o.followLink(link);
     // Shift+click selects the rows from the edited (or already selected) one to here.
     const anchor = o.selection()?.anchor ?? o.focus()?.id;
     if (e.shiftKey && anchor) {
@@ -197,16 +204,50 @@ const timeCommand = (o: Outliner, id: NodeId, el: HTMLElement, text: string, not
   o.insert(note ? { id, caret, note: true } : { id, caret }, timeOfDay(), TIME_COMMAND.length);
 };
 
-// Undo/redo from the browser's menu bypasses keydown.
-const historyInput = (o: Outliner) => (e: InputEvent) => {
+/**
+ * `[[` typed: closed with `]]` at once, the caret between, ready for the
+ * title (and the suggestions, Suggest.tsx). Returns the text to keep.
+ */
+const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: string) => void): string => {
+  if (e.isComposing || e.inputType !== 'insertText' || e.data !== '[') return text;
+  const caret = selectionIn(el)?.[0];
+  if (caret === undefined || !opensLink(text, caret)) return text;
+  const next = `${text.slice(0, caret)}]]${text.slice(caret)}`;
+  write(next);
+  setCaret(el, caret);
+  return next;
+};
+
+/**
+ * Before the browser edits the text: undo/redo from its menu (which bypasses
+ * keydown), `]` stepping over a link's closing bracket, Backspace taking out
+ * an empty `[]` pair whole. `read`/`write` give the element's text.
+ */
+function beforeInput(e: InputEvent, o: Outliner, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void): void {
   if (e.inputType === 'historyUndo') {
     e.preventDefault();
-    o.undo();
-  } else if (e.inputType === 'historyRedo') {
-    e.preventDefault();
-    o.redo();
+    return o.undo();
   }
-};
+  if (e.inputType === 'historyRedo') {
+    e.preventDefault();
+    return o.redo();
+  }
+  if (e.isComposing || !e.cancelable) return;
+  const sel = selectionIn(el);
+  if (!sel || sel[0] !== sel[1]) return;
+  const caret = sel[0];
+  const text = read();
+  if (e.inputType === 'insertText' && e.data === ']' && closesLink(text, caret)) {
+    e.preventDefault();
+    setCaret(el, caret + 1);
+  } else if (e.inputType === 'deleteContentBackward' && text[caret - 1] === '[' && text[caret] === ']') {
+    e.preventDefault();
+    const next = text.slice(0, caret - 1) + text.slice(caret + 1);
+    write(next);
+    setCaret(el, caret - 1);
+    save(next);
+  }
+}
 
 /** Places the caret for a focus request: at an offset, or at a horizontal position on the first/last line. */
 function placeCaret(el: HTMLElement, f: FocusRequest): void {
@@ -257,7 +298,8 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       el.textContent = t.replace(/\n/g, ' ');
       setCaret(el, caret);
     }
-    o.type(id, el.textContent ?? '');
+    const write = (t: string) => (el.textContent = t);
+    o.type(id, closeLink(e, el, el.textContent ?? '', write));
     if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
   };
 
@@ -280,7 +322,7 @@ function Editable(props: { o: Outliner; id: NodeId }) {
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
       onPaste={onPaste}
-      onBeforeInput={historyInput(o)}
+      onBeforeInput={(e) => beforeInput(e, o, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t))}
     />
   );
 }
@@ -325,7 +367,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
       write(el.innerText.replace(/\n$/, ''));
       if (caret !== undefined) setCaret(el, caret);
     }
-    o.typeNote(id, read());
+    o.typeNote(id, closeLink(e, el, read(), write));
     if (!e.isComposing) timeCommand(o, id, el, read(), true);
   };
 
@@ -337,7 +379,7 @@ function NoteEditable(props: { o: Outliner; id: NodeId }) {
       onKeyDown={(e) => suggestKey(e) || onNoteKeyDown(e, o, id, el)}
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, read(), true)}
-      onBeforeInput={historyInput(o)}
+      onBeforeInput={(e) => beforeInput(e, o, el, read, write, (t) => o.typeNote(id, t))}
     />
   );
 }
