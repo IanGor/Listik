@@ -669,6 +669,38 @@ test.describe('theme', () => {
   });
 });
 
+test.describe('text size', () => {
+  const fontSize = (page: Page) => page.locator('.row .text').first().evaluate((el) => getComputedStyle(el).fontSize);
+  const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
+
+  test('the menu steps the outline text, keeps the menu open, and the size survives a reload', async ({ page }) => {
+    expect(await fontSize(page)).toBe('17px');
+    await menu(page).click();
+    const larger = page.getByRole('button', { name: 'Крупнее' });
+    await larger.click();
+    await larger.click();
+    await expect(page.locator('.menu')).toBeVisible();
+    await expect(page.locator('.step-value')).toHaveText('130%');
+    expect(await fontSize(page)).toBe('22.1px');
+    // The chrome keeps its size; only the outline grows.
+    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('15px');
+    // Rows are measured again: none overlaps the next.
+    const boxes = await page.locator('.row').evaluateAll((rows) => rows.map((r) => r.getBoundingClientRect()).map((b) => [b.top, b.bottom]));
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i][0]).toBeGreaterThanOrEqual(boxes[i - 1][1] - 0.5);
+
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+    expect(await fontSize(page)).toBe('22.1px');
+    await menu(page).click();
+    await page.getByRole('button', { name: 'Мельче' }).click();
+    await page.getByRole('button', { name: 'Мельче' }).click();
+    await page.getByRole('button', { name: 'Мельче' }).click();
+    await expect(page.locator('.step-value')).toHaveText('85%');
+    await expect(page.getByRole('button', { name: 'Мельче' })).toBeDisabled();
+    expect(await fontSize(page)).toBe('14.45px');
+  });
+});
+
 test.describe('phone screen', () => {
   const rightmost = (page: Page) =>
     page.locator('.topbar > *, .topbar-actions > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));

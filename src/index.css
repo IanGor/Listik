@@ -43,8 +43,10 @@
      otherwise whatever the OS/browser maps `monospace` to. */
   --font-text: ui-monospace, monospace;
   /* Must stay explicit: a bare `monospace` family otherwise falls back to
-     the browser's 13px default. */
-  --font-size: 17px;
+     the browser's 13px default. `--font-scale` is the text size picked in
+     the menu (view/textsize.ts); it scales the outline, not the chrome. */
+  --font-scale: 1;
+  --font-size: calc(17px * var(--font-scale));
   --line-height: 1.53;
   /* Indent per nesting level in px, after Workflowy; the text column in
      character cells. The height estimate in Outline.tsx measures --indent and
@@ -442,7 +444,7 @@ kbd {
 /* A note under the bullet: smaller, quieter, may span lines. Notes size is
    mirrored by NOTE_SCALE in Outline.tsx. */
 .note {
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   line-height: 1.5;
   color: var(--muted);
   white-space: pre-wrap;
@@ -612,7 +614,7 @@ mark,
 
 .zoom-title {
   min-height: 1lh;
-  font-size: 28px;
+  font-size: calc(28px * var(--font-scale));
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.02em;
@@ -661,7 +663,7 @@ mark,
 /* Phones. The width is mirrored by view/screen.ts. */
 @media (max-width: 640px) {
   :root {
-    --font-size: 16px;
+    --font-size: calc(16px * var(--font-scale));
     --indent: 28px;
   }
 
@@ -700,7 +702,7 @@ mark,
   }
 
   .zoom-title {
-    font-size: 24px;
+    font-size: calc(24px * var(--font-scale));
   }
 
   .shortcuts-body,
@@ -802,6 +804,47 @@ mark,
 .menu .hint {
   font-size: 12px;
   color: var(--faint);
+}
+
+.menu-stepper {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 4px 0 12px;
+}
+
+.menu-stepper-label {
+  flex: 1;
+}
+
+.menu .step {
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  color: var(--muted);
+}
+
+.menu .step:disabled {
+  color: var(--faint);
+  cursor: default;
+  background: none;
+}
+
+@media (pointer: coarse) {
+  .menu .step {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.step-value {
+  min-width: 5ch;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .menu-sep {

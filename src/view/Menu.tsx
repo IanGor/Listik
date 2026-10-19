@@ -7,6 +7,7 @@ import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
+import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -119,6 +120,33 @@ export function DocumentMenu(props: { o: Outliner }) {
           >
             {theme() === 'dark' ? 'Дневная тема' : 'Ночная тема'}
           </button>
+          {/* Steps keep the menu open: the outline behind shows each size at once. */}
+          <div class="menu-stepper" role="group" aria-label="Размер текста">
+            <span class="menu-stepper-label">Размер текста</span>
+            <button
+              type="button"
+              class="step"
+              aria-label="Мельче"
+              disabled={textScale() === TEXT_SCALES[0]}
+              onClick={() => stepTextScale(-1)}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                <path d="M3 7h8" />
+              </svg>
+            </button>
+            <span class="step-value" aria-live="polite">{Math.round(textScale() * 100)}%</span>
+            <button
+              type="button"
+              class="step"
+              aria-label="Крупнее"
+              disabled={textScale() === TEXT_SCALES[TEXT_SCALES.length - 1]}
+              onClick={() => stepTextScale(1)}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+                <path d="M3 7h8M7 3v8" />
+              </svg>
+            </button>
+          </div>
           <div class="menu-sep" role="separator" />
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => void importFile()}>

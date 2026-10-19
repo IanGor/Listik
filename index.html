@@ -16,6 +16,9 @@
       try {
         const theme = localStorage.getItem('listik-theme');
         if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+        // And the text size (src/view/textsize.ts), so the outline does not jump.
+        const scale = localStorage.getItem('listik-text-scale');
+        if (scale) document.documentElement.style.setProperty('--font-scale', scale);
       } catch {}
     </script>
   </head>

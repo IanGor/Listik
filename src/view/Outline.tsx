@@ -11,6 +11,7 @@ import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { Crumbs, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
+import { textScale } from './textsize';
 import { Virtualizer } from './virtualizer';
 
 /** Space above the first and below the last row, px; zoomed in, above the title. */
@@ -182,6 +183,9 @@ export function Outline(props: { o: Outliner }) {
     scroller.scrollTop = next;
     setScrollTop(scroller.scrollTop);
   };
+
+  // A new text size (menu) changes characters per line and line height.
+  createEffect(on(textScale, () => updateMetrics(), { defer: true }));
 
   // Zooming starts at the top of the new level (zooming out then scrolls to the
   // bullet we left, through the focus effect below).
