@@ -156,6 +156,7 @@ button {
 }
 
 .searchbar {
+  position: relative;
   display: flex;
   flex: 1;
   gap: 12px;
@@ -242,6 +243,141 @@ kbd {
 .searchbar .clear:hover {
   color: var(--text);
   background: var(--surface-2);
+}
+
+/* The star: an outline to save what is typed, filled in the coral once saved. */
+.searchbar .star {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--faint);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out), scale 100ms var(--ease-out);
+}
+
+.searchbar .star:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.searchbar .star.saved {
+  color: var(--primary);
+}
+
+.searchbar .star:active {
+  scale: 0.85;
+}
+
+/* Saved searches, dropped below the focused box. At most 8.5 rows on a
+   computer, 40% of what the screen shows on a phone (with the keyboard up
+   on a OnePlus 8: about five rows); a half row says it scrolls. */
+.saved-searches {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -1px;
+  right: -1px;
+  z-index: 30;
+  box-sizing: border-box;
+  max-height: min(calc(8.5 * 36px + 28px), 40dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 4px 4px;
+  font-size: 14px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+
+.saved-searches.more {
+  mask-image: linear-gradient(to top, transparent, #000 28px);
+}
+
+.saved-searches-label {
+  position: sticky;
+  top: 0;
+  padding: 8px 8px 4px;
+  font-size: 12px;
+  color: var(--faint);
+  background: var(--canvas);
+}
+
+.saved-search {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+}
+
+.saved-search:hover {
+  background: var(--surface);
+}
+
+.saved-search-run {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.saved-search-run svg {
+  flex: none;
+  color: var(--primary);
+}
+
+.saved-search-run span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-search-remove {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--faint);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.saved-search-remove:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* Finger-sized rows on a touch screen. */
+@media (pointer: coarse) {
+  .saved-searches {
+    max-height: min(calc(8.5 * 44px + 28px), 40dvh);
+  }
+
+  .saved-search-run {
+    height: 44px;
+  }
+
+  .saved-search-remove {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .icon-button {

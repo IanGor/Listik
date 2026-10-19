@@ -155,6 +155,68 @@ test('undo works in any keyboard layout and without an editing row', async ({ pa
   expect(await outline(page)).toEqual(DEMO);
 });
 
+test.describe('saved searches', () => {
+  const star = (page: Page) => page.locator('.searchbar .star');
+  const list = (page: Page) => page.getByRole('list', { name: 'Избранные поиски' });
+
+  test('the star saves what is typed; focused, the box lists saved searches, last saved first; a press runs one, × takes it out', async ({ page }) => {
+    const search = page.locator('.search');
+    await search.fill('#салон');
+    await expect(star(page)).toHaveAttribute('aria-pressed', 'false');
+    await star(page).click();
+    await expect(star(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(star(page).locator('path')).toHaveAttribute('d', /M12/);
+    await search.fill('Анна');
+    await star(page).click();
+    await search.press('Escape');
+
+    // Focus on an empty box: the saved searches, the last saved first.
+    await search.click();
+    await expect(list(page).getByRole('listitem')).toHaveText(['Анна', '#салон']);
+    // Typing narrows them.
+    await search.pressSequentially('#с');
+    await expect(list(page).getByRole('listitem')).toHaveText(['#салон']);
+    await list(page).getByRole('button', { name: '#салон', exact: true }).click();
+    await expect(search).toHaveValue('#салон');
+    await expect(search).toBeFocused();
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(star(page)).toHaveAttribute('aria-pressed', 'true');
+
+    // Kept in this browser.
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+    await search.click();
+    await expect(list(page).getByRole('listitem')).toHaveCount(2);
+    await list(page).getByRole('button', { name: 'Убрать «Анна» из избранного' }).click();
+    await expect(list(page).getByRole('listitem')).toHaveText(['#салон']);
+    await search.press('Escape');
+    await expect(list(page)).toHaveCount(0);
+  });
+
+  test('at most 20 kept, the oldest letting go; a long list scrolls, about five rows on a phone with the keyboard up', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('listik-saved-searches', JSON.stringify(Array.from({ length: 20 }, (_, i) => `поиск ${i}`))));
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+    const search = page.locator('.search');
+    await search.fill('новый');
+    await star(page).click();
+    await expect(page.locator('.toast')).toContainText('не больше 20');
+    await search.fill('');
+    await expect(list(page).getByRole('listitem')).toHaveCount(20);
+    await expect(list(page).getByRole('listitem').first()).toHaveText('новый');
+    await expect(list(page).getByRole('listitem').last()).toHaveText('поиск 18');
+    expect(await list(page).evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    await expect(list(page)).toHaveClass(/more/);
+    await list(page).evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await expect(list(page)).not.toHaveClass(/more/);
+    // A OnePlus 8 with the keyboard up: 412 × 540.
+    await page.setViewportSize({ width: 412, height: 540 });
+    const height = await list(page).evaluate((el) => el.getBoundingClientRect().height);
+    expect(height).toBeLessThanOrEqual(0.4 * 540 + 1);
+    expect(height).toBeGreaterThan(150);
+  });
+});
+
 test.describe('tag filter', () => {
   test('a tag typed in the search box narrows with every character, as a word does', async ({ page }) => {
     const search = page.locator('.search');

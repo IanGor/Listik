@@ -16,6 +16,19 @@ import { NodeSignals } from './node-signals';
 import { touch } from './screen';
 
 const HIDE_DONE = 'listik-hide-done';
+/** Saved searches (the star in the search box), newest first; per browser, like the theme. */
+const SAVED_SEARCHES = 'listik-saved-searches';
+/** Saved searches kept at most: saving one more lets the oldest go. */
+export const SAVED_MAX = 20;
+
+function readSaved(): string[] {
+  try {
+    const list: unknown = JSON.parse(readSetting(SAVED_SEARCHES) ?? '[]');
+    return Array.isArray(list) ? list.filter((q): q is string => typeof q === 'string' && !!q.trim()).slice(0, SAVED_MAX) : [];
+  } catch {
+    return [];
+  }
+}
 
 function readSetting(key: string): string | null {
   try {
@@ -94,6 +107,9 @@ export class Outliner {
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
   readonly selection: Accessor<Selection | null>;
+  /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
+  readonly savedSearches: Accessor<string[]>;
+  private setSavedSearches: Setter<string[]>;
   /** Completed bullets are shown (Ctrl+O hides them); remembered per browser. */
   readonly showDone: Accessor<boolean>;
   private setShowDone: Setter<boolean>;
@@ -154,6 +170,7 @@ export class Outliner {
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
+    [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
     const hideDone = readSetting(HIDE_DONE) === '1';
     [this.showDone, this.setShowDone] = createSignal(!hideDone);
     if (hideDone) this.rows.setHideDone(true);
@@ -268,6 +285,29 @@ export class Outliner {
       this.pendingSearch = null;
       this.applyQuery();
     });
+  }
+
+  /** Is this search (as typed, spaces at the ends aside) among the saved ones? */
+  isSaved(query: string): boolean {
+    return this.savedSearches().includes(query.trim());
+  }
+
+  /** The star: saves the search, first in the list, or takes it out again. Beyond SAVED_MAX the oldest goes. */
+  toggleSaved(query: string): void {
+    const q = query.trim();
+    if (!q) return;
+    const list = this.savedSearches();
+    let next: string[];
+    if (list.includes(q)) next = list.filter((s) => s !== q);
+    else {
+      next = [q, ...list];
+      if (next.length > SAVED_MAX) {
+        next = next.slice(0, SAVED_MAX);
+        this.notify(`В избранном не больше ${SAVED_MAX} поисков: самый старый убран`);
+      }
+    }
+    this.setSavedSearches(next);
+    writeSetting(SAVED_SEARCHES, next.length ? JSON.stringify(next) : null);
   }
 
   /** A click on a tag: search for it. */
