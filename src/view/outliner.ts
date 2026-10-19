@@ -7,6 +7,9 @@ import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '..
 import { TagIndex } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
+import type { Persistence } from '../persist/idb';
+import type { SyncStatus } from '../sync/engine';
+import type { Opened, SyncHandle } from '../sync/setup';
 import { NodeSignals } from './node-signals';
 
 const HIDE_DONE = 'listik-hide-done';
@@ -83,6 +86,19 @@ export class Outliner {
   readonly setDragged: Setter<ReadonlySet<NodeId>>;
   /** Automatic copies into a folder; null for in-memory documents. */
   backup: Backup | null = null;
+  /** The stored document's persistence; null for in-memory documents. */
+  persistence: Persistence | null = null;
+  /** The document's database, sync settings and keys; null for in-memory documents. */
+  opened: Opened | null = null;
+  /** The live sync session, once sync is set up in the writing tab. Not reactive: read `syncing()` first. */
+  syncHandle: SyncHandle | null = null;
+  /** What the sync engine reports; `stopped` when there is none. */
+  readonly syncStatus: Accessor<SyncStatus>;
+  private setSyncStatus: Setter<SyncStatus>;
+  private unwatchSync: (() => void) | null = null;
+  /** Bumped to open the sync dialog. */
+  readonly syncRequests: Accessor<number>;
+  private setSyncRequests: Setter<number>;
   /** Another tab holds the document: nothing here may change it. */
   readonly readOnly: boolean;
   private setRowsVersion: Setter<number>;
@@ -115,6 +131,8 @@ export class Outliner {
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.helpRequests, this.setHelpRequests] = createSignal(0);
+    [this.syncRequests, this.setSyncRequests] = createSignal(0);
+    [this.syncStatus, this.setSyncStatus] = createSignal<SyncStatus>({ phase: 'stopped', pending: 0, head: 0 });
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<NodeId>>(new Set());
@@ -126,8 +144,11 @@ export class Outliner {
       commit: () => {
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
         const z = this.zoom();
-        if (z && !doc.has(z)) this.zoomTo(null);
+        if (z && (!doc.has(z) || !doc.inOutline(z))) this.zoomTo(null);
         this.syncRows();
+        // A change from another device may have hidden the edited row.
+        const cur = this.focus();
+        if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
       },
     });
     // Ready before the first search in practice, without blocking input meanwhile.
@@ -333,6 +354,29 @@ export class Outliner {
   /** `?` or Ctrl+/: shows the keyboard shortcuts. */
   showHelp(): void {
     this.setHelpRequests((n) => n + 1);
+  }
+
+  /** Is sync set up (reactive)? */
+  syncing(): boolean {
+    return this.syncStatus().phase !== 'stopped';
+  }
+
+  /** The menu or the cloud icon: opens the sync dialog. */
+  showSync(): void {
+    this.setSyncRequests((n) => n + 1);
+  }
+
+  /** Follows the current sync engine's status (call after `syncHandle` changes). */
+  watchSync(): void {
+    this.unwatchSync?.();
+    this.unwatchSync = null;
+    const engine = this.syncHandle?.engine;
+    if (!engine) {
+      this.setSyncStatus({ phase: 'stopped', pending: 0, head: 0 });
+      return;
+    }
+    this.setSyncStatus(engine.status);
+    this.unwatchSync = engine.subscribe((s) => this.setSyncStatus({ ...s }));
   }
 
   /** Ctrl+F: put the caret into the search box. */

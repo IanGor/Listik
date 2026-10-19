@@ -5,6 +5,7 @@ import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
+import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { ZoomHeader } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
@@ -194,6 +195,9 @@ export function Outline(props: { o: Outliner }) {
     <div class="outline">
       <TopBar o={o} />
       <Shortcuts o={o} />
+      <Show when={o.opened && !o.readOnly}>
+        <SyncDialog o={o} />
+      </Show>
       <Show when={o.readOnly}>
         <div class="banner" role="status">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

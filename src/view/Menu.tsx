@@ -5,6 +5,7 @@ import type { BackupStatus } from '../persist/backup';
 import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
+import { describeSync } from './SyncDialog';
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -95,6 +96,15 @@ export function DocumentMenu(props: { o: Outliner }) {
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => void importFile()}>
               Импорт из файла…
+            </button>
+          </Show>
+          <Show when={o.opened && !o.readOnly}>
+            <div class="menu-sep" role="separator" />
+            <Show when={o.syncing()}>
+              <p class="menu-note">{describeSync(o.syncStatus())}</p>
+            </Show>
+            <button type="button" role="menuitem" onClick={() => { close(); o.showSync(); }}>
+              {o.syncing() ? 'Синхронизация…' : 'Синхронизация между устройствами…'}
             </button>
           </Show>
           <Show when={backup()}>

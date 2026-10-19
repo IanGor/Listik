@@ -8,6 +8,8 @@ const chromium = process.env.CHROMIUM_PATH ?? ['/usr/bin/chromium', '/usr/bin/ch
 const dev = 'http://127.0.0.1:5180';
 // The built app, for what only a production build does (service worker, offline).
 const built = 'http://127.0.0.1:5181';
+// The sync server (server/index.js), for the multi-device tests.
+const sync = 'http://127.0.0.1:5182';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -15,7 +17,7 @@ export default defineConfig({
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
   projects: [
-    { name: 'app', testMatch: 'outline.spec.ts', use: { baseURL: dev } },
+    { name: 'app', testMatch: /outline\.spec\.ts|sync\.spec\.ts/, use: { baseURL: dev } },
     { name: 'pwa', testMatch: 'pwa.spec.ts', use: { baseURL: built } },
   ],
   webServer: [
@@ -29,6 +31,12 @@ export default defineConfig({
       url: built,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
+    },
+    {
+      command: 'rm -rf test-results/sync-data && node server/index.js',
+      url: `${sync}/health`,
+      reuseExistingServer: !process.env.CI,
+      env: { LISTIK_DATA: 'test-results/sync-data', LISTIK_PORT: '5182', LISTIK_ORIGINS: '*' },
     },
   ],
 });
