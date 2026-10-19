@@ -285,6 +285,20 @@ test.describe('zoom', () => {
     await expect(page.locator('.crumbs [aria-current="page"]')).toBeVisible();
   });
 
+  test('the title shows tags like a row: a click on one filters, a click elsewhere edits there', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
+    await expect(title(page).locator('.tag')).toHaveText('#салон');
+    await expect(title(page)).not.toHaveAttribute('contenteditable');
+    // A click on the text puts the caret there; leaving shows the tags again.
+    await title(page).click({ position: { x: 5, y: 10 } });
+    await expect(title(page)).toHaveAttribute('contenteditable', 'plaintext-only');
+    await expect(title(page)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(title(page).locator('.tag')).toHaveText('#салон');
+    await title(page).locator('.tag').click();
+    await expect(page.locator('.search')).toHaveValue('#салон');
+  });
+
   test('Alt+→ zooms into the edited bullet, Alt+← zooms out back to it', async ({ page }) => {
     await edit(page, 'Часть первая');
     await page.keyboard.press('Alt+ArrowRight');

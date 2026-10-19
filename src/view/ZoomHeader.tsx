@@ -1,10 +1,12 @@
-import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
 import { plainText } from '../model/format';
+import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
-import { caretOnLastLine, selectionIn, setCaret } from './caret';
+import { caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
 import { onGlobalKeys } from './keymap';
 import type { Outliner } from './outliner';
+import { Pieces } from './Row';
 
 /**
  * The path from the root to where you are, the place itself included:
@@ -75,23 +77,67 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
 }
 
 /**
- * The zoomed-in bullet's text, editable in place. Like a row's editor, the
- * DOM is the source of truth while typing; outside changes (undo) are
- * written back. Enter starts the first child.
+ * The zoomed-in bullet's text. It shows like a row's: tags filter on a
+ * click, links lead to their bullet, bold and italic are styled. A click
+ * elsewhere in it (or Ctrl+↑ from the first row, `titleRequests`) makes it
+ * editable where the click was (TitleEditable).
  */
 export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   const o = props.o;
   const id = props.id;
-  let el!: HTMLDivElement;
   o.nodes.acquire(id);
   onCleanup(() => o.nodes.release(id));
   const text = () => {
     o.nodes.track(id);
     return o.doc.nodes.get(id)?.text ?? '';
   };
+  /** Where the caret goes in the editor; null while the title only shows. */
+  const [caret, setCaretAt] = createSignal<number | null>(null);
+  const pieces = createMemo(() => decorate(text(), o.filter()?.query.terms ?? []));
+
+  createEffect(on(o.titleRequests, () => !o.readOnly && setCaretAt(text().length), { defer: true }));
+
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const target = e.target as HTMLElement;
+    const tag = target.dataset.tag;
+    if (tag) return o.filterByTag(tag);
+    const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
+    if (link !== undefined) return o.followLink(link);
+    if (o.readOnly) return;
+    setCaretAt(offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY) ?? text().length);
+  };
+
+  return (
+    <Show
+      when={caret() !== null}
+      fallback={
+        <div class="zoom-title" onMouseDown={onMouseDown}>
+          <Pieces o={o} pieces={pieces()} />
+        </div>
+      }
+    >
+      <TitleEditable o={o} id={id} text={text} caret={caret()!} done={() => setCaretAt(null)} />
+    </Show>
+  );
+}
+
+/**
+ * The title being edited. Like a row's editor, the DOM is the source of
+ * truth while typing; outside changes (undo) are written back. Enter starts
+ * the first child; leaving it shows the title again.
+ */
+function TitleEditable(props: { o: Outliner; id: NodeId; text: () => string; caret: number; done: () => void }) {
+  const o = props.o;
+  const id = props.id;
+  const text = props.text;
+  let el!: HTMLDivElement;
 
   onMount(() => {
     el.textContent = text();
+    el.focus({ preventScroll: true });
+    setCaret(el, Math.min(props.caret, text().length));
   });
 
   createEffect(on(text, (t) => {
@@ -152,8 +198,9 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
     <div
       ref={el}
       class="zoom-title"
-      contentEditable={o.readOnly ? false : 'plaintext-only'}
+      contentEditable="plaintext-only"
       onFocus={() => o.setFocus(null)}
+      onBlur={() => props.done()}
       onInput={onInput}
       onKeyDown={onKeyDown}
       onBeforeInput={onBeforeInput}

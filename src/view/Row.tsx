@@ -29,7 +29,7 @@ const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
  * Formatting markers stay in the DOM, hidden, so offsets in the element
  * are offsets in the text (a click puts the caret where it belongs).
  */
-function Pieces(props: { o: Outliner; pieces: Piece[] }) {
+export function Pieces(props: { o: Outliner; pieces: Piece[] }) {
   return (
     <For each={props.pieces}>
       {(p) => {
