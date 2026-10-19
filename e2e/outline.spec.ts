@@ -730,6 +730,20 @@ test.describe('phone screen', () => {
     await expect(page.getByRole('menuitem', { name: 'Дневная тема' })).toBeVisible();
   });
 
+  test('the end of a long list scrolls up to mid-screen', async ({ page }) => {
+    await page.goto('/?sample=300');
+    await expect(page.locator('.row').first()).toBeVisible();
+    const scroller = page.locator('.scroller');
+    // Scroll to the very end; virtualized rows settle as they render.
+    for (let i = 0; i < 3; i++) {
+      await scroller.evaluate((el) => (el.scrollTop = el.scrollHeight));
+      await page.waitForTimeout(100);
+    }
+    const box = (await scroller.boundingBox())!;
+    const last = (await page.locator('.row').last().boundingBox())!;
+    expect(last.y + last.height - box.y).toBeLessThan(box.height * 0.6);
+  });
+
   test('the keyboard coming up keeps the edited row in view', async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 915 });
     await page.goto('/?sample=300');
@@ -794,6 +808,27 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toBeFocused();
     await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
+  });
+
+  test('typing at the bottom keeps the line, descenders and air, above the bar', async ({ page }) => {
+    await page.goto('/?sample=300');
+    await expect(page.locator('.row').first()).toBeVisible();
+    const id = await page.locator('.row').evaluateAll((rows) => {
+      const fits = rows.filter((r) => r.getBoundingClientRect().bottom <= innerHeight);
+      return (fits[fits.length - 1] as HTMLElement).dataset.id!;
+    });
+    await page.locator(`.row[data-id="${id}"] .text`).tap();
+    await keyboard(page, true);
+    await expect(bar(page)).toBeVisible();
+    await page.keyboard.press('Control+End');
+    // Enough to wrap onto new lines, each a little lower.
+    await page.keyboard.type(' рррр уууу дддд'.repeat(4));
+    const gap = await page.evaluate(() => {
+      const caret = getSelection()!.getRangeAt(0).getBoundingClientRect();
+      const lh = parseFloat(getComputedStyle(document.activeElement!).lineHeight);
+      return (document.querySelector('.editbar')!.getBoundingClientRect().top - caret.bottom) / lh;
+    });
+    expect(gap).toBeGreaterThanOrEqual(0.5);
   });
 
   test('no bar while the keyboard is down, nor for the address bar coming and going', async ({ page }) => {

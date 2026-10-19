@@ -24,6 +24,8 @@ const ROW_PAD = 4;
 const NOTE_SCALE = 0.81;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
+/** Air kept between the caret's line and the edge it nears, in lines: room for descenders (р, у, д). */
+const CARET_ROOM = 0.6;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
 const ADD_HEIGHT = 32;
 
@@ -141,6 +143,7 @@ export function Outline(props: { o: Outliner }) {
         const f = o.focus();
         const i = f ? o.rows.indexOf(f.id) : -1;
         if (i >= 0) ensureVisible(i);
+        revealCaret();
       }
       height = scroller.clientHeight;
       if (scroller.clientWidth === width) return;
@@ -183,6 +186,30 @@ export function Outline(props: { o: Outliner }) {
     scroller.scrollTop = next;
     setScrollTop(scroller.scrollTop);
   };
+
+  /**
+   * Keeps the caret's line, descenders and a little air included, clear of
+   * the outline's edges: at the bottom that is the editing bar over the
+   * keyboard. Runs on every input, as a typed line may wrap onto a new one.
+   */
+  const revealCaret = () => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el?.isContentEditable || !scroller.contains(el)) return;
+    const sel = getSelection();
+    let r = sel?.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+    if (!r?.height) r = el.getBoundingClientRect();
+    const box = scroller.getBoundingClientRect();
+    const room = (parseFloat(getComputedStyle(el).lineHeight) || 24) * CARET_ROOM;
+    const below = r.bottom + room - box.bottom;
+    const above = box.top - (r.top - room);
+    if (below > 0) scroller.scrollTop += below;
+    else if (above > 0) scroller.scrollTop -= above;
+    else return;
+    setScrollTop(scroller.scrollTop);
+  };
+
+  /** Room under the last row: half the outline's height, so the end of a list can be worked on mid-screen. */
+  const tail = () => Math.max(PAD, Math.round(viewport() / 2));
 
   // A new text size (menu) changes characters per line and line height.
   createEffect(on(textScale, () => updateMetrics(), { defer: true }));
@@ -241,8 +268,8 @@ export function Outline(props: { o: Outliner }) {
       </Show>
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
       <Crumbs o={o} scrolled={scrollTop() > 0} />
-      <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown}>
-        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + PAD + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+      <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
+        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
           <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
           <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
           <Show when={o.zoom()} keyed>
