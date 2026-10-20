@@ -688,6 +688,93 @@ test.describe('structure and calendar', () => {
   });
 });
 
+test.describe('tree panel', () => {
+  const panel = (page: Page) => page.getByRole('complementary', { name: 'Дерево' });
+  const treeRows = (page: Page) =>
+    panel(page).locator('.row').evaluateAll((rows) =>
+      rows.map((r) => '  '.repeat(Number((r as HTMLElement).dataset.depth)) + r.querySelector('.text')!.textContent),
+    );
+  const mainRows = (page: Page) =>
+    page.locator('.main .row').evaluateAll((rows) =>
+      rows.map((r) => '  '.repeat(Number((r as HTMLElement).dataset.depth)) + r.querySelector('.text')!.textContent),
+    );
+
+  test('one press opens it, Ctrl+\\ too; it starts folded, folds on its own, and stays open through a reload', async ({ page }) => {
+    await expect(panel(page)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Дерево документа' }).click();
+    await expect(panel(page)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Дерево документа' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await treeRows(page)).toEqual(['Том первый', 'Том второй']);
+    expect(await mainRows(page)).toEqual(DEMO);
+    // Unfolding in the panel leaves the outline as it is, and the other way round.
+    await panel(page).locator('.row', { hasText: 'Том первый' }).locator('.toggle').click();
+    expect(await treeRows(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
+    await page.locator('.main .row', { hasText: 'Часть первая' }).locator('.toggle').click();
+    expect(await mainRows(page)).toEqual([DEMO[0], DEMO[1], DEMO[4], DEMO[5]]);
+    expect(await treeRows(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
+    await page.keyboard.press('Control+Backslash');
+    await expect(panel(page)).toHaveCount(0);
+    await page.keyboard.press('Control+Backslash');
+    await expect(panel(page)).toBeVisible();
+    await page.reload();
+    await expect(panel(page)).toBeVisible();
+  });
+
+  test('a dot opens the bullet in the outline; the panel marks the place and unfolds the way to it', async ({ page }) => {
+    await page.getByRole('button', { name: 'Дерево документа' }).click();
+    await panel(page).locator('.row', { hasText: 'Том первый' }).locator('.toggle').click();
+    await panel(page).locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    await expect(panel(page).locator('.row.here')).toHaveText('Часть первая');
+    expect(await mainRows(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+    // The panel itself never zooms: it still shows the whole document.
+    expect((await treeRows(page))[0]).toBe('Том первый');
+    // Gone elsewhere in the outline: the way there unfolds in the panel.
+    await page.locator('.main .row', { hasText: 'Анна Павловна' }).locator('.bullet').click();
+    await expect(panel(page).locator('.row.here')).toContainText('Анна Павловна');
+    expect(await treeRows(page)).toContain(`    ${DEMO[3].trim()}`);
+  });
+
+  test('editing in the panel: text, Enter, Tab show in the outline; Esc goes back to the caret in the outline', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' — ');
+    await page.getByRole('button', { name: 'Дерево документа' }).click();
+    await panel(page).locator('.row .text', { hasText: 'Том второй' }).click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('мысль');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Escape');
+    expect(await mainRows(page)).toEqual([...DEMO.slice(0, 5), 'Том второй — ', '  мысль']);
+    // Back where the caret was in the outline.
+    await expect(page.locator('.main .text[contenteditable]')).toBeFocused();
+    await expect(page.locator('.main .text[contenteditable]')).toHaveText('Том второй — ');
+    await page.keyboard.type('!');
+    await expect(page.locator('.main .text[contenteditable]')).toHaveText('Том второй — !');
+    // One history: undo takes back what was typed here, then the panel's edits.
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+z');
+    expect(await mainRows(page)).not.toContain('  мысль');
+  });
+
+  test('its edge drags its width, remembered; a double click puts it back', async ({ page }) => {
+    await page.getByRole('button', { name: 'Дерево документа' }).click();
+    const width = async () => (await panel(page).boundingBox())!.width;
+    expect(await width()).toBe(280);
+    const edge = (await panel(page).locator('.tree-resize').boundingBox())!;
+    await page.mouse.move(edge.x + edge.width / 2, edge.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(edge.x + 120, edge.y + 200, { steps: 5 });
+    await page.mouse.up();
+    expect(Math.round(await width())).toBeGreaterThan(380);
+    await page.reload();
+    expect(Math.round(await width())).toBeGreaterThan(380);
+    await panel(page).locator('.tree-resize').dblclick();
+    expect(await width()).toBe(280);
+  });
+});
+
 test.describe('trash', () => {
   const panel = (page: Page) => page.getByRole('complementary', { name: 'Корзина' });
   const openTrash = async (page: Page) => {
@@ -1095,7 +1182,8 @@ test.describe('theme', () => {
     await page.goto('/?demo');
     expect(await background(page)).toBe(DARK);
     // The switch lives in the menu, as everything but search does.
-    await expect(page.locator('.topbar button')).toHaveCount(2);
+    // Beside it only the tree panel's switch and the logo.
+    await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
     await page.getByRole('menuitem', { name: 'Дневная тема' }).click();
@@ -1217,6 +1305,19 @@ test.describe('touch screen', () => {
   const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
+
+  test('the tree is a drawer from the left: a bullet opens in the outline and the drawer closes; a tap beside it closes it too', async ({ page }) => {
+    const drawer = page.getByRole('complementary', { name: 'Дерево' });
+    await page.getByRole('button', { name: 'Дерево документа' }).tap();
+    await expect(drawer).toBeVisible();
+    await expect.poll(async () => (await drawer.boundingBox())!.x).toBe(0);
+    await drawer.locator('.row', { hasText: 'Том второй' }).locator('.bullet').tap();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await expect(drawer).toHaveCount(0);
+    await page.getByRole('button', { name: 'Дерево документа' }).tap();
+    await page.locator('.tree-scrim').tap({ position: { x: 400, y: 500 } });
+    await expect(drawer).toHaveCount(0);
+  });
 
   test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
     await page.locator('.menu-button').tap();

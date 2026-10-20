@@ -206,7 +206,8 @@ button {
 
 .search {
   flex: 1;
-  min-width: 0;
+  /* Never squeezed away by the count and buttons beside it: what is typed stays in sight. */
+  min-width: 4ch;
   padding: 0;
   font: inherit;
   color: inherit;
@@ -2096,5 +2097,240 @@ body.is-dragging * {
 @media (prefers-reduced-motion: reduce) {
   .trash {
     animation: none;
+  }
+}
+
+/* --- Tree panel (view/TreePanel.tsx) ------------------------------------ */
+
+.topbar-start {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: -10px;
+}
+
+.topbar-start .brand {
+  margin-left: 0;
+}
+
+/* The switch: a panel outline whose left pane fills while the tree is open. */
+.tree-toggle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tree-toggle:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tree-toggle-fill {
+  fill: currentColor;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+
+.tree-toggle.on {
+  color: var(--text);
+}
+
+.tree-toggle.on .tree-toggle-fill {
+  opacity: 0.45;
+}
+
+/* The same rows as the outline's, a size smaller and closer. */
+.tree {
+  --font-size: calc(14px * var(--font-scale));
+  --indent: 22px;
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid var(--hairline);
+  background: var(--canvas);
+  font-size: var(--font-size);
+}
+
+.tree .spacer {
+  max-width: none;
+}
+
+.tree .window {
+  left: 2.5ch;
+  right: 1.5ch;
+}
+
+.tree-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 8px 8px 0 16px;
+}
+
+.tree-head h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tree-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tree-close:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Where the outline is: a quiet band behind the row. */
+.row.here::after {
+  content: '';
+  position: absolute;
+  inset: 0 -6px 0 calc(var(--indent) * var(--depth) - 6px);
+  z-index: -1;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.row.here > .body .text {
+  font-weight: 600;
+}
+
+/* The edge to drag: a hairline that turns coral under the pointer. */
+.tree-resize {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  z-index: 3;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.tree-resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 120ms;
+}
+
+.tree-resize:hover::after,
+.tree-resize:focus-visible::after,
+.resizing .tree-resize::after {
+  background: var(--primary);
+}
+
+.tree-resize:focus-visible {
+  outline: none;
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* A phone: a drawer over the outline, from the left, with a scrim beside it. */
+@media (max-width: 640px) {
+  .topbar-start {
+    margin-left: -6px;
+  }
+
+  .tree {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(85vw, 360px);
+    border-right: 0;
+    box-shadow: var(--shadow-pop);
+    animation: tree-in 240ms var(--ease-out);
+  }
+
+  .tree-head {
+    padding: 12px 10px 4px 16px;
+  }
+
+  .tree-close {
+    width: 36px;
+    height: 36px;
+  }
+
+  .tree-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgb(0 0 0 / 0.32);
+    animation: scrim-in 200ms ease-out;
+  }
+}
+
+@keyframes tree-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree,
+  .tree-scrim {
+    animation: none;
+  }
+}
+
+/* The narrowest phones (320 px): the header gives up a little air, so the
+   search keeps room for what is typed beside its count and buttons. */
+@media (max-width: 360px) {
+  .topbar {
+    gap: 6px;
+    padding: 0 8px;
+  }
+
+  .topbar-start {
+    margin-left: -4px;
+  }
+
+  .tree-toggle {
+    width: 32px;
+  }
+
+  .brand {
+    padding: 0 8px;
+  }
+
+  .searchbar {
+    gap: 6px;
+    padding: 0 8px 0 10px;
   }
 }

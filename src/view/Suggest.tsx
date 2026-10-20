@@ -173,7 +173,8 @@ export function Suggest(props: { o: Outliner }) {
   refresh = (now = false) => {
     const el = document.activeElement as HTMLElement | null;
     const f = o.focus();
-    if (!f || o.readOnly || !el?.isContentEditable || !el.closest('.row')) return setOpen(null);
+    // Not in the tree panel: its rows are another outliner's (tree.ts).
+    if (!f || o.readOnly || !el?.isContentEditable || !el.closest('.row') || el.closest('.tree')) return setOpen(null);
     const sel = selectionIn(el);
     const text = el.textContent ?? '';
     const token = sel && sel[0] === sel[1] ? tokenBefore(text, sel[0]) : null;

@@ -5,7 +5,7 @@ import { checkInvariants } from '../src/model/invariants';
 import { VisibleRows } from '../src/model/rows';
 import { Virtualizer } from '../src/view/virtualizer';
 import type { Op } from '../src/model/types';
-import { dump, dumpRows, rng, setup } from './helpers';
+import { build, dump, dumpRows, rng, setup } from './helpers';
 
 describe('VisibleRows', () => {
   it('lists rows in pre-order and skips collapsed subtrees', () => {
@@ -113,5 +113,40 @@ describe('VisibleRows', () => {
     expect(rows.unfolded('c')).toBe(true);
     expect(rows.hasHiddenChildren('c')).toBe(false);
   });
-});
 
+  it('detached (the tree panel): folds of its own, never the doc\'s, equal to a rebuild under random editing', () => {
+    let steps = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const rand = rng(seed);
+      const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+      const doc = build(['a', '  b', '    c', 'd', '  e', 'f', 'g']);
+      const rows = new VisibleRows(doc, { detached: true });
+      const ctx = { doc, rows };
+      expect(rows.ids).toEqual(['a', 'd', 'f', 'g']);
+      for (let step = 0; step < 200; step++) {
+        if (!rows.length) break;
+        steps++;
+        const key = pick(rows.ids);
+        const action = pick([
+          () => cmd.setCollapsed(ctx, key, !rows.folded(key)),
+          () => cmd.split(ctx, key, 0),
+          () => cmd.indent(ctx, key),
+          () => cmd.outdent(ctx, key),
+          () => cmd.moveDown(ctx, key),
+          () => cmd.moveUp(ctx, key),
+          () => (rows.length > 3 ? cmd.deleteNode(ctx, key) : undefined),
+          () => rows.reveal(pick([...doc.nodes.keys()].filter((id) => doc.inOutline(id) && id !== doc.root))),
+        ]);
+        const ops = doc.transact(() => { action(); });
+        // The doc's folds never change from here.
+        expect(ops.some((op) => op.t === 'setCollapsed')).toBe(false);
+        const fresh = new VisibleRows(doc, { detached: true });
+        fresh.loadFolds(rows.foldEntries());
+        fresh.dispose();
+        expect(rows.ids, `seed ${seed} step ${step}`).toEqual(fresh.ids);
+        expect(rows.depths, `seed ${seed} step ${step}`).toEqual(fresh.depths);
+      }
+    }
+    expect(steps).toBeGreaterThan(1000);
+  });
+});

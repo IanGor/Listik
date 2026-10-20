@@ -11,6 +11,8 @@ import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
+import { TreeOutliner } from './tree';
+import { TreePanel } from './TreePanel';
 import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { Crumbs, ZoomTitle } from './ZoomHeader';
@@ -38,11 +40,90 @@ const CARET_ROOM = 0.6;
 const ADD_HEIGHT = 32;
 
 /**
- * The scrollable outline. Only rows near the viewport are in the DOM; they
- * flow normally inside a "window" shifted to the first rendered row's offset,
- * so estimate errors never make rows overlap.
+ * The page: the header, the outline and the panels beside it (the tree on
+ * the left, the trash on the right), and what floats over them.
  */
 export function Outline(props: { o: Outliner }) {
+  const o = props.o;
+  const [scrolled, setScrolled] = createSignal(false);
+  // The tree panel: the same document once more, its own folds and caret (tree.ts).
+  const tree = new TreeOutliner(o);
+  if (o.docName) tree.keepFolds(`${o.docName}:tree`);
+
+  onMount(() => {
+    // Global keys and Esc also work when no row is being edited; the editing
+    // row and the search box handle their own keys.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Backslash' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        return o.showTree();
+      }
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || target.tagName === 'INPUT') return;
+      if (onSelectionKeys(e, o) || periodKeys(e, o)) return;
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        return o.showHelp();
+      }
+      if (e.key === 'Escape' && (o.query() || o.filter())) return o.setQuery('', true);
+      if (e.key === 'ArrowLeft' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        return o.zoomOut();
+      }
+      onGlobalKeys(e, o);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+  });
+
+  syncZoomWithHash(o);
+  // Opened without a place in the address (the installed app always is): today's day, if there is the structure.
+  if (!location.hash) o.goToday(true);
+  const onVisible = () => document.visibilityState === 'visible' && o.resumed();
+  document.addEventListener('visibilitychange', onVisible);
+  onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
+
+  return (
+    <div class="outline">
+      <TopBar o={o} />
+      <Shortcuts o={o} />
+      <Show when={o.opened && !o.readOnly}>
+        <SyncDialog o={o} />
+      </Show>
+      <Show when={o.readOnly}>
+        <div class="banner" role="status">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
+        </div>
+      </Show>
+      <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
+      <div class="workspace">
+        <TreePanel o={o} tree={tree} />
+        <div class="main">
+          <Crumbs o={o} scrolled={scrolled()} />
+          <List o={o} onScroll={(top) => setScrolled(top > 0)} />
+        </div>
+        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard. */}
+        <Show when={o.trashOpen() && !(touch() && keyboard())}>
+          <Trash o={o} />
+        </Show>
+      </div>
+      <EditBar o={o} />
+      <Suggest o={o} />
+    </div>
+  );
+}
+
+/**
+ * A scrollable outline: the outline itself, or the tree panel's. Only rows
+ * near the viewport are in the DOM; they flow normally inside a "window"
+ * shifted to the first rendered row's offset, so estimate errors never make
+ * rows overlap.
+ */
+export function List(props: { o: Outliner; onScroll?: (top: number) => void }) {
   const o = props.o;
   let scroller!: HTMLDivElement;
   let windowEl!: HTMLDivElement;
@@ -50,7 +131,11 @@ export function Outline(props: { o: Outliner }) {
   let indentProbe!: HTMLSpanElement;
   let spacer!: HTMLDivElement;
 
-  const [scrollTop, setScrollTop] = createSignal(0);
+  const [scrollTop, setScrollTopSignal] = createSignal(0);
+  const setScrollTop = (top: number) => {
+    setScrollTopSignal(top);
+    props.onScroll?.(top);
+  };
   const [viewport, setViewport] = createSignal(0);
   const [layout, bumpLayout] = createSignal(undefined, { equals: false });
 
@@ -175,26 +260,6 @@ export function Outline(props: { o: Outliner }) {
     });
     resize.observe(scroller);
     onCleanup(() => resize.disconnect());
-
-    // Global keys and Esc also work when no row is being edited; the editing
-    // row and the search box handle their own keys.
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.isContentEditable || target.tagName === 'INPUT') return;
-      if (onSelectionKeys(e, o) || periodKeys(e, o)) return;
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        return o.showHelp();
-      }
-      if (e.key === 'Escape' && (o.query() || o.filter())) return o.setQuery('', true);
-      if (e.key === 'ArrowLeft' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        return o.zoomOut();
-      }
-      onGlobalKeys(e, o);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    onCleanup(() => window.removeEventListener('keydown', onKeyDown));
   });
 
   const ensureVisible = (i: number) => {
@@ -244,13 +309,6 @@ export function Outline(props: { o: Outliner }) {
     setScrollTop(0);
   }, { defer: true }));
 
-  syncZoomWithHash(o);
-  // Opened without a place in the address (the installed app always is): today's day, if there is the structure.
-  if (!location.hash) o.goToday(true);
-  const onVisible = () => document.visibilityState === 'visible' && o.resumed();
-  document.addEventListener('visibilitychange', onVisible);
-  onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
-
   createEffect(on(o.homeRequests, () => {
     scroller.scrollTop = 0;
     setScrollTop(0);
@@ -270,6 +328,16 @@ export function Outline(props: { o: Outliner }) {
     if (i >= 0) ensureVisible(i);
   });
 
+  // A row to show without editing it (the tree panel following the outline): in view, about a third down.
+  createEffect(on(o.revealRequests, (key) => {
+    const i = key ? o.rows.indexOf(key) : -1;
+    if (i < 0) return;
+    const y = v.offsetOf(i) + top();
+    if (y >= scroller.scrollTop && y + v.heightOf(i) <= scroller.scrollTop + scroller.clientHeight) return;
+    scroller.scrollTop = Math.max(0, y - scroller.clientHeight / 3);
+    setScrollTop(scroller.scrollTop);
+  }, { defer: true }));
+
   // A click on the empty space below the rows edits the last one.
   const onMouseDown = (e: MouseEvent) => {
     if (e.target !== scroller && !(e.target as HTMLElement).classList.contains('spacer')) return;
@@ -279,77 +347,49 @@ export function Outline(props: { o: Outliner }) {
   };
 
   return (
-    <div class="outline">
-      <TopBar o={o} />
-      <Shortcuts o={o} />
-      <Show when={o.opened && !o.readOnly}>
-        <SyncDialog o={o} />
-      </Show>
-      <Show when={o.readOnly}>
-        <div class="banner" role="status">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="5" y="11" width="14" height="10" rx="2" />
-            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-          </svg>
-          Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
-        </div>
-      </Show>
-      <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
-      <div class="workspace">
-        <div class="main">
-          <Crumbs o={o} scrolled={scrollTop() > 0} />
-          <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
-            <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
-              <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
-              <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
-              <Show when={o.zoom()} keyed>
-                {(id) => (
-                  <div ref={observeHead} class="zoomhead">
-                    <ZoomTitle o={o} id={id} />
-                  </div>
-                )}
-              </Show>
-              <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
-                <For each={ids()}>
-                  {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
-                </For>
-              </div>
-              <Show when={drag.target()}>
-                {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
-              </Show>
-              <Show when={showAdd()}>
-                {/* Sits right under the last row: the rows above it end at `total`. */}
-                <button
-                  type="button"
-                  class="add"
-                  style={{ top: `${top() + total()}px` }}
-                  title="Новый пункт"
-                  aria-label="Новый пункт"
-                  onClick={addBullet}
-                >
-                  <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
-                    <path d="M6 1.5v9M1.5 6h9" />
-                  </svg>
-                </button>
-              </Show>
-              {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
-              <Show when={o.zoom()} keyed>
-                {(id) => (
-                  <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
-                    <Backlinks o={o} id={id} />
-                  </div>
-                )}
-              </Show>
+    <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
+      <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
+        <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
+        <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
+        <Show when={o.zoom()} keyed>
+          {(id) => (
+            <div ref={observeHead} class="zoomhead">
+              <ZoomTitle o={o} id={id} />
             </div>
-          </div>
+          )}
+        </Show>
+        <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
+          <For each={ids()}>
+            {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
+          </For>
         </div>
-        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard. */}
-        <Show when={o.trashOpen() && !(touch() && keyboard())}>
-          <Trash o={o} />
+        <Show when={drag.target()}>
+          {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
+        </Show>
+        <Show when={showAdd()}>
+          {/* Sits right under the last row: the rows above it end at `total`. */}
+          <button
+            type="button"
+            class="add"
+            style={{ top: `${top() + total()}px` }}
+            title="Новый пункт"
+            aria-label="Новый пункт"
+            onClick={addBullet}
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 1.5v9M1.5 6h9" />
+            </svg>
+          </button>
+        </Show>
+        {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
+        <Show when={o.zoom()} keyed>
+          {(id) => (
+            <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+              <Backlinks o={o} id={id} />
+            </div>
+          )}
         </Show>
       </div>
-      <EditBar o={o} />
-      <Suggest o={o} />
     </div>
   );
 }
