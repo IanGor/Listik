@@ -2246,8 +2246,9 @@ body.is-dragging * {
 
 /* --- Quick capture (view/QuickCapture.tsx) ------------------------------ */
 
-/* The tray in the header: a computer's way in; a phone uses the menu. */
-@media (max-width: 640px) {
+/* The tray in the header: a computer's way in; a phone uses the menu, turned
+   sideways too (wider than 640px, still a touch screen). */
+@media (max-width: 640px), (pointer: coarse) {
   .capture-button {
     display: none;
   }

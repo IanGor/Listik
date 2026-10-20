@@ -1363,6 +1363,10 @@ test.describe('touch screen', () => {
 
   test('quick capture comes first in the menu; no tray in the header; the line sits at the bottom', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
+    // Turned sideways the window is wider than 640px, still no tray.
+    await page.setViewportSize({ width: 915, height: 412 });
+    await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
+    await page.setViewportSize({ width: 412, height: 915 });
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.getByRole('menuitem').first()).toHaveText('Записать в Inbox');
     await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();

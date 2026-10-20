@@ -22,7 +22,7 @@ export function TopBar(props: { o: Outliner }) {
       </button>
       <SearchBar o={props.o} />
       <div class="topbar-actions">
-        {/* Quick capture: a tray, not a "+": "+" adds here, this sends to the Inbox from anywhere. Computer only; on a phone it is in the menu. */}
+        {/* Quick capture: a tray, not a "+": "+" adds here, this sends to the Inbox from anywhere. Computer only; on a touch screen it is in the menu. */}
         <Show when={!props.o.readOnly}>
           <button
             type="button"
