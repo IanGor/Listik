@@ -397,6 +397,12 @@ export function Outline(props: { o: Outliner }) {
               <Show when={hotGuide()}>
                 {(g) => <div class="guide-hot" style={{ top: `${g().top}px`, height: `${g().height}px`, left: `${g().left}px` }} />}
               </Show>
+              {/* A search that finds nothing says so, rather than leaving a blank page. */}
+              <Show when={o.filter()?.count === 0}>
+                <p class="no-results" role="status" style={{ top: `${top()}px` }}>
+                  {o.zoom() ? 'Здесь ничего не найдено' : 'Ничего не найдено'}
+                </p>
+              </Show>
               <Show when={showAdd()}>
                 {/* Sits right under the last row: the rows above it end at `total`. */}
                 <button

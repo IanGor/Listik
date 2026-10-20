@@ -232,6 +232,10 @@ test.describe('tag filter', () => {
     await expect.poll(() => outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
     await search.pressSequentially('х');
     await expect(page.locator('.searchbar .count')).toHaveText(/^0 /);
+    // Nothing found says so, instead of a blank page.
+    await expect(page.locator('.no-results')).toHaveText('Ничего не найдено');
+    await search.press('Escape');
+    await expect(page.locator('.no-results')).toHaveCount(0);
   });
 
   test('clicking a tag shows only tagged bullets with their path; Esc clears', async ({ page }) => {
@@ -1729,6 +1733,13 @@ test.describe('touch screen', () => {
     const crumb = page.locator('.crumb').first();
     await crumb.tap();
     await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+
+  test('the search field keeps its room: the count is a bare number', async ({ page }) => {
+    await page.locator('.search').tap();
+    await page.keyboard.type('#шерер');
+    await expect(page.locator('.searchbar .count')).toHaveText('1');
+    await expect(page.locator('.searchbar .count')).toHaveAttribute('title', '1 bullet');
   });
 
   test('on a 320px phone the menu stays inside the window; long items wrap', async ({ page }) => {

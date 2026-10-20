@@ -89,7 +89,11 @@ export function SearchBar(props: { o: Outliner }) {
         onBlur={() => setFocused(false)}
       />
       <Show when={o.filter()}>
-        {(f) => <span class="count">{f().count} {plural(f().count, 'bullet', 'bullet’а', 'bullet’ов')}</span>}
+        {(f) => {
+          const label = () => `${f().count} ${plural(f().count, 'bullet', 'bullet’а', 'bullet’ов')}`;
+          // A phone keeps the field for the query: the number alone, the words in the tooltip.
+          return <span class="count" title={label()}>{narrow() ? f().count : label()}</span>;
+        }}
       </Show>
       <Show
         when={o.query().trim()}
