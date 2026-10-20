@@ -115,16 +115,15 @@ const TITLE_MAIN: Action[][] = [
 
 const SETS: SubSet[] = [
   {
-    // The bullet's place, for a run of moves: up, down, out, in, or into a place found by name.
+    // Up and down, for a run of moves, or into a place found by name. Out and in stay
+    // in the main set only: one place for each action.
     name: 'move',
     label: 'Перемещение',
     stays: true,
     items: [
       { label: 'Вверх', icon: ['M12 19V5', 'M6 11l6-6 6 6'], run: (o, h) => run(o, h, cmd.moveUp) },
       { label: 'Вниз', icon: ['M12 5v14', 'M6 13l6 6 6-6'], run: (o, h) => run(o, h, cmd.moveDown) },
-      OUTDENT,
-      INDENT,
-      // The search box turns into "Переместить в…".
+      // The place line asks "Переместить в…".
       { label: 'Куда…', icon: ['M3 7h6l2 2h10v10H3z', 'M10 14h6', 'M13 11l3 3-3 3'], run: (o, h) => o.openMove([h.id]) },
     ],
   },

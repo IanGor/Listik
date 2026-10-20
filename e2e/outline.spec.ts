@@ -1682,11 +1682,9 @@ test.describe('touch screen', () => {
     await action(page, 'Вверх').tap();
     await action(page, 'Вниз').tap();
     expect(await outline(page)).toEqual(DEMO);
-    // Out and in are there too: a whole run of rearranging without leaving the set.
-    await action(page, 'Вынести').tap();
-    expect((await outline(page)).slice(-2)).toEqual(['Часть вторая', 'Том второй']);
-    await action(page, 'Вложить').tap();
-    expect(await outline(page)).toEqual(DEMO);
+    // Out and in live in the main set only: no button twice.
+    await expect(action(page, 'Вынести')).toHaveCount(0);
+    await expect(action(page, 'Вложить')).toHaveCount(0);
     await page.locator('.editbar-move').getByRole('button', { name: 'Назад' }).tap();
 
     await action(page, 'Задача: сделать, отметить, убрать').tap();
