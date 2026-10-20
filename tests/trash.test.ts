@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as cmd from '../src/model/commands';
-import { TRASH, trashKey, trashTime } from '../src/model/doc';
+import { TRASH, invert, trashKey, trashTime } from '../src/model/doc';
 import { History } from '../src/model/history';
 import { checkInvariants } from '../src/model/invariants';
 import { TextIndex } from '../src/model/search';
 import { TagIndex } from '../src/model/tags';
-import { TRASH_TTL, purgeTrash } from '../src/model/trash';
+import { TRASH_TTL, deletedEntries, deletedFrom, deletedKey, purgeTrash, restoreDeleted } from '../src/model/trash';
 import { deserialize, serialize } from '../src/persist/serialize';
 import { dump, dumpRows, setup } from './helpers';
 
@@ -74,6 +74,59 @@ describe('trash', () => {
     expect(purgeTrash(doc, now - TRASH_TTL)).toBe(1);
     expect(doc.has('b')).toBe(false);
     expect(doc.get(TRASH).children).toEqual(['c']);
+    checkInvariants(doc);
+  });
+
+  it('a deleted bullet keeps where it was in its trash key, the time still first', () => {
+    const key = deletedKey(1234, 'p-1_x', 'a0V');
+    expect(trashTime(key)).toBe(1234);
+    expect(deletedFrom(key)).toEqual({ parent: 'p-1_x', order: 'a0V' });
+    expect(deletedFrom(trashKey(1234))).toBeNull();
+    expect(deletedKey(1, 'z', 'zz') < deletedKey(2, 'a', 'a')).toBe(true);
+  });
+
+  it('lists what was deleted, newest first, without empty lines and undone creations', () => {
+    const { doc, ctx, rows, run } = setup(['a', 'b', '  c', 'd', '']);
+    run(() => cmd.deleteNode(ctx, 'b'));
+    run(() => cmd.deleteNode(ctx, ''));
+    const made = doc.transact(() => { cmd.split(ctx, 'd', 1); });
+    run(() => [...made].reverse().forEach((op) => doc.apply(invert(op))));
+    run(() => cmd.deleteNode(ctx, 'a'));
+    expect(deletedEntries(doc).map((e) => e.id)).toEqual(['a', 'b']);
+    expect(deletedEntries(doc)[1].from).toEqual({ parent: 'root', order: expect.any(String) });
+    expect(rows.ids).toEqual(['d']);
+  });
+
+  it('"Вернуть" puts a block back between the same neighbours, one undoable move; a gone place sends it to the end', () => {
+    const { doc, ctx, run } = setup(['a', '  b', '    c', '  d', 'e']);
+    run(() => cmd.deleteNode(ctx, 'b'));
+    const ops = doc.transact(() => { expect(restoreDeleted(ctx, 'b')).toEqual({ home: true }); });
+    expect(ops).toHaveLength(1);
+    expect(dump(doc)).toEqual(['a', '  b', '    c', '  d', 'e']);
+    run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(dump(doc)).toEqual(['a', '  d', 'e']);
+    // Its place went too: back at the end of the top level, and the place's own entry stays.
+    run(() => cmd.deleteNode(ctx, 'a'));
+    expect(run(() => restoreDeleted(ctx, 'b'))).toEqual({ home: false });
+    expect(dump(doc)).toEqual(['e', 'b', '  c']);
+    expect(deletedEntries(doc).map((e) => e.id)).toEqual(['a']);
+    expect(run(() => restoreDeleted(ctx, 'e'))).toBeNull();
+    checkInvariants(doc);
+    const copy = deserialize(serialize(doc));
+    expect(deletedFrom(copy.get('a').order)).toEqual({ parent: 'root', order: expect.any(String) });
+  });
+
+  it('a copy brought back is a copy again, whichever one went', () => {
+    const { doc, ctx, run } = setup(['a', '  b', 'm']);
+    run(() => doc.apply({ t: 'setMirror', id: 'm', from: null, to: 'a' }));
+    run(() => cmd.deleteNode(ctx, 'a'));
+    expect(doc.get('m').mirrorOf).toBeNull();
+    run(() => restoreDeleted(ctx, 'a'));
+    expect(doc.copies('m').sort()).toEqual(['a', 'm']);
+    expect(doc.content('a').text).toBe('a');
+    // "m" now holds it all (its own text the copies' text), "a" mirrors it.
+    expect(dump(doc)).toEqual(['a', 'a', '  b']);
+    expect(doc.get('a').mirrorOf).toBe('m');
     checkInvariants(doc);
   });
 });

@@ -144,6 +144,12 @@ export function DocumentMenu(props: { o: Outliner }) {
             </button>
           </div>
           <div class="menu-sep" role="separator" />
+          <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
+            {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}
+            <Show when={!o.trashOpen() && o.deleted().length}>
+              <span class="hint">{o.deleted().length}</span>
+            </Show>
+          </button>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
               Создать структуру <span class="hint">PARA и календарь</span>

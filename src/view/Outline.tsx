@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { touch } from './screen';
+import { keyboard, touch } from './screen';
 import { createDrag } from './drag';
 import { EditBar } from './EditBar';
 import { onGlobalKeys, onSelectionKeys, periodKeys } from './keymap';
@@ -10,6 +10,7 @@ import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
 import { Suggest } from './Suggest';
+import { Trash } from './Trash';
 import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { Crumbs, ZoomTitle } from './ZoomHeader';
@@ -294,50 +295,58 @@ export function Outline(props: { o: Outliner }) {
         </div>
       </Show>
       <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
-      <Crumbs o={o} scrolled={scrollTop() > 0} />
-      <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
-        <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
-          <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
-          <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
-          <Show when={o.zoom()} keyed>
-            {(id) => (
-              <div ref={observeHead} class="zoomhead">
-                <ZoomTitle o={o} id={id} />
+      <div class="workspace">
+        <div class="main">
+          <Crumbs o={o} scrolled={scrollTop() > 0} />
+          <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
+            <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
+              <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
+              <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
+              <Show when={o.zoom()} keyed>
+                {(id) => (
+                  <div ref={observeHead} class="zoomhead">
+                    <ZoomTitle o={o} id={id} />
+                  </div>
+                )}
+              </Show>
+              <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
+                <For each={ids()}>
+                  {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
+                </For>
               </div>
-            )}
-          </Show>
-          <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
-            <For each={ids()}>
-              {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
-            </For>
+              <Show when={drag.target()}>
+                {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
+              </Show>
+              <Show when={showAdd()}>
+                {/* Sits right under the last row: the rows above it end at `total`. */}
+                <button
+                  type="button"
+                  class="add"
+                  style={{ top: `${top() + total()}px` }}
+                  title="Новый пункт"
+                  aria-label="Новый пункт"
+                  onClick={addBullet}
+                >
+                  <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 1.5v9M1.5 6h9" />
+                  </svg>
+                </button>
+              </Show>
+              {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
+              <Show when={o.zoom()} keyed>
+                {(id) => (
+                  <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
+                    <Backlinks o={o} id={id} />
+                  </div>
+                )}
+              </Show>
+            </div>
           </div>
-          <Show when={drag.target()}>
-            {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
-          </Show>
-          <Show when={showAdd()}>
-            {/* Sits right under the last row: the rows above it end at `total`. */}
-            <button
-              type="button"
-              class="add"
-              style={{ top: `${top() + total()}px` }}
-              title="Новый пункт"
-              aria-label="Новый пункт"
-              onClick={addBullet}
-            >
-              <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
-                <path d="M6 1.5v9M1.5 6h9" />
-              </svg>
-            </button>
-          </Show>
-          {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
-          <Show when={o.zoom()} keyed>
-            {(id) => (
-              <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
-                <Backlinks o={o} id={id} />
-              </div>
-            )}
-          </Show>
         </div>
+        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard. */}
+        <Show when={o.trashOpen() && !(touch() && keyboard())}>
+          <Trash o={o} />
+        </Show>
       </div>
       <EditBar o={o} />
       <Suggest o={o} />

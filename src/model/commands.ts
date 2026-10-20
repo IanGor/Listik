@@ -1,8 +1,9 @@
 import { generateKeyBetween } from 'fractional-indexing';
 import { clock } from './clock';
-import { TRASH, newId, trashKey, type Doc } from './doc';
+import { TRASH, newId, type Doc } from './doc';
 import { compareOrder } from './links';
 import { countTrees, type Tree } from './outline-text';
+import { deletedKey } from './trash';
 import { contextOf, keyIn, nodeOf, type RowKey, type VisibleRows } from './rows';
 import type { Focus, NodeId, NodeSnapshot } from './types';
 
@@ -77,13 +78,14 @@ function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
 }
 
 /**
- * Deleting a bullet moves it into the trash, keyed by the time (see TRASH in
- * doc.ts). Copies elsewhere of a bullet in it stay whole (`handOver`).
+ * Deleting a bullet moves it into the trash, keyed by the time and the place
+ * it leaves (`deletedKey`, see TRASH in doc.ts), for "Вернуть". Copies
+ * elsewhere of a bullet in it stay whole (`handOver`).
  */
 function remove(doc: Doc, id: NodeId): void {
   handOver(doc, id);
   const n = doc.get(id);
-  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: trashKey(clock.now()) } });
+  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: deletedKey(clock.now(), n.parent!, n.order) } });
 }
 
 /**
@@ -91,7 +93,9 @@ function remove(doc: Doc, id: NodeId): void {
  * origin, holds the text, note, task state and children. Before the subtree
  * of `id` goes, each origin in it with copies outside hands all that over to
  * the first of those copies in the outline, which stops being a mirror; the
- * other copies then mirror it. Whichever copy goes, the rest stay as they were.
+ * other copies then mirror it, and so does the origin itself, in the trash:
+ * brought back, it is a copy again. Whichever copy goes, the rest stay as
+ * they were.
  */
 function handOver(doc: Doc, id: NodeId): void {
   const origins: NodeId[] = [];
@@ -99,6 +103,8 @@ function handOver(doc: Doc, id: NodeId): void {
     if (!n.mirrorOf && doc.hasMirrors(n.id)) origins.push(n.id);
   });
   for (const o of origins) {
+    // An origin inside another one went out with its children to that one's heir: it stays.
+    if (!doc.within(o, id)) continue;
     const rest = doc.copies(o).filter((c) => !doc.within(c, id));
     if (!rest.length) continue;
     const heir = rest.reduce((a, b) => (compareOrder(doc, b, a) < 0 ? b : a));
@@ -118,6 +124,7 @@ function handOver(doc: Doc, id: NodeId): void {
       const mirrorOf = doc.get(m).mirrorOf;
       if (m !== heir && mirrorOf !== heir) doc.apply({ t: 'setMirror', id: m, from: mirrorOf, to: heir });
     }
+    doc.apply({ t: 'setMirror', id: o, from: null, to: heir });
   }
 }
 

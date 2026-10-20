@@ -10,6 +10,7 @@ import { linkEnd, resolveLink } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
+import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
 import type { Persistence } from '../persist/idb';
@@ -17,6 +18,8 @@ import type { SyncStatus } from '../sync/engine';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { NodeSignals } from './node-signals';
 
+/** The trash panel is open; per browser, like the theme. */
+const TRASH_OPEN = 'listik-trash-open';
 /** Saved searches (the star in the search box), newest first; per browser, like the theme. */
 const SAVED_SEARCHES = 'listik-saved-searches';
 /** Saved searches kept at most: saving one more lets the oldest go. */
@@ -108,6 +111,9 @@ export class Outliner {
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
   readonly selection: Accessor<Selection | null>;
+  /** The trash panel (Trash.tsx) is open beside the outline. */
+  readonly trashOpen: Accessor<boolean>;
+  private setTrashOpen: Setter<boolean>;
   /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
@@ -181,6 +187,7 @@ export class Outliner {
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
+    [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
     doc.subscribe(this.nodes);
@@ -570,6 +577,44 @@ export class Outliner {
       const entries = this.rows.foldEntries();
       writeSetting(key, entries.length ? JSON.stringify(entries) : null);
     };
+  }
+
+  /** The menu: opens the trash panel beside the outline, or closes it; remembered per browser. */
+  showTrash(open = !this.trashOpen()): void {
+    this.setTrashOpen(open);
+    writeSetting(TRASH_OPEN, open ? '1' : null);
+  }
+
+  /** What was deleted, newest first (model/trash.ts). Reactive. */
+  deleted(): Deleted[] {
+    this.rowsVersion();
+    return deletedEntries(this.doc);
+  }
+
+  /**
+   * "Вернуть" in the trash panel: the block goes back where it was (one undo
+   * step), and the caret to the end of its text, there among its neighbours.
+   * If that place is not on the screen, the view goes to it first.
+   */
+  restoreDeleted(id: NodeId): void {
+    if (this.readOnly) return;
+    const landed: { home: boolean }[] = [];
+    batch(() => {
+      this.run((ctx) => {
+        const r = restoreDeleted(ctx, id);
+        if (r) landed.push(r);
+      }, this.keepFocus());
+      if (!landed.length) return;
+      const caret = this.doc.content(id).text.length;
+      let key = this.rows.locate(id);
+      if (!key) {
+        const parent = this.doc.get(id).parent!;
+        this.zoomTo(parent === this.doc.root ? null : parent);
+        key = this.rows.locate(id);
+      }
+      if (key) this.setFocus({ id: key, caret });
+    });
+    if (landed.length && !landed[0].home) this.notify('Прежнего места уже нет: пункт вернулся в конец списка');
   }
 
   /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */

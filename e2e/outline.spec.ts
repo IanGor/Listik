@@ -671,6 +671,76 @@ test.describe('structure and calendar', () => {
   });
 });
 
+test.describe('trash', () => {
+  const panel = (page: Page) => page.getByRole('complementary', { name: 'Корзина' });
+  const openTrash = async (page: Page) => {
+    await page.locator('.menu-button').click();
+    await page.getByRole('menuitem', { name: /Корзина/ }).click();
+  };
+
+  test('a panel beside the outline lists what is deleted as it goes; "Вернуть" puts it back, the caret in it; undo deletes it again', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+Shift+Backspace');
+    // An empty line taken out is not listed.
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await openTrash(page);
+    await expect(panel(page)).toBeVisible();
+    const items = panel(page).locator('.trash-item');
+    await expect(items).toHaveCount(1);
+    await expect(items.first().locator('.trash-text')).toHaveText('Часть первая');
+    await expect(items.first().locator('.trash-meta')).toContainText('+2 вложенных');
+    await expect(items.first().locator('.trash-meta')).toContainText('Главная › Том первый');
+    await expect(panel(page).locator('.trash-day h3')).toHaveText(['Сегодня']);
+
+    // The outline goes on working, the panel open; a new deletion shows at once, on top.
+    await edit(page, 'Том второй');
+    await page.keyboard.type('!');
+    await expect(editing(page)).toHaveText('Том второй!');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(items.first().locator('.trash-text')).toHaveText('Том второй!');
+    await expect(items).toHaveCount(2);
+
+    await items.nth(1).getByRole('button', { name: 'Вернуть' }).click();
+    expect(await outline(page)).toEqual(['Том первый', ...DEMO.slice(1, 5)]);
+    await expect(editing(page)).toBeFocused();
+    await expect(editing(page)).toHaveText('Часть первая');
+    await expect(items).toHaveCount(1);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(['Том первый', '  Часть вторая']);
+    await expect(items).toHaveCount(2);
+    // It stays open through a reload; the filter narrows it down.
+    await page.reload();
+    await expect(panel(page)).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Закрыть корзину' }).click();
+    await expect(panel(page)).toHaveCount(0);
+  });
+
+  test('a block whose place is not on the screen: the view goes there; one whose place is gone goes last', async ({ page }) => {
+    await edit(page, 'Анна Павловна');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.row', { hasText: 'Том второй' }).locator('.bullet').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await openTrash(page);
+    await panel(page).getByRole('button', { name: 'Вернуть' }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    await expect(editing(page)).toContainText('Анна Павловна');
+    // Deleted, then its place too: back at the end of the top level.
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+Shift+Backspace');
+    const old = panel(page).locator('.trash-item').nth(1);
+    await expect(old.locator('.trash-meta')).toContainText('из удалённого пункта');
+    await old.getByRole('button', { name: 'Вернуть' }).click();
+    await expect(page.locator('.toast')).toContainText('Прежнего места уже нет');
+    expect((await outline(page)).at(-1)).toBe(DEMO[3].trim());
+    await expect(editing(page)).toContainText('Анна Павловна');
+  });
+});
+
 test.describe('done and notes', () => {
   test('Ctrl+L makes a task (checkbox), then checks it; Ctrl+Shift+L makes it plain; undo works', async ({ page }) => {
     const row = page.locator('.row', { hasText: 'Часть вторая' });
@@ -1111,6 +1181,21 @@ test.describe('touch screen', () => {
   const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
+
+  test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: /Корзина/ }).tap();
+    const sheet = page.getByRole('complementary', { name: 'Корзина' });
+    await expect(sheet).toBeVisible();
+    // Once it has slid up.
+    await expect.poll(async () => { const b = (await sheet.boundingBox())!; return b.y + b.height; }).toBeLessThanOrEqual(915 + 1);
+    expect((await sheet.boundingBox())!.width).toBe(412);
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await keyboard(page, true);
+    await expect(sheet).toHaveCount(0);
+    await keyboard(page, false);
+    await expect(sheet).toBeVisible();
+  });
 
   test('a bar under the list does what Tab, Ctrl+L and Ctrl+Z do; the keyboard stays', async ({ page }) => {
     await expect(bar(page)).toHaveCount(0);
