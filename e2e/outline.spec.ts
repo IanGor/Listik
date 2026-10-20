@@ -1541,7 +1541,8 @@ test.describe('touch screen', () => {
   test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
 
   const bar = (page: Page) => page.getByRole('toolbar', { name: 'Правка пункта' });
-  const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
+  /** A button of the set in view (the others are inert, sliding away). */
+  const action = (page: Page, name: string) => bar(page).locator('.editbar-set:not([inert])').getByRole('button', { name, exact: true });
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
 
@@ -1681,12 +1682,19 @@ test.describe('touch screen', () => {
     await action(page, 'Вверх').tap();
     await action(page, 'Вниз').tap();
     expect(await outline(page)).toEqual(DEMO);
+    // Out and in are there too: a whole run of rearranging without leaving the set.
+    await action(page, 'Вынести').tap();
+    expect((await outline(page)).slice(-2)).toEqual(['Часть вторая', 'Том второй']);
+    await action(page, 'Вложить').tap();
+    expect(await outline(page)).toEqual(DEMO);
     await page.locator('.editbar-move').getByRole('button', { name: 'Назад' }).tap();
 
     await action(page, 'Задача: сделать, отметить, убрать').tap();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet.todo')).toHaveCount(1);
     await action(page, 'Отменить').tap();
     await expect(page.locator('.bullet.todo')).toHaveCount(0);
+    // Redo is rare: behind "Ещё".
+    await action(page, 'Ещё').tap();
     await action(page, 'Повторить').tap();
     await expect(page.locator('.bullet.todo')).toHaveCount(1);
 
@@ -1778,15 +1786,15 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toBeFocused();
   });
 
-  test('"Оформление" swaps in bold and italic; picking one brings the main set back', async ({ page }) => {
+  test('"Ещё" swaps in bold and italic; picking one brings the main set back', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await keyboard(page, true);
     const main = page.locator('.editbar-main');
-    const formats = page.locator('.editbar-format');
+    const formats = page.locator('.editbar-extra');
     // The main set fits the phone without scrolling.
     expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     await expect(formats).toHaveAttribute('inert', '');
-    await action(page, 'Оформление').tap();
+    await action(page, 'Ещё').tap();
     await expect(main).toHaveAttribute('inert', '');
     await expect(formats).not.toHaveAttribute('inert', '');
 
@@ -1803,7 +1811,7 @@ test.describe('touch screen', () => {
     await expect(formats).toHaveAttribute('inert', '');
     await expect(main).not.toHaveAttribute('inert', '');
 
-    await action(page, 'Оформление').tap();
+    await action(page, 'Ещё').tap();
     await formats.getByRole('button', { name: 'Назад' }).tap();
     await expect(main).not.toHaveAttribute('inert', '');
     await expect(editing(page)).toHaveText('Том **второй**');
@@ -1814,7 +1822,7 @@ test.describe('touch screen', () => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await keyboard(page, true);
     await page.keyboard.press('Control+Home');
-    await action(page, 'Вставить').tap();
+    await action(page, 'Ещё').tap();
     await action(page, 'Время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');
     await expect(editing(page)).toBeFocused();
@@ -1822,15 +1830,17 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toHaveText('23:40 Том второй');
   });
 
-  test('"Вставить" puts in a link or a mirror with the caret between the brackets, and the suggestions open', async ({ page }) => {
+  test('a link is one press, a mirror is in "Ещё": the caret between the brackets, and the suggestions open', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await keyboard(page, true);
-    await action(page, 'Вставить').tap();
+    await action(page, 'Ещё').tap();
     await action(page, 'Зеркало').tap();
     await expect(editing(page)).toHaveText('(())');
     const mirrors = page.getByRole('listbox', { name: 'Зеркала' });
     await expect(mirrors).toBeVisible();
+    // The set went back to the main one after the pick.
+    await expect(page.locator('.editbar-extra')).toHaveAttribute('inert', '');
     await page.keyboard.type('Часть втор');
     await mirrors.getByRole('option').first().tap();
     await expect(page.locator('.row.mirror')).toHaveCount(2);
@@ -1838,18 +1848,52 @@ test.describe('touch screen', () => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' см. ');
-    await action(page, 'Вставить').tap();
     await action(page, 'Ссылка').tap();
     await expect(editing(page)).toHaveText('Том второй см. [[]]');
     await expect(page.getByRole('listbox', { name: 'Ссылки' })).toBeVisible();
-    // The set went back to the main one after the pick.
-    await expect(page.locator('.editbar-insert')).toHaveAttribute('inert', '');
 
     // In a note a mirror is just brackets: its button is off there.
     await action(page, 'Заметка').tap();
-    await action(page, 'Вставить').tap();
+    await action(page, 'Ещё').tap();
     await expect(action(page, 'Зеркало')).toBeDisabled();
-    await expect(action(page, 'Ссылка')).toBeEnabled();
+  });
+
+  test('# starts a tag, a space before it after a word, and offers the tags there are', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await keyboard(page, true);
+    await action(page, 'Тег').tap();
+    await expect(editing(page)).toHaveText('Том второй #');
+    const tags = page.getByRole('listbox', { name: 'Теги' });
+    await expect(tags.getByRole('option')).toHaveText([/#салон/, /#шерер/]);
+    await tags.getByRole('option', { name: /#шерер/ }).tap();
+    await expect(editing(page)).toHaveText(/^Том второй #шерер/);
+    // After a space, or at the very start, just the #.
+    await page.keyboard.press('Control+Home');
+    await action(page, 'Тег').tap();
+    await expect(editing(page)).toHaveText(/^#Том второй/);
+  });
+
+  test('"Удалить" in "Ещё" takes the bullet with what is inside it; undo brings it back', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Часть первая' }).tap();
+    await keyboard(page, true);
+    await action(page, 'Ещё').tap();
+    await action(page, 'Удалить').tap();
+    expect(await outline(page)).toEqual(['Том первый', '  Часть вторая', 'Том второй']);
+    // The keyboard stays, on the row above.
+    await expect(editing(page)).toHaveText('Том первый');
+    await expect(bar(page)).toBeVisible();
+    await action(page, 'Отменить').tap();
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('the main set: nine buttons a finger wide, in four groups — the tree, the bullet, typing, history', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
+    const main = page.locator('.editbar-main');
+    const names = await main.getByRole('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')));
+    expect(names).toEqual(['Вынести', 'Вложить', 'Переместить', 'Задача: сделать, отметить, убрать', 'Заметка', 'Тег', 'Ссылка', 'Отменить', 'Ещё']);
+    await expect(main.locator('.editbar-sep')).toHaveCount(3);
+    for (const b of await main.getByRole('button').all()) expect((await b.boundingBox())!.width).toBeGreaterThanOrEqual(43);
   });
 
   test('the main set fits a small phone; a wider set scrolls under a finger, "Назад" staying put', async ({ page }) => {
@@ -1862,8 +1906,8 @@ test.describe('touch screen', () => {
     expect(await main.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     await expect(main).not.toHaveClass(/more/);
 
-    await action(page, 'Вставить').tap();
-    const insert = page.locator('.editbar-insert');
+    await action(page, 'Ещё').tap();
+    const insert = page.locator('.editbar-extra');
     expect(await insert.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
     await expect(insert).toHaveClass(/more/);
     const back = insert.getByRole('button', { name: 'Назад' });
@@ -1878,15 +1922,15 @@ test.describe('touch screen', () => {
     await action(page, 'Время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');
     // Opened again, the set starts at its beginning.
-    await action(page, 'Вставить').tap();
+    await action(page, 'Ещё').tap();
     expect(await insert.evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
   test('quick taps between the sets, while they slide, leave the bar in place', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await keyboard(page, true);
-    await action(page, 'Вставить').tap();
-    await page.locator('.editbar-insert').getByRole('button', { name: 'Назад' }).tap();
+    await action(page, 'Ещё').tap();
+    await page.locator('.editbar-extra').getByRole('button', { name: 'Назад' }).tap();
     // No waiting for the slide: the next set at once.
     await action(page, 'Переместить').tap();
     const move = page.locator('.editbar-move');

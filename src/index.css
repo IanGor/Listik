@@ -1469,6 +1469,7 @@ mark,
   inset: 4px 8px auto;
   display: flex;
   gap: 2px;
+  align-items: center;
   justify-content: space-around;
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1483,6 +1484,22 @@ mark,
 .editbar-main[inert] {
   opacity: 0;
   transform: translateX(-32px);
+}
+
+/* Between the main set's groups (the place in the tree, the bullet, what is
+   typed, history): a hairline, so each group reads as one and is found by
+   where it stands. */
+.editbar-sep {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  background: var(--hairline);
+}
+
+/* Nine buttons side by side, no gap: each as wide as can be (44px on a
+   412px phone). */
+.editbar-main {
+  gap: 0;
 }
 
 /* A set wider than the screen scrolls sideways under a finger, "Назад"
@@ -1537,21 +1554,39 @@ mark,
   opacity: 0.35;
 }
 
-/* In a set, a button says what it does: a format in its own style
-   ("Жирный" bold, "Курсив" italic), an insertion with the brackets it types. */
+/* In a set, a button says what it does under its icon, a tile: the whole
+   set fits a phone without scrolling; a format in its own style ("Жирный"
+   bold, "Курсив" italic), an insertion with the brackets it types. Sets
+   are pressed rarely, so the words help more than they cost. */
 .editbar .editbar-labelled {
   display: flex;
-  flex: none;
-  gap: 8px;
-  max-width: none;
-  padding: 0 12px;
-  font-size: 15px;
+  flex: 1 0 52px;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  max-width: 72px;
+  padding: 0 2px;
 }
 
+.editbar-caption {
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* The characters a button types, in the link colour: "#", "[[]]", "(( ))". */
 .editbar-glyph {
   font-size: 14px;
   font-weight: 600;
+  line-height: 20px;
   color: var(--link);
+  white-space: nowrap;
+}
+
+.editbar-labelled .editbar-glyph {
+  font-size: 12px;
 }
 
 /* Reduced motion: the arrow just shows its new state. */
