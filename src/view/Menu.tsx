@@ -95,6 +95,12 @@ export function DocumentMenu(props: { o: Outliner }) {
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
+          {/* Going to a place by its name is a computer's: a phone has its search. */}
+          <Show when={!touch()}>
+            <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
+              Перейти к пункту… <span class="hint">Ctrl+K</span>
+            </button>
+          </Show>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox

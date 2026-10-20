@@ -218,72 +218,99 @@ test.describe('saved searches', () => {
   });
 });
 
-test.describe('places in the search box', () => {
+test.describe('go to a place', () => {
+  const line = (page: Page) => page.getByRole('dialog', { name: 'Перейти к пункту' });
   const places = (page: Page) => page.getByRole('listbox', { name: 'Места' });
   const recent = (page: Page) => page.getByRole('listbox', { name: 'Недавние места' });
   const title = (page: Page) => page.locator('.zoom-title');
 
-  test('Ctrl+K and a name: places by title with their path, the first chosen; Enter goes in, the caret on its first bullet', async ({ page }) => {
+  test('Ctrl+K: a line in the middle of the screen; a name lists places with their path, the first chosen; the outline is not searched; Enter goes in, the caret on its first bullet', async ({ page }) => {
     await page.keyboard.press('Control+k');
-    await expect(page.locator('.search')).toBeFocused();
+    await expect(line(page).getByRole('textbox')).toBeFocused();
+    const box = (await line(page).boundingBox())!;
+    const width = page.viewportSize()!.width;
+    expect(Math.abs(box.x + box.width / 2 - width / 2)).toBeLessThan(2);
+    expect(box.y).toBeGreaterThan(100);
     await page.keyboard.type('часть пер');
     await expect(places(page).getByRole('option')).toHaveText(['Часть первая' + 'Том первый']);
     await expect(places(page).getByRole('option', { selected: true })).toHaveText(/^Часть первая/);
-    // The outline below still shows what matches.
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    // What is typed is a name, not a search: the outline stays whole.
+    await expect(page.locator('.search')).toHaveValue('');
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
     await page.keyboard.press('Enter');
     await expect(title(page)).toHaveText('Часть первая');
-    await expect(page.locator('.search')).toHaveValue('');
+    await expect(line(page)).toHaveCount(0);
     await expect(editing(page)).toHaveText(DEMO[2].trim());
   });
 
-  test('↓ chooses another place; a click goes there without editing; a tag lists no places', async ({ page }) => {
-    const search = page.locator('.search');
-    await search.click();
-    await search.pressSequentially('часть');
+  test('↓ chooses another place, a click goes there without editing; Esc closes, the caret back; a name nothing has says so', async ({ page }) => {
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('часть');
     const options = places(page).getByRole('option');
     await expect(options).toHaveCount(2);
     await expect(options.first()).toHaveAttribute('aria-selected', 'true');
-    await search.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
     await expect(options.last()).toHaveAttribute('aria-selected', 'true');
-    await search.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
     await expect(options.first()).toHaveAttribute('aria-selected', 'true');
     await places(page).getByRole('option', { name: /Часть вторая/ }).click();
     await expect(title(page)).toHaveText('Часть вторая');
     await expect(editing(page)).toHaveCount(0);
 
-    await search.click();
-    await search.fill('#шер');
-    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
-    await expect(places(page)).toHaveCount(0);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await edit(page, 'Том второй');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('нет такого');
+    await expect(line(page)).toContainText('Нет пункта с таким названием');
+    await page.keyboard.press('Escape');
+    await expect(line(page)).toHaveCount(0);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('|');
+    await expect(editing(page)).toHaveText('Том второ|й');
   });
 
-  test('before anything is typed, the places gone to lately, the newest first, without the one you are in', async ({ page }) => {
+  test('the search box lists no places; Ctrl+K from it opens the line, the search staying; so does the menu', async ({ page }) => {
+    const search = page.locator('.search');
+    await search.click();
+    await search.pressSequentially('часть');
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    await page.keyboard.press('Control+k');
+    await expect(line(page).getByRole('textbox')).toBeFocused();
+    await expect(search).toHaveValue('часть');
+    // A press outside closes it.
+    await page.mouse.click(5, 300);
+    await expect(line(page)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /Перейти к пункту/ }).click();
+    await expect(line(page).getByRole('textbox')).toBeFocused();
+  });
+
+  test('before anything is typed, the places gone to lately, the newest first and chosen, without the one you are in', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'Том второй' }).locator('.bullet').click();
     await expect(title(page)).toHaveText('Том второй');
-    await page.locator('.search').click();
+    await page.keyboard.press('Control+k');
     await expect(recent(page).getByRole('option')).toHaveText(['Часть первая' + 'Том первый']);
-    // Nothing is chosen until ↓.
-    await expect(recent(page).getByRole('option', { selected: true })).toHaveCount(0);
-    await page.keyboard.press('ArrowDown');
+    await expect(recent(page).getByRole('option', { selected: true })).toHaveText(/^Часть первая/);
     await page.keyboard.press('Enter');
     await expect(title(page)).toHaveText('Часть первая');
-    await page.locator('.search').click();
+    await page.keyboard.press('Control+k');
     await expect(recent(page).getByRole('option')).toHaveText(['Том второй']);
   });
 });
 
 test.describe('move to a place', () => {
   const targets = (page: Page) => page.getByRole('listbox', { name: 'Куда переместить' });
-  const search = (page: Page) => page.locator('.search');
+  const input = (page: Page) => page.getByRole('dialog', { name: 'Переместить' }).getByRole('textbox');
 
-  test('Ctrl+Shift+M: the box asks where to; a name and Enter move the bullet last there, the caret stays here; undo and the toast', async ({ page }) => {
+  test('Ctrl+Shift+M: the line asks where to; a name and Enter move the bullet last there, the caret stays here; undo and the toast', async ({ page }) => {
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+Shift+m');
-    await expect(search(page)).toBeFocused();
-    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить «Часть вторая» в…');
+    await expect(input(page)).toBeFocused();
+    await expect(input(page)).toHaveAttribute('placeholder', 'Переместить «Часть вторая» в…');
     await page.keyboard.type('том вт');
     // The outline is left as it is: the name is no search.
     expect(await outline(page)).toEqual(DEMO);
@@ -292,7 +319,7 @@ test.describe('move to a place', () => {
     expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);
     // On, to the row that followed it.
     await expect(editing(page)).toHaveText('Том второй');
-    await expect(search(page)).toHaveValue('');
+    await expect(input(page)).toHaveCount(0);
     await expect(page.locator('.toast')).toContainText('Перемещено в');
 
     await page.keyboard.press('Control+z');
@@ -329,7 +356,7 @@ test.describe('move to a place', () => {
     // Down through its own bullets to the next part.
     for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
     await page.keyboard.press('Control+Shift+m');
-    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить 2 пункта в…');
+    await expect(input(page)).toHaveAttribute('placeholder', 'Переместить 2 пункта в…');
     await page.keyboard.type('том вт');
     await page.keyboard.press('Enter');
     expect(await outline(page)).toEqual(['Том первый', 'Том второй', '  Часть первая', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Часть вторая']);
@@ -403,14 +430,14 @@ test.describe('search', () => {
     await expect(page.locator('.row .tag.hit')).toHaveText(['шерер']);
   });
 
-  test('a search that lists no places: Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
-    await page.locator('.search').fill('#шерер');
+  test('Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
+    await page.locator('.search').fill('вторая');
     await page.keyboard.press('Enter');
-    await expect(editing(page)).toHaveText(DEMO[3].trim());
+    await expect(editing(page)).toHaveText('Часть вторая');
     await page.keyboard.type('!');
     await page.keyboard.press('Escape');
     await expect(page.locator('.search')).toHaveValue('');
-    await expect(editing(page)).toHaveText('!' + DEMO[3].trim());
+    await expect(editing(page)).toHaveText('!Часть вторая');
     expect(await outline(page)).toHaveLength(DEMO.length);
   });
 
@@ -1360,8 +1387,8 @@ test.describe('theme', () => {
   test('follows the system; a pick holds until the system switches, a reload too; then the system leads again', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
-    expect(await background(page)).toBe(DARK);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect.poll(() => background(page)).toBe(DARK);
     // The switch lives in the menu, as everything but search and quick capture does: the logo, the tray, the menu.
     await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
@@ -1369,7 +1396,7 @@ test.describe('theme', () => {
     await page.getByRole('menuitem', { name: 'Дневная тема' }).click();
     // The switch runs inside a view transition: it lands on the next frame.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    expect(await background(page)).toBe(CREAM);
+    await expect.poll(() => background(page)).toBe(CREAM);
     await menu.click();
     await expect(page.getByRole('menuitem', { name: 'Ночная тема' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -1612,12 +1639,23 @@ test.describe('touch screen', () => {
     await expect(bar(page)).toBeVisible();
   });
 
-  test('"Куда…" in the move set: the search box asks where to, a tap on a place moves the bullet', async ({ page }) => {
+  test('the search box lists no recent places: nothing drops over the outline', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').tap();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    await page.locator('.search').tap();
+    await expect(page.locator('.search')).toBeFocused();
+    await expect(page.locator('.search-menu')).toHaveCount(0);
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+  });
+
+  test('"Куда…" in the move set: a line at the top asks where to, a tap on a place moves the bullet', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     await keyboard(page, true);
     await action(page, 'Переместить').tap();
     await action(page, 'Куда…').tap();
-    await expect(page.locator('.search')).toBeFocused();
+    const line = page.getByRole('dialog', { name: 'Переместить' });
+    await expect(line.getByRole('textbox')).toBeFocused();
+    expect((await line.boundingBox())!.y).toBeLessThan(20);
     await page.keyboard.type('том вт');
     await page.getByRole('listbox', { name: 'Куда переместить' }).getByRole('option', { name: /Том второй/ }).tap();
     expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);

@@ -67,6 +67,9 @@ export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'las
 /** What of the zoom title is being edited (ZoomHeader.tsx) and where the caret goes; null when neither. */
 export type TitleEdit = { note: boolean; caret: number } | null;
 
+/** What the places line (GoTo.tsx) is open for: going to a place, or moving rows into one. */
+export type PlaceLine = { kind: 'go' } | { kind: 'move'; keys: RowKey[]; label: string };
+
 /** Several rows selected: from `anchor` (where it started) to `head` (the moving end). */
 export interface Selection {
   anchor: RowKey;
@@ -143,7 +146,7 @@ export class Outliner {
   /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
-  /** Places zoomed into lately, newest first, calendar periods aside: the search box offers them before anything is typed. */
+  /** Places zoomed into lately, newest first, calendar periods aside: the places line offers them before anything is typed. */
   readonly recentPlaces: Accessor<NodeId[]>;
   private setRecentPlaces: Setter<NodeId[]>;
   /** Where bullets were moved to lately ("Переместить в…"), newest first: offered first next time. */
@@ -151,11 +154,11 @@ export class Outliner {
   private setRecentTargets: Setter<NodeId[]>;
   /** The document's name for the keys `recentPlaces` and `recentTargets` last under on this device (`keepRecent`); null: for this page only. */
   private recentName: string | null = null;
-  /** "Переместить в…" is open (SearchBar.tsx): the rows to move, and what the box says of them. */
-  readonly moving: Accessor<{ keys: RowKey[]; label: string } | null>;
-  private setMoving: Setter<{ keys: RowKey[]; label: string } | null>;
-  /** Where the caret was when "Переместить в…" opened: it goes back there if nothing moves. */
-  private moveBack: FocusRequest | null = null;
+  /** The places line (GoTo.tsx): "Перейти к…", or "Переместить в…" with the rows to move and what the line says of them; null: closed. */
+  readonly placeLine: Accessor<PlaceLine | null>;
+  private setPlaceLine: Setter<PlaceLine | null>;
+  /** Where the caret was when the places line opened: it goes back there if the line closes with nothing done. */
+  private placeBack: FocusRequest | null = null;
   /** Rows being dragged (with their subtrees), shown dimmed. */
   readonly dragged: Accessor<ReadonlySet<RowKey>>;
   readonly setDragged: Setter<ReadonlySet<RowKey>>;
@@ -246,7 +249,7 @@ export class Outliner {
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
     [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
     [this.recentTargets, this.setRecentTargets] = createSignal<NodeId[]>([]);
-    [this.moving, this.setMoving] = createSignal<{ keys: RowKey[]; label: string } | null>(null);
+    [this.placeLine, this.setPlaceLine] = createSignal<PlaceLine | null>(null);
     [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
@@ -486,35 +489,60 @@ export class Outliner {
   }
 
   /**
-   * Ctrl+Shift+M, "Куда…" on the editing bar: the search box turns into
-   * "Переместить в…" for these rows (SearchBar.tsx). The outline stays as
-   * it is; where the caret was is read off the page, to go back there if
-   * nothing moves (as quick capture does).
+   * Where the caret is in the outline, read off the page: the focus request
+   * is where editing began, and typing has moved on since. A line over the
+   * outline (quick capture, places) puts it back there as it closes.
+   */
+  private caretNow(): FocusRequest | null {
+    const el = document.activeElement as HTMLElement | null;
+    const f = this.focus();
+    const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
+    return f && offset !== undefined ? (el!.classList.contains('note') ? { id: f.id, caret: offset, note: true } : { id: f.id, caret: offset }) : f;
+  }
+
+  /**
+   * Ctrl+K: the places line opens as "Перейти к…" (GoTo.tsx), a place to
+   * go to by its name; the search and the outline stay as they are. Works
+   * read-only too: it only goes.
+   */
+  openGoTo(): void {
+    if (this.placeLine()) return;
+    this.settleTitle();
+    this.placeBack = this.caretNow();
+    this.setPlaceLine({ kind: 'go' });
+  }
+
+  /**
+   * Ctrl+Shift+M, "Куда…" on the editing bar: the places line opens as
+   * "Переместить в…" for these rows (GoTo.tsx). The outline stays as it is.
    */
   openMove(keys: RowKey[]): void {
     if (this.readOnly || !keys.length) return;
     this.settleTitle();
-    const el = document.activeElement as HTMLElement | null;
-    const f = this.focus();
-    const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
-    this.moveBack = f && offset !== undefined ? (el!.classList.contains('note') ? { id: f.id, caret: offset, note: true } : { id: f.id, caret: offset }) : f;
+    this.placeBack = this.caretNow();
     const first = titleOf(this.contentOf(keys[0]).text) || 'пустой пункт';
-    this.setMoving({ keys, label: keys.length > 1 ? `${keys.length} ${plural(keys.length, 'пункт', 'пункта', 'пунктов')}` : `«${first}»` });
+    this.setPlaceLine({ kind: 'move', keys, label: keys.length > 1 ? `${keys.length} ${plural(keys.length, 'пункт', 'пункта', 'пунктов')}` : `«${first}»` });
   }
 
-  /** "Переместить в…" closes with nothing moved: the caret goes back where it was. */
-  cancelMove(): void {
-    if (!this.moving()) return;
-    this.setMoving(null);
-    const back = this.moveBack;
-    this.moveBack = null;
+  /** The rows "Переместить в…" is open for, and what the line says of them; null: it is not. */
+  moving(): { keys: RowKey[]; label: string } | null {
+    const line = this.placeLine();
+    return line?.kind === 'move' ? line : null;
+  }
+
+  /** The places line closes with nothing done (Esc, a press outside): the caret goes back where it was. */
+  closePlaceLine(): void {
+    if (!this.placeLine()) return;
+    this.setPlaceLine(null);
+    const back = this.placeBack;
+    this.placeBack = null;
     if (back && this.rows.indexOf(back.id) >= 0) this.setFocus({ ...back });
   }
 
   /**
    * Whether a bullet cannot take what is being moved: it is one of the
    * moved bullets or inside one (its original, for a mirror). Places the
-   * box offers leave these out.
+   * line offers leave these out.
    */
   moveRefuses(id: NodeId): boolean {
     const m = this.moving();
@@ -531,9 +559,9 @@ export class Outliner {
   moveInto(target: NodeId): void {
     const m = this.moving();
     if (!m || this.readOnly) return;
-    this.setMoving(null);
-    const back = this.moveBack;
-    this.moveBack = null;
+    this.setPlaceLine(null);
+    const back = this.placeBack;
+    this.placeBack = null;
     const keys = m.keys.filter((k) => this.rows.indexOf(k) >= 0);
     if (!keys.length) return;
     // The row after the moved block (a selection is one), or the one before it.
@@ -577,12 +605,14 @@ export class Outliner {
   }
 
   /**
-   * A place taken in the search box's list: the search goes and the view
-   * zooms into it. With `edit` (the keyboard) the caret goes on into its
-   * first bullet, or its title, as Alt+→ does.
+   * A place taken in "Перейти к…": the line closes, a search goes, and the
+   * view zooms into it. With `edit` (the keyboard) the caret goes on into
+   * its first bullet, or its title, as Alt+→ does.
    */
   goToPlace(id: NodeId, edit: boolean): void {
     if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
+    this.setPlaceLine(null);
+    this.placeBack = null;
     batch(() => {
       this.setQuery('', true);
       this.setFocus(null);
@@ -968,10 +998,7 @@ export class Outliner {
   openCapture(): void {
     if (this.readOnly) return;
     if (this.captureOpen()) return;
-    const el = document.activeElement as HTMLElement | null;
-    const f = this.focus();
-    const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
-    this.captureBack = f && offset !== undefined ? (el!.classList.contains('note') ? { id: f.id, caret: offset, note: true } : { id: f.id, caret: offset }) : f;
+    this.captureBack = this.caretNow();
     this.setCaptureOpen(true);
   }
 
