@@ -1279,6 +1279,10 @@ mark,
   bottom: 24px;
   left: 50%;
   z-index: 30;
+  /* Its own width: left: 50% alone would leave it half the window to fit in,
+     and a short message with its action would wrap on a phone. */
+  box-sizing: border-box;
+  width: max-content;
   max-width: min(560px, calc(100vw - 32px));
   padding: 12px 18px;
   font-size: 14px;

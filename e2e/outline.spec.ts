@@ -1353,6 +1353,10 @@ test.describe('touch screen', () => {
     await page.keyboard.type('с телефона');
     await page.keyboard.press('Enter');
     expect((await outline(page)).slice(-2)).toEqual(['Inbox', '  с телефона']);
+    // The message and its action on one line, not squeezed into half the screen.
+    const toast = page.getByRole('status');
+    await expect(toast).toContainText('Отменить');
+    expect((await toast.boundingBox())!.height).toBeLessThan(50);
   });
 
   test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
