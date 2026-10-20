@@ -98,6 +98,8 @@ const SETS: SubSet[] = [
     items: [
       { label: 'Вверх', icon: ['M12 19V5', 'M6 11l6-6 6 6'], run: (o, h) => o.run((ctx) => cmd.moveUp(ctx, h.id), h) },
       { label: 'Вниз', icon: ['M12 5v14', 'M6 13l6 6 6-6'], run: (o, h) => o.run((ctx) => cmd.moveDown(ctx, h.id), h) },
+      // Into a place found by name (the search box turns into "Переместить в…"); the zoom title has no such set.
+      { label: 'Куда…', icon: ['M4 12h11', 'M11 8l4 4-4 4', 'M19 5v14'], run: (o, h) => o.openMove([h.id]) },
     ],
   },
   {

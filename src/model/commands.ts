@@ -603,3 +603,22 @@ export function moveManyTo({ doc, rows }: Ctx, keys: RowKey[], parentKey: RowKey
   });
 }
 
+/**
+ * "Переместить в…": the rows' bullets, with their subtrees and in their
+ * order, go last under `target` (a mirror: under its original), left
+ * folded or open as it is. Refuses a target inside one of the moved
+ * subtrees. Returns how many bullets moved.
+ */
+export function moveManyInto({ doc, rows }: Ctx, keys: RowKey[], target: NodeId): number {
+  const parent = hostFor(doc, target);
+  if (parent === null) return 0;
+  const ids = blockOf(doc, keys).map(nodeOf);
+  if (ids.some((id) => doc.within(parent, id))) return 0;
+  const orders = doc.ordersAt(parent, doc.get(parent).children.length, ids.length);
+  if (ids.length > 2) rows.expectMany();
+  ids.forEach((id, i) => {
+    const n = doc.get(id);
+    doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent, order: orders[i] } });
+  });
+  return ids.length;
+}

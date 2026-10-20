@@ -275,6 +275,68 @@ test.describe('places in the search box', () => {
   });
 });
 
+test.describe('move to a place', () => {
+  const targets = (page: Page) => page.getByRole('listbox', { name: 'Куда переместить' });
+  const search = (page: Page) => page.locator('.search');
+
+  test('Ctrl+Shift+M: the box asks where to; a name and Enter move the bullet last there, the caret stays here; undo and the toast', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(search(page)).toBeFocused();
+    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить «Часть вторая» в…');
+    await page.keyboard.type('том вт');
+    // The outline is left as it is: the name is no search.
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(targets(page).getByRole('option', { selected: true })).toHaveText('Том второй');
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);
+    // On, to the row that followed it.
+    await expect(editing(page)).toHaveText('Том второй');
+    await expect(search(page)).toHaveValue('');
+    await expect(page.locator('.toast')).toContainText('Перемещено в');
+
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveText('Часть вторая');
+
+    // Where bullets went lately comes first, before anything is typed.
+    await page.keyboard.press('Control+Shift+m');
+    await expect(targets(page).getByRole('option').first()).toHaveText('Том второй');
+    // The toast's place leads there, to the moved bullet.
+    await page.keyboard.press('Enter');
+    await page.locator('.toast').getByRole('button', { name: 'Том второй' }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await expect(editing(page)).toHaveText('Часть вторая');
+  });
+
+  test('a bullet is never offered itself or what is inside it; Esc moves nothing and the caret goes back', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Control+Shift+m');
+    await page.keyboard.type('часть');
+    await expect(targets(page).getByRole('option')).toHaveText(['Часть вторая' + 'Том первый']);
+    await page.keyboard.type(' пер');
+    await expect(targets(page)).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('|');
+    await expect(editing(page)).toHaveText('Часть перва|я');
+    expect(await outline(page)).toHaveLength(DEMO.length);
+  });
+
+  test('selected bullets move together, in their order', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    // Down through its own bullets to the next part.
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить 2 пункта в…');
+    await page.keyboard.type('том вт');
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual(['Том первый', 'Том второй', '  Часть первая', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Часть вторая']);
+    await expect(page.locator('.toast')).toContainText('2 пункта перемещены в');
+  });
+});
+
 test.describe('tag filter', () => {
   test('a tag typed in the search box narrows with every character, as a word does', async ({ page }) => {
     const search = page.locator('.search');
@@ -1460,6 +1522,17 @@ test.describe('touch screen', () => {
     await expect(sheet).toHaveCount(0);
     await keyboard(page, false);
     await expect(sheet).toBeVisible();
+  });
+
+  test('"Куда…" in the move set: the search box asks where to, a tap on a place moves the bullet', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await keyboard(page, true);
+    await action(page, 'Переместить').tap();
+    await action(page, 'Куда…').tap();
+    await expect(page.locator('.search')).toBeFocused();
+    await page.keyboard.type('том вт');
+    await page.getByRole('listbox', { name: 'Куда переместить' }).getByRole('option', { name: /Том второй/ }).tap();
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);
   });
 
   test('a bar under the list does what Tab, Ctrl+L and Ctrl+Z do; the keyboard stays', async ({ page }) => {

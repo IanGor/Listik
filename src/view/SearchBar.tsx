@@ -37,6 +37,13 @@ const shortPath = (p: Place) => (p.path.length > 2 ? ['…', ...p.path.slice(-2)
  * its first bullet), ↑/↓ choose another. A search with tags or operators
  * lists no places: Enter edits its first match, as without the list.
  *
+ * "Переместить в…" (Ctrl+Shift+M, `Outliner.openMove`) takes the same box
+ * over: what is typed there is only a place's name, the outline is left
+ * as it is, the list holds places alone — before anything is typed, where
+ * bullets went lately, then the recent places — without the moved bullets
+ * and what is inside them. Enter moves them into the chosen one; Esc, ×
+ * or leaving the box moves nothing.
+ *
  * Saved searches: the star keeps what is typed (filled once saved; pressed
  * again, it lets go). They are listed last saved first, narrowed to those
  * holding what is typed; a press runs one, its × takes it out. The list
@@ -46,9 +53,15 @@ export function SearchBar(props: { o: Outliner }) {
   const o = props.o;
   let input!: HTMLInputElement;
   const [focused, setFocused] = createSignal(false);
+  /** What "Переместить в…" has typed: a name, never a search. */
+  const [moveQuery, setMoveQuery] = createSignal('');
+  const moving = () => o.moving();
+  /** The box's text: the search, or the name of a place to move to. */
+  const text = () => (moving() ? moveQuery() : o.query());
   const saved = () => o.isSaved(o.query());
-  /** Saved searches to offer: all of them, or those holding what is typed (not the very same). */
+  /** Saved searches to offer: all of them, or those holding what is typed (not the very same); none while moving. */
   const offered = () => {
+    if (moving()) return [];
     const q = normalize(o.query().trim());
     const list = o.savedSearches();
     return q ? list.filter((s) => normalize(s) !== q && normalize(s).includes(q)) : list;
@@ -60,15 +73,28 @@ export function SearchBar(props: { o: Outliner }) {
 
   /** The places for the box as it is: recent ones, or those found by the words typed. */
   const lookUp = () => {
-    const q = o.query();
-    const found = !q.trim()
-      ? o.recentPlaces()
-          .filter((id) => id !== o.zoom() && o.doc.has(id) && o.doc.inOutline(id))
-          .slice(0, RECENT)
-          .map((id) => placeOf(o.doc, id))
-      : asksPlace(q) ? findPlaces(o.doc, o.text, q, PLACES) : [];
+    const q = text();
+    const usable = (id: string) => o.doc.has(id) && o.doc.inOutline(id);
+    let found: Place[];
+    if (moving()) {
+      const skip = (id: string) => o.moveRefuses(id);
+      found = q.trim()
+        ? findPlaces(o.doc, o.text, q, PLACES, skip)
+        : [...new Set([...o.recentTargets(), ...o.recentPlaces()])]
+            .filter((id) => usable(id) && !skip(id))
+            .slice(0, RECENT)
+            .map((id) => placeOf(o.doc, id));
+    } else {
+      found = !q.trim()
+        ? o.recentPlaces()
+            .filter((id) => id !== o.zoom() && usable(id))
+            .slice(0, RECENT)
+            .map((id) => placeOf(o.doc, id))
+        : asksPlace(q) ? findPlaces(o.doc, o.text, q, PLACES) : [];
+    }
     setPlaces(found);
-    setActive(q.trim() && found.length ? 0 : -1);
+    // Moving, the first place is always chosen: Enter is all it takes.
+    setActive(found.length && (moving() || q.trim()) ? 0 : -1);
   };
   // Looking places up is a pass over every bullet: after the frame that shows the search.
   let pending: { frame: number; timer?: ReturnType<typeof setTimeout> } | null = null;
@@ -84,7 +110,7 @@ export function SearchBar(props: { o: Outliner }) {
     cancel();
     lookUp();
   };
-  createEffect(on([focused, o.query, o.recentPlaces], ([f, q]) => {
+  createEffect(on([focused, text, o.recentPlaces, moving], ([f, q]) => {
     cancel();
     if (!f) return setPlaces([]);
     if (!q.trim()) return lookUp();
@@ -101,6 +127,12 @@ export function SearchBar(props: { o: Outliner }) {
 
   const run = (query: string) => o.setQuery(query, true);
   const go = (place: Place, edit: boolean) => {
+    if (moving()) {
+      // The caret goes back into the outline, to the row after the moved ones.
+      o.moveInto(place.id);
+      if (document.activeElement === input) input.blur();
+      return;
+    }
     input.blur();
     o.goToPlace(place.id, edit);
   };
@@ -128,12 +160,25 @@ export function SearchBar(props: { o: Outliner }) {
     input.select();
   }, { defer: true }));
 
+  createEffect(on(moving, (m) => {
+    if (!m) return;
+    setMoveQuery('');
+    input.focus();
+  }, { defer: true }));
+
+  /** Moving: Esc, × and leaving the box move nothing. */
+  const cancelMove = () => {
+    o.cancelMove();
+    if (document.activeElement === input) input.blur();
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.isComposing) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') settle();
     const n = count();
     if (e.key === 'Escape') {
       e.preventDefault();
+      if (moving()) return cancelMove();
       o.setQuery('', true);
       input.blur();
     } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n) {
@@ -143,6 +188,9 @@ export function SearchBar(props: { o: Outliner }) {
     } else if (e.key === 'Enter' && active() >= 0) {
       e.preventDefault();
       take(active(), true);
+    } else if (moving() && (e.key === 'Enter' || e.key === 'ArrowDown')) {
+      // Nowhere to move to for what is typed.
+      e.preventDefault();
     } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
       // Go edit the first match.
       e.preventDefault();
@@ -156,34 +204,56 @@ export function SearchBar(props: { o: Outliner }) {
   };
 
   return (
-    <div class="searchbar">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
+    <div class="searchbar" classList={{ moving: !!moving() }}>
+      <Show
+        when={moving()}
+        fallback={
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        }
+      >
+        {/* An arrow into a box: what is typed is where the bullets go. */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12h11" />
+          <path d="M11 8l4 4-4 4" />
+          <path d="M19 5v14" />
+        </svg>
+      </Show>
       <input
         ref={input}
         class="search"
         type="text"
-        placeholder={narrow() ? 'Перейти или найти' : 'Перейти к пункту или найти: слова, #теги'}
+        placeholder={moving() ? `Переместить ${moving()!.label} в…` : narrow() ? 'Перейти или найти' : 'Перейти к пункту или найти: слова, #теги'}
         title="Название пункта — перейти к нему (Enter). Поиск: слова через пробел, «фраза в кавычках», #тег или @тег; -слово или -#тег исключает; OR — или; is:done — выполненные"
         spellcheck={false}
-        value={o.query()}
-        onInput={(e) => o.setQuery(e.currentTarget.value)}
+        value={text()}
+        onInput={(e) => (moving() ? setMoveQuery(e.currentTarget.value) : o.setQuery(e.currentTarget.value))}
         onKeyDown={onKeyDown}
         onFocus={() => {
           // Links follow a title just retyped before the search sees it.
           o.settleTitle();
           setFocused(true);
         }}
-        onBlur={() => setFocused(false)}
+        onBlur={() => {
+          setFocused(false);
+          if (moving()) o.cancelMove();
+        }}
       />
-      <Show when={o.filter()}>
+      <Show when={moving()}>
+        <button type="button" class="clear" title="Не перемещать (Esc)" aria-label="Не перемещать" onMouseDown={(e) => e.preventDefault()} onClick={cancelMove}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+          </svg>
+        </button>
+      </Show>
+      <Show when={!moving() && o.filter()}>
         {(f) => <span class="count">{f().count} {plural(f().count, 'bullet', 'bullet’а', 'bullet’ов')}</span>}
       </Show>
       <Show
-        when={o.query().trim()}
-        fallback={<kbd aria-hidden="true">{IS_MAC ? '⌘ K' : 'Ctrl K'}</kbd>}
+        when={!moving() && o.query().trim()}
+        fallback={<Show when={!moving()}><kbd aria-hidden="true">{IS_MAC ? '⌘ K' : 'Ctrl K'}</kbd></Show>}
       >
         <button
           type="button"
@@ -207,8 +277,8 @@ export function SearchBar(props: { o: Outliner }) {
         {/* Presses never take focus from the box, so the keyboard stays on a phone. */}
         <div ref={fade} class="search-menu" onMouseDown={(e) => e.preventDefault()}>
           <Show when={places().length}>
-            <div class="search-menu-label" aria-hidden="true">{o.query().trim() ? 'Перейти' : 'Недавние'}</div>
-            <div role="listbox" aria-label={o.query().trim() ? 'Места' : 'Недавние места'}>
+            <div class="search-menu-label" aria-hidden="true">{moving() ? 'Переместить в' : o.query().trim() ? 'Перейти' : 'Недавние'}</div>
+            <div role="listbox" aria-label={moving() ? 'Куда переместить' : o.query().trim() ? 'Места' : 'Недавние места'}>
               <For each={places()}>
                 {(p, i) => (
                   <div
