@@ -1735,6 +1735,16 @@ test.describe('touch screen', () => {
     await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   });
 
+  test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
+    expect((await page.locator('.brand').boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
+    // The "+" is drawn 24px; a tap just beside it still adds a bullet.
+    const add = (await page.getByRole('button', { name: 'Новый пункт' }).boundingBox())!;
+    expect(add.width).toBe(24);
+    await page.touchscreen.tap(add.x + add.width / 2, add.y + add.height + 8);
+    expect(await outline(page)).toEqual([...DEMO, '']);
+  });
+
   test('fields are 16px at least, so a phone does not zoom in on them', async ({ page }) => {
     await expect(page.locator('.search')).toHaveCSS('font-size', '16px');
     await page.locator('.row .text', { hasText: 'Так говорила' }).tap();

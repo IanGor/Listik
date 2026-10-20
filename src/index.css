@@ -2471,16 +2471,53 @@ body.is-dragging * {
   }
 }
 
-/* --- Fields on touch screens ------------------------------------------------ */
+/* --- Fields and small buttons on touch screens -------------------------------- */
 
-/* 16px at least: Safari on an iPhone zooms the page in on a smaller field
-   when it takes focus, and leaves it zoomed. Last in the file, so it wins
-   over each field's own size. */
+/* Last in the file, so these win over each element's own size. */
 @media (pointer: coarse) {
+  /* 16px at least: Safari on an iPhone zooms the page in on a smaller field
+     when it takes focus, and leaves it zoomed. */
   .search,
   .field input,
   .trash-filter,
   .capture-input {
     font-size: 16px;
+  }
+
+  /* A finger's worth (~44px) to hit, the look unchanged: the "+" under the
+     list and the trash's × grow an invisible margin. */
+  .add::before,
+  .trash-close::before {
+    content: '';
+    position: absolute;
+    inset: -10px;
+  }
+
+  .trash-close {
+    position: relative;
+  }
+
+  /* The logo's dot (phone: no name beside it) stays where it was. */
+  .brand {
+    justify-content: center;
+    min-width: 44px;
+    padding: 0;
+  }
+
+  /* The crumbs: taller to hit, the path no closer to the rows. */
+  .crumbs {
+    padding-block: 8px;
+    margin-block: -8px;
+  }
+
+  .crumb {
+    padding-block: 8px;
+    margin-block: -6px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 640px) {
+  .brand {
+    margin-left: -13px;
   }
 }
