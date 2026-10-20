@@ -1276,10 +1276,11 @@ test.describe('theme', () => {
   const CREAM = 'rgb(250, 249, 245)';
   const DARK = 'rgb(38, 38, 36)';
 
-  test('follows the system until picked; the pick survives a reload', async ({ page }) => {
+  test('follows the system; a pick holds until the system switches, a reload too; then the system leads again', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
     expect(await background(page)).toBe(DARK);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     // The switch lives in the menu, as everything but search and quick capture does: the logo, the tray, the menu.
     await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
@@ -1292,12 +1293,41 @@ test.describe('theme', () => {
     await expect(page.getByRole('menuitem', { name: 'Ночная тема' })).toBeVisible();
     await page.keyboard.press('Escape');
 
+    // The system is as it was: the pick holds, after a reload too.
     await page.reload();
-    expect(await background(page)).toBe(CREAM);
-    // A system change no longer overrides the pick.
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect.poll(() => background(page)).toBe(CREAM);
+
+    // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.emulateMedia({ colorScheme: 'dark' });
-    expect(await background(page)).toBe(CREAM);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect.poll(() => background(page)).toBe(DARK);
+    await page.reload();
+    await expect.poll(() => background(page)).toBe(DARK);
+  });
+
+  test('a pick made under another system theme is dropped at the start', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/?demo');
+    await page.evaluate(() => {
+      localStorage.setItem('listik-theme', 'dark');
+      localStorage.setItem('listik-theme-system', 'dark');
+    });
+    await page.reload();
+    await expect.poll(() => background(page)).toBe(CREAM);
+  });
+
+  test('a system that tells no theme gets the dark one', async ({ page }) => {
+    // A browser without prefers-color-scheme: neither light nor dark matches.
+    await page.addInitScript(() => {
+      const own = window.matchMedia.bind(window);
+      window.matchMedia = (q: string) => (q.includes('prefers-color-scheme') ? { ...own('(max-width: 0px)'), matches: false, media: 'not all', addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList : own(q));
+    });
+    await page.goto('/?demo');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    expect(await background(page)).toBe(DARK);
   });
 });
 

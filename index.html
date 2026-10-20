@@ -12,14 +12,19 @@
     <meta name="color-scheme" content="light dark" />
     <title>Listik</title>
     <script>
-      // Apply a saved theme before the first paint, so the page never flashes the other one (see src/view/theme.ts).
+      {
+      // The theme before the first paint, so the page never flashes the other one (see src/view/theme.ts):
+      // the system's, dark if it tells none; a pick in the menu while the system is as it was then.
+      const system = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = system;
       try {
         const theme = localStorage.getItem('listik-theme');
-        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+        if ((theme === 'light' || theme === 'dark') && localStorage.getItem('listik-theme-system') === system) document.documentElement.dataset.theme = theme;
         // And the text size (src/view/textsize.ts), so the outline does not jump.
         const scale = localStorage.getItem('listik-text-scale');
         if (scale) document.documentElement.style.setProperty('--font-scale', scale);
       } catch {}
+      }
     </script>
   </head>
   <body>
