@@ -64,7 +64,7 @@ const ACTIONS: Action[] = [
   { label: 'Вынести', icon: ['M4 6v12', 'M20 12H9', 'M13 8l-4 4 4 4'], run: (o, h) => o.run((ctx) => cmd.outdent(ctx, h.id), h) },
   { label: 'Вложить', icon: ['M20 6v12', 'M4 12h11', 'M11 8l4 4-4 4'], run: (o, h) => o.run((ctx) => cmd.indent(ctx, h.id), h) },
   { label: 'Переместить', icon: ['M8 9l4-4 4 4', 'M12 5v14', 'M8 15l4 4 4-4'], run: () => {}, opens: 'move' },
-  { label: 'Задача: сделать, отметить, снять отметку', icon: ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z', 'M8.5 12.5l2.5 2.5 4.5-5'], run: (o, h) => o.cycleTask([h.id], h) },
+  { label: 'Задача: сделать, отметить, убрать', icon: ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z', 'M8.5 12.5l2.5 2.5 4.5-5'], run: (o, h) => o.cycleTask([h.id], h) },
   {
     label: 'Заметка',
     icon: ['M5 7h14', 'M5 12h14', 'M5 17h8'],

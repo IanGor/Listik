@@ -191,15 +191,20 @@ export function toggleDone({ doc }: Ctx, ids: RowKey[]): void {
 }
 
 /**
- * Ctrl+L: a plain bullet becomes a task (an empty checkbox); a task is
- * checked or unchecked. For several bullets: any plain ones become tasks
- * first; once all are tasks, they are checked (or all unchecked).
+ * Ctrl+L (and the editing bar's task button): three states in a circle — a
+ * plain bullet becomes a task (an empty checkbox), a task is checked, a
+ * checked one becomes a plain bullet again. For several bullets: any plain
+ * ones become tasks first, then any open ones are checked, then all go
+ * plain. A click on the checkbox itself only checks and unchecks.
  */
 export function cycleTask(ctx: Ctx, ids: RowKey[]): void {
   const { doc } = ctx;
-  const plain = [...new Set(ids.map((id) => doc.content(nodeOf(id))))].filter((n) => !n.todo);
+  const nodes = [...new Set(ids.map((id) => doc.content(nodeOf(id))))];
+  const plain = nodes.filter((n) => !n.todo);
+  const open = nodes.filter((n) => n.todo && !n.done);
   if (plain.length) for (const n of plain) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
-  else toggleDone(ctx, ids);
+  else if (open.length) for (const n of open) doc.apply({ t: 'setDone', id: n.id, from: false, to: true });
+  else untask(ctx, ids);
 }
 
 /** Ctrl+Shift+L: tasks become plain bullets again (and so not done). */

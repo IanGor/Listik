@@ -888,7 +888,7 @@ test.describe('trash', () => {
 });
 
 test.describe('done and notes', () => {
-  test('Ctrl+L makes a task (checkbox), then checks it; Ctrl+Shift+L makes it plain; undo works', async ({ page }) => {
+  test('Ctrl+L goes round: a task (checkbox), checked, plain again; a click on the box only checks; Ctrl+Shift+L makes it plain; undo works', async ({ page }) => {
     const row = page.locator('.row', { hasText: 'Часть вторая' });
     const box = row.locator('.bullet');
     await edit(page, 'Часть вторая');
@@ -899,6 +899,20 @@ test.describe('done and notes', () => {
     await page.keyboard.press('Control+l');
     await expect(row).toHaveClass(/done/);
     await expect(box).toHaveAttribute('aria-checked', 'true');
+    // The third press: a plain bullet again; the fourth, a task again.
+    await page.keyboard.press('Control+l');
+    await expect(box).not.toHaveClass(/todo/);
+    await expect(row).not.toHaveClass(/done/);
+    await page.keyboard.press('Control+l');
+    await expect(box).toHaveClass(/todo/);
+    // A click on the box only checks and unchecks; the caret stays in the row.
+    await box.click();
+    await expect(row).toHaveClass(/done/);
+    await box.click();
+    await expect(row).not.toHaveClass(/done/);
+    await expect(box).toHaveClass(/todo/);
+    await expect(editing(page)).toHaveText('Часть вторая');
+    await page.keyboard.press('Control+l');
     await page.keyboard.press('Control+z');
     await expect(row).not.toHaveClass(/done/);
     await page.keyboard.press('Control+Shift+L');
@@ -1378,7 +1392,7 @@ test.describe('touch screen', () => {
     expect(await outline(page)).toEqual(DEMO);
     await page.locator('.editbar-move').getByRole('button', { name: 'Назад' }).tap();
 
-    await action(page, 'Задача: сделать, отметить, снять отметку').tap();
+    await action(page, 'Задача: сделать, отметить, убрать').tap();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet.todo')).toHaveCount(1);
     await action(page, 'Отменить').tap();
     await expect(page.locator('.bullet.todo')).toHaveCount(0);

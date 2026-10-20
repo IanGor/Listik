@@ -284,7 +284,7 @@ describe('moveManyTo (drag and drop)', () => {
 });
 
 describe('tasks (checkbox bullets)', () => {
-  it('Ctrl+Enter makes a plain bullet a task, then checks and unchecks it; Ctrl+Shift+Enter makes it plain again', () => {
+  it('Ctrl+L goes round three states: a task, checked, plain again; a click on the box only checks and unchecks', () => {
     const { doc, ctx, run } = setup(['a']);
     const state = () => ({ todo: doc.get('a').todo, done: doc.get('a').done });
     run(() => cmd.cycleTask(ctx, ['a']));
@@ -292,8 +292,12 @@ describe('tasks (checkbox bullets)', () => {
     run(() => cmd.cycleTask(ctx, ['a']));
     expect(state()).toEqual({ todo: true, done: true });
     run(() => cmd.cycleTask(ctx, ['a']));
-    expect(state()).toEqual({ todo: true, done: false });
+    expect(state()).toEqual({ todo: false, done: false });
     run(() => cmd.cycleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.toggleDone(ctx, ['a']));
+    run(() => cmd.toggleDone(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
     run(() => cmd.untask(ctx, ['a']));
     expect(state()).toEqual({ todo: false, done: false });
   });
@@ -305,6 +309,8 @@ describe('tasks (checkbox bullets)', () => {
     expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, false], [true, false]]);
     run(() => cmd.cycleTask(ctx, ['a', 'b']));
     expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, true], [true, true]]);
+    run(() => cmd.cycleTask(ctx, ['a', 'b']));
+    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[false, false], [false, false]]);
   });
 
   it('writes tasks as - [ ] / - [x] and reads them back', () => {
