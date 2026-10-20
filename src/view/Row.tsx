@@ -196,7 +196,7 @@ export function Row(props: RowProps) {
       classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
       data-id={id}
       data-depth={props.depth}
-      style={{ 'padding-left': `calc(var(--indent) * ${props.depth})`, '--depth': String(props.depth) }}
+      style={{ 'padding-left': 'var(--shift)', '--depth': String(props.depth) }}
     >
       <Show when={hasChildren()}>
         <span class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} aria-hidden="true">

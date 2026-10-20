@@ -52,6 +52,11 @@
      character cells. The height estimate in Outline.tsx measures --indent and
      assumes BULLET_GAP (--bullet + the row gap) before the text. */
   --indent: 38px;
+  /* Past --deep levels each one indents by --indent-deep, in px (phones: a
+     deep branch keeps room for its text). Rows start at --shift (.row);
+     view/indent.ts computes the same for the estimate, guides and drag. */
+  --deep: 1000;
+  --indent-deep: 38px;
   --column: 72ch;
   /* The bullet's box: its dot, halo, guide line and fold arrow centre on it. */
   --bullet: 20px;
@@ -463,6 +468,7 @@ kbd {
 
 /* Vertical padding must match ROW_PAD in Outline.tsx. */
 .row {
+  --shift: calc(var(--indent) * min(var(--depth), var(--deep)) + var(--indent-deep) * max(0, var(--depth) - var(--deep)));
   position: relative;
   display: flex;
   gap: 6px;
@@ -477,8 +483,13 @@ kbd {
   top: 0;
   bottom: 0;
   left: 0;
-  width: calc(var(--indent) * var(--depth));
-  background: linear-gradient(to right, var(--guide) 1px, transparent 1px) calc(var(--bullet) / 2 - 0.5px) 0 / var(--indent) 100% repeat-x;
+  width: var(--shift);
+  /* One line per --indent, then one per --indent-deep past --deep levels. */
+  background:
+    repeating-linear-gradient(to right, var(--guide) 0 1px, transparent 1px var(--indent))
+      calc(var(--bullet) / 2 - 0.5px) 0 / calc(var(--indent) * min(var(--depth), var(--deep))) 100% no-repeat,
+    repeating-linear-gradient(to right, var(--guide) 0 1px, transparent 1px var(--indent-deep))
+      calc(var(--indent) * var(--deep) + var(--bullet) / 2 - 0.5px) 0 / calc(var(--indent-deep) * max(0, var(--depth) - var(--deep))) 100% no-repeat;
   pointer-events: none;
 }
 
@@ -588,7 +599,7 @@ kbd {
 .toggle {
   position: absolute;
   top: 2px;
-  left: calc(var(--indent) * var(--depth) + var(--bullet) / 2 - 31px);
+  left: calc(var(--shift) + var(--bullet) / 2 - 31px);
   display: grid;
   place-items: center;
   width: 16px;
@@ -668,7 +679,7 @@ kbd {
 .row.selected::after {
   content: '';
   position: absolute;
-  inset: 0 -8px 0 calc(var(--indent) * var(--depth) - 8px);
+  inset: 0 -8px 0 calc(var(--shift) - 8px);
   z-index: -1;
   background: var(--chip);
 }
@@ -1050,6 +1061,19 @@ mark,
   :root {
     --font-size: calc(16px * var(--font-scale));
     --indent: 28px;
+    /* Deeper than 4 levels, 12px a level: at depth 10 the text still has
+       ~12 characters, not one letter a line. */
+    --deep: 4;
+    --indent-deep: 12px;
+  }
+
+  /* A small phone (320–380 px) has less to give: closer from the 4th level. */
+  @media (max-width: 380px) {
+    :root {
+      --indent: 24px;
+      --deep: 3;
+      --indent-deep: 10px;
+    }
   }
 
   .topbar {

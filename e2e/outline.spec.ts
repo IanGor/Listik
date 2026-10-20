@@ -1374,6 +1374,27 @@ test.describe('touch screen', () => {
     await expect(sheet).toBeVisible();
   });
 
+  test('ten levels deep the text still has room: past the 4th a level indents less', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await page.keyboard.press('Control+End');
+    for (let d = 1; d <= 10; d++) {
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Tab');
+      await page.keyboard.type(`уровень ${d}`);
+    }
+    await page.keyboard.press('Escape');
+    const text = (d: number) => page.locator(`.row[data-depth="${d}"] .text`).last().boundingBox();
+    // 28 px a level up to the 4th, 12 px after it.
+    expect(Math.round((await text(4))!.x - (await text(3))!.x)).toBe(28);
+    expect(Math.round((await text(5))!.x - (await text(4))!.x)).toBe(12);
+    expect((await text(10))!.width).toBeGreaterThan(100);
+    // A guide line deep down is still where its bullet is: a tap on it folds that bullet.
+    const parent = (await page.locator('.row', { hasText: 'уровень 6' }).locator('.bullet').boundingBox())!;
+    const child = (await page.locator('.row', { hasText: 'уровень 8' }).boundingBox())!;
+    await page.touchscreen.tap(parent.x + parent.width / 2, child.y + child.height / 2);
+    await expect(page.locator('.row', { hasText: 'уровень 7' })).toHaveCount(0);
+  });
+
   test('the trash filter takes the keyboard: the sheet stays, without the edit bar', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
     await page.keyboard.press('Control+Shift+Backspace');
