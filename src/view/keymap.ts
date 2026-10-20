@@ -212,16 +212,15 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTM
 
 /**
  * Keys that work wherever the caret is in the outline: Ctrl/Cmd+Z,
- * Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+F or Ctrl/Cmd+K for the search
- * box, which also goes to places (the browser's own find cannot see
- * virtualized rows). Matched by physical key, so they
- * work in any keyboard layout. The browser's own undo never runs: it would
- * desync the DOM from the model.
+ * Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+F for the search box (the
+ * browser's own find cannot see virtualized rows). Matched by physical key,
+ * so they work in any keyboard layout. The browser's own undo never runs:
+ * it would desync the DOM from the model. Ctrl/Cmd+K, the places line, is
+ * the window's (Outline.tsx): it works from the search box too.
  */
 export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  // Ctrl+K as in Workflowy: the same box, to go to a place by its name.
-  if (e.code === 'KeyF' || e.code === 'KeyK') {
+  if (e.code === 'KeyF') {
     e.preventDefault();
     o.requestSearch();
   } else if (e.code === 'Slash') {

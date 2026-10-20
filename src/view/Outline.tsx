@@ -5,6 +5,7 @@ import { Backlinks } from './Backlinks';
 import { keyboard, touch } from './screen';
 import { createDrag } from './drag';
 import { EditBar } from './EditBar';
+import { GoTo } from './GoTo';
 import { onGlobalKeys, onSelectionKeys, periodKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
@@ -184,6 +185,11 @@ export function Outline(props: { o: Outliner }) {
       if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
         e.preventDefault();
         return o.openCapture();
+      }
+      // Go to a place by its name, as in Workflowy: from anywhere, the search box too.
+      if (e.code === 'KeyK' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        return o.openGoTo();
       }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
@@ -366,6 +372,7 @@ export function Outline(props: { o: Outliner }) {
         )}
       </Show>
       <QuickCapture o={o} />
+      <GoTo o={o} />
       <div class="workspace">
         <div class="main">
           <Crumbs o={o} scrolled={scrollTop() > 0} />

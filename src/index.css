@@ -39,6 +39,8 @@
   --selection: rgb(217 119 87 / 0.24);
   --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
   --shadow-pop: light-dark(0 12px 32px rgb(31 30 28 / 0.12), 0 12px 32px rgb(0 0 0 / 0.5));
+  /* What dims the page under a dialog or the places line. */
+  --scrim: light-dark(rgb(31 30 28 / 0.28), rgb(0 0 0 / 0.55));
 
   /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
      otherwise whatever the OS/browser maps `monospace` to. */
@@ -290,10 +292,9 @@ kbd {
   scale: 0.85;
 }
 
-/* The box's list, dropped below it while it is focused: places to go to,
-   then saved searches. At most 8.5 rows on a computer, 40% of what the
-   screen shows on a phone (with the keyboard up on a OnePlus 8: about five
-   rows); a half row says it scrolls. */
+/* Saved searches, dropped below the box while it is focused. At most 8.5
+   rows on a computer, 40% of what the screen shows on a phone (with the
+   keyboard up on a OnePlus 8: about five rows); a half row says it scrolls. */
 .search-menu {
   position: absolute;
   top: calc(100% + 6px);
@@ -324,41 +325,6 @@ kbd {
   font-size: 12px;
   color: var(--faint);
   background: var(--canvas);
-}
-
-/* A place: its title, and the path to it after, giving way to the title. */
-.place {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  height: 36px;
-  padding: 0 8px;
-  white-space: nowrap;
-  border-radius: 8px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.place-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.place-path {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 50%;
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12px;
-  color: var(--faint);
-}
-
-/* The entry Enter takes (↑/↓ move it; the pointer too). */
-.place[data-active],
-.saved-search[data-active] {
-  background: var(--surface);
 }
 
 .saved-search {
@@ -421,10 +387,6 @@ kbd {
 @media (pointer: coarse) {
   .search-menu {
     max-height: min(calc(8.5 * 44px + 28px), 40dvh);
-  }
-
-  .place {
-    height: 44px;
   }
 
   .saved-search-run {
@@ -1602,7 +1564,7 @@ body.is-dragging * {
 }
 
 .shortcuts::backdrop {
-  background: light-dark(rgb(31 30 28 / 0.28), rgb(0 0 0 / 0.55));
+  background: var(--scrim);
 }
 
 .shortcuts-body {
@@ -1679,7 +1641,7 @@ body.is-dragging * {
 }
 
 .sheet::backdrop {
-  background: light-dark(rgb(31 30 28 / 0.28), rgb(0 0 0 / 0.55));
+  background: var(--scrim);
 }
 
 .sheet-body {
@@ -2135,6 +2097,189 @@ body.is-dragging * {
 
 @media (prefers-reduced-motion: reduce) {
   .trash {
+    animation: none;
+  }
+}
+
+/* --- The places line (view/GoTo.tsx) ----------------------------------- */
+
+/* The outline dims under it; a press there closes the line. */
+.goto-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--scrim);
+  animation: goto-fade 140ms var(--ease-out);
+}
+
+@keyframes goto-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* In the middle of a computer's screen, a little above it: the list grows
+   down from a line that stays put. */
+.goto {
+  position: fixed;
+  top: max(76px, 24vh);
+  left: 50%;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: var(--shadow-pop);
+  transform: translateX(-50%);
+  animation: goto-in 160ms var(--ease-out);
+}
+
+@keyframes goto-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.99);
+  }
+}
+
+.goto-line {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  align-items: center;
+  height: 52px;
+  padding: 0 16px;
+}
+
+.goto-icon {
+  flex: none;
+  color: var(--primary);
+}
+
+.goto-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.goto-input::placeholder {
+  color: var(--faint);
+}
+
+.goto-hint {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.goto-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-right: -8px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* At most 8.5 rows; a half row says it scrolls. */
+.goto-list {
+  max-height: min(calc(8.5 * 36px + 28px), 50dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+  font-size: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.goto-list.more {
+  mask-image: linear-gradient(to top, transparent, #000 28px);
+}
+
+.goto-label {
+  padding: 6px 10px 4px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.goto-empty {
+  padding: 12px 16px 14px;
+  font-size: 14px;
+  color: var(--muted);
+  border-top: 1px solid var(--hairline);
+}
+
+/* A place: its title, and the path to it after, giving way to the title. */
+.place {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.place-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.place-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* The place Enter takes (↑/↓ move it; the pointer too). */
+.place[data-active] {
+  background: var(--surface);
+}
+
+/* Finger-sized rows on a touch screen. */
+@media (pointer: coarse) {
+  .goto-list {
+    max-height: min(calc(8.5 * 44px + 28px), 40dvh);
+  }
+
+  .place {
+    height: 44px;
+  }
+}
+
+/* A phone ("Куда…"): at the top, above the keyboard, the width of the screen. */
+@media (max-width: 640px) {
+  .goto {
+    top: 8px;
+    width: calc(100vw - 16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .goto,
+  .goto-scrim {
     animation: none;
   }
 }

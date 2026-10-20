@@ -6,7 +6,7 @@ import type { NodeId } from './types';
 
 /**
  * Places: bullets to go to (or move bullets into) by their title, the
- * search box's list (view/SearchBar.tsx). Found as links are
+ * places line's list (view/GoTo.tsx). Found as links are
  * (`findTargets`: titles that start with what is typed first, then a word
  * in them, then the rest; one per title, where a link with it would lead),
  * shown with the path to them.
@@ -27,16 +27,6 @@ export function pathOf(doc: Doc, id: NodeId): string[] {
 
 export function placeOf(doc: Doc, id: NodeId): Place {
   return { id, title: plainText(doc.content(id).text).trim(), path: pathOf(doc, id) };
-}
-
-/**
- * Whether the search box holds a name to look places up by: words alone,
- * no `#tag`, `@tag`, `-exclusion`, `"phrase"`, `OR` or `is:`. Anything of
- * the sort is a search, and its matches in the outline are the answer.
- */
-export function asksPlace(query: string): boolean {
-  const q = query.trim();
-  return q !== '' && !/(^|\s)[#@-]|["«»]|(^|\s)OR(\s|$)|(^|\s)is:/i.test(q);
 }
 
 /**
