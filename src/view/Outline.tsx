@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
-import { nodeOf } from '../model/rows';
+import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
 import { keyboard, touch } from './screen';
 import { createDrag } from './drag';
@@ -277,7 +277,48 @@ export function Outline(props: { o: Outliner }) {
   });
 
   // A click on the empty space below the rows edits the last one.
+  /**
+   * The guide line under the pointer: the lines of a row's indent are its
+   * ancestors' (index.css `.row::before`), one per level, through each
+   * ancestor's bullet. Returns that ancestor's row, and where its line runs
+   * in the spacer; null off a line. Fair room either side of the 1 px line.
+   */
+  const guideAt = (e: MouseEvent): { key: RowKey; top: number; height: number; left: number } | null => {
+    const row = e.target as HTMLElement;
+    if (!row.classList?.contains('row')) return null;
+    const depth = Number(row.dataset.depth);
+    if (!depth) return null;
+    const indent = indentProbe.getBoundingClientRect().width;
+    const half = (parseFloat(getComputedStyle(row).getPropertyValue('--bullet')) || 20) / 2;
+    const x = e.clientX - row.getBoundingClientRect().left;
+    const k = Math.round((x - half) / indent);
+    if (k < 0 || k >= depth || Math.abs(x - (k * indent + half)) > (touch() ? 10 : 5)) return null;
+    let key: RowKey | null = row.dataset.id!;
+    for (let d = depth; d > k && key; d--) key = o.rows.parentKey(key);
+    const i = key ? o.rows.indexOf(key) : -1;
+    if (i < 0) return null;
+    const from = v.offsetOf(i + 1);
+    const to = v.offsetOf(o.rows.subtreeEnd(i));
+    return { key: key!, top: top() + from, height: to - from, left: windowEl.offsetLeft + k * indent + half };
+  };
+  const [hotGuide, setHotGuide] = createSignal<{ key: RowKey; top: number; height: number; left: number } | null>(null);
+  const onMouseMove = (e: MouseEvent) => {
+    const g = drag.target() ? null : guideAt(e);
+    const cur = hotGuide();
+    if (g?.key !== cur?.key || g?.top !== cur?.top) setHotGuide(g);
+  };
+
   const onMouseDown = (e: MouseEvent) => {
+    // A click on a guide line folds the bullet whose line it is, kept in sight.
+    const g = e.button === 0 ? guideAt(e) : null;
+    if (g) {
+      e.preventDefault();
+      setHotGuide(null);
+      o.fold(g.key, true);
+      const i = o.rows.indexOf(g.key);
+      if (i >= 0) ensureVisible(i);
+      return;
+    }
     if (e.target !== scroller && !(e.target as HTMLElement).classList.contains('spacer')) return;
     e.preventDefault();
     const last = o.rows.ids[o.rows.length - 1];
@@ -328,7 +369,7 @@ export function Outline(props: { o: Outliner }) {
       <div class="workspace">
         <div class="main">
           <Crumbs o={o} scrolled={scrollTop() > 0} />
-          <div ref={scroller} class="scroller" onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onInput={revealCaret}>
+          <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
               <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
@@ -346,6 +387,10 @@ export function Outline(props: { o: Outliner }) {
               </div>
               <Show when={drag.target()}>
                 {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
+              </Show>
+              {/* The guide line under the pointer, lit through its bullet's whole branch: a click folds it. */}
+              <Show when={hotGuide()}>
+                {(g) => <div class="guide-hot" style={{ top: `${g().top}px`, height: `${g().height}px`, left: `${g().left}px` }} />}
               </Show>
               <Show when={showAdd()}>
                 {/* Sits right under the last row: the rows above it end at `total`. */}

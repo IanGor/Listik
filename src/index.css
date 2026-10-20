@@ -903,17 +903,15 @@ mark,
   background: var(--surface);
 }
 
-/* Where you are: the end of the path, not a link. Its whole text is the
-   title just below, so a long one gives way to the bullets above it. */
-.crumb.current,
-.crumb.current:hover {
+/* Where you are: the end of the path. Its whole text is the title just
+   below, so a long one gives way to the bullets above it. A press folds
+   the first level here (an overview), another opens it again. */
+.crumb.current {
   flex: none;
   max-width: 50%;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text);
-  background: none;
-  cursor: default;
 }
 
 .crumbs .sep {
@@ -2292,4 +2290,30 @@ body.is-dragging * {
 
 .toast-link:hover {
   text-decoration-style: solid;
+}
+
+/* --- Guide lines that fold (Outline.tsx) --------------------------------- */
+
+/* Under the pointer, an ancestor's guide line lights coral through its whole
+   branch: a click there folds that bullet. */
+.scroller.on-guide {
+  cursor: pointer;
+}
+
+.guide-hot {
+  position: absolute;
+  z-index: 1;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--primary);
+  opacity: 0.7;
+  transform: translateX(-1px);
+  pointer-events: none;
+  animation: guide-in 120ms var(--ease-out);
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+  }
 }

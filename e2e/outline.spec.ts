@@ -563,6 +563,42 @@ test.describe('zoom', () => {
   });
 });
 
+test('a click on a guide line folds the bullet whose line it is; the line lights under the pointer', async ({ page }) => {
+  const row = page.locator('.row', { hasText: 'Анна Павловна' });
+  const box = (await row.boundingBox())!;
+  const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+  // The second line of a row two levels down: "Часть первая"'s.
+  await page.mouse.move(box.x + indent + 10, box.y + 10);
+  await expect(page.locator('.guide-hot')).toHaveCount(1);
+  await page.mouse.down();
+  await page.mouse.up();
+  expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[4], DEMO[5]]);
+  await expect(page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet')).toHaveClass(/collapsed/);
+  // Off the line, nothing.
+  await page.mouse.move(box.x + indent + 22, box.y + 10);
+  await expect(page.locator('.guide-hot')).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  expect(await outline(page)).toEqual(DEMO);
+});
+
+test('the place\'s own crumb folds the first level inside, an overview; again, it opens what it folded', async ({ page }) => {
+  await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
+  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  const crumb = page.locator('.crumbs .crumb.current');
+  await expect(crumb).toHaveText('Том первый');
+  await crumb.click();
+  expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+  await crumb.click();
+  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  // At home, "Главная" does the same.
+  await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+  const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
+  await home.click();
+  expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
+  await home.click();
+  expect(await outline(page)).toEqual(DEMO);
+});
+
 test('"Главная" goes home with the search, and there folds the top level: out of the search, one undo step', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');

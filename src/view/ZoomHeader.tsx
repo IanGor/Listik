@@ -55,7 +55,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           class="crumb"
           classList={{ current: !path().length }}
           aria-current={path().length ? undefined : 'page'}
-          title={path().length ? 'На главную' : 'Свернуть всё'}
+          title={path().length ? 'На главную' : 'Свернуть весь первый уровень; ещё раз — развернуть'}
           onClick={() => (path().length ? o.zoomTo(null, true) : o.goHome())}
         >
           Главная
@@ -119,7 +119,12 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   return (
     <Show
       when={!props.current}
-      fallback={<span class="crumb current" aria-current="page" title={text()}>{text()}</span>}
+      fallback={
+        // The place's own crumb: its first level folded, an overview; again — open.
+        <button type="button" class="crumb current" aria-current="page" title={`${text()} — свернуть всё внутри; ещё раз — развернуть`} onClick={() => o.toggleLevel()}>
+          {text()}
+        </button>
+      }
     >
       <button type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id, true)}>
         {text()}

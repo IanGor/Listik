@@ -537,9 +537,37 @@ export class Outliner {
     batch(() => {
       this.setQuery('', true);
       this.zoomTo(null);
-      this.run((ctx) => collapseChildren(ctx, this.doc.root));
+      this.toggleLevel();
       this.setFocus(null);
       this.setHomeRequests((n) => n + 1);
+    });
+  }
+
+  /** What the place's own crumb last folded: pressed again, it opens just those. */
+  private levelFolded: { parent: NodeId; ids: NodeId[] } | null = null;
+
+  /**
+   * The place's own crumb ("Главная" on the home page, the last one in a
+   * zoom): every bullet of the first level here folded, an overview to find
+   * the one wanted in. Pressed again with nothing left to fold, it opens
+   * again what it folded (or, after other changes there, every one). One
+   * undo step each.
+   */
+  toggleLevel(): void {
+    const parent = this.zoom() ?? this.doc.root;
+    const kids = this.doc.get(parent).children.filter((c) => (this.doc.host(c)?.children.length ?? 0) > 0);
+    const open = kids.filter((c) => !this.doc.get(c).collapsed);
+    if (open.length) {
+      this.run((ctx) => collapseChildren(ctx, parent));
+      this.levelFolded = { parent, ids: open };
+      return;
+    }
+    const last = this.levelFolded;
+    const ids = last?.parent === parent ? last.ids.filter((id) => kids.includes(id)) : kids;
+    this.levelFolded = null;
+    this.run((ctx) => {
+      if (ids.length > 1) ctx.rows.expectMany();
+      for (const id of ids) setCollapsed(ctx, id, false);
     });
   }
 
