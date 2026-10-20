@@ -99,6 +99,14 @@ export class VisibleRows implements DocListener {
   private stale = false;
   /** Keys of the mirror rows on the list: the contexts other rows may show in. */
   private mirrors = new Set<RowKey>();
+  /**
+   * How bullets fold under each mirror, apart from the other copies
+   * (model/mirrors.ts): `mirror/bullet` → folded. A bullet with no entry
+   * folds as the bullet does (`collapsed`). Kept by the view, per device,
+   * like folding itself (never synced); `onFolds` hears of changes.
+   */
+  private folds = new Map<string, boolean>();
+  onFolds: (() => void) | null = null;
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
 
@@ -205,7 +213,64 @@ export class VisibleRows implements DocListener {
     const f = this.filter;
     if (f?.keep.has(n.id)) return f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
-    return n.collapsed && key !== this.top ? [] : kids;
+    return key !== this.top && this.folded(key) ? [] : kids;
+  }
+
+  /** The fold entry of the row `key` under a mirror: the mirror's id, SEP, the bullet's. */
+  private foldKey(key: RowKey): string {
+    return nodeOf(contextOf(key)) + SEP + nodeOf(key);
+  }
+
+  /** Is the row folded: under a mirror the way it folds there, elsewhere as its bullet does. */
+  folded(key: RowKey): boolean {
+    const n = this.doc.get(nodeOf(key));
+    if (this.folds.size && key.includes(SEP)) return this.folds.get(this.foldKey(key)) ?? n.collapsed;
+    return n.collapsed;
+  }
+
+  /** Folds or unfolds a row under a mirror, there only: the other copies show the bullet as they did. */
+  setFold(key: RowKey, folded: boolean): void {
+    if (!contextOf(key) || this.folded(key) === folded) return;
+    this.folds.set(this.foldKey(key), folded);
+    // The fold is the mirror's: every row of that mirror on the list shows it.
+    const mirror = nodeOf(contextOf(key));
+    if (!this.stale) for (const m of [...this.mirrors]) if (nodeOf(m) === mirror) this.refreshRow(keyIn(m, nodeOf(key)));
+    this.version++;
+    this.onFolds?.();
+  }
+
+  /**
+   * The bullet `id` is about to fold or unfold where it lives: every mirror
+   * of a bullet around it, which shows it too, keeps it as it shows it now.
+   */
+  freeze(id: NodeId): void {
+    const collapsed = this.doc.get(id).collapsed;
+    let changed = false;
+    for (let p = this.doc.get(id).parent; p !== null; p = this.doc.get(p).parent) {
+      if (!this.doc.hasMirrors(p)) continue;
+      for (const m of this.doc.copies(p)) {
+        const key = m + SEP + id;
+        if (m === p || this.folds.has(key)) continue;
+        this.folds.set(key, collapsed);
+        changed = true;
+      }
+    }
+    if (changed) this.onFolds?.();
+  }
+
+  /** The folds under mirrors, to keep; `loadFolds` takes them back, leaving out mirrors that are gone. */
+  foldEntries(): [string, boolean][] {
+    return [...this.folds];
+  }
+
+  loadFolds(entries: [string, boolean][]): void {
+    this.folds.clear();
+    for (const [key, folded] of entries) {
+      const i = key.indexOf(SEP);
+      const m = this.doc.nodes.get(key.slice(0, i));
+      if (m?.mirrorOf && this.doc.has(key.slice(i + 1))) this.folds.set(key, folded);
+    }
+    this.rebuild();
   }
 
   get hidesDone(): boolean {
@@ -269,8 +334,9 @@ export class VisibleRows implements DocListener {
    */
   locate(id: RowKey, near: RowKey = id): RowKey | null {
     if (this.indexOf(id) >= 0 && (id.includes(SEP) || !this.mirrors.size)) return id;
-    if (!this.mirrors.size) return null;
     const node = nodeOf(id);
+    // A key under a mirror that is gone (a copy taken out, `handOver`): the bullet where it is now.
+    if (!this.mirrors.size) return this.indexOf(node) >= 0 ? node : null;
     for (let c = near; c; c = contextOf(c)) {
       if (this.mirrors.has(c) && this.indexOf(keyIn(c, node)) >= 0) return keyIn(c, node);
     }

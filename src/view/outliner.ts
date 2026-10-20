@@ -7,7 +7,7 @@ import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink } from '../model/links';
-import { VisibleRows, keepSet, nodeOf, type RowKey } from '../model/rows';
+import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
 import type { Focus, NodeId } from '../model/types';
@@ -239,16 +239,10 @@ export class Outliner {
     return this.selectionInfo().roots;
   }
 
-  /** Is the row a mirror's own (its heading takes no edits: model/commands.ts)? */
-  isMirror(key: RowKey): boolean {
-    return !!this.doc.nodes.get(nodeOf(key))?.mirrorOf;
-  }
-
-  /** An edit was tried on a mirror's heading: say where it can be made, and how the mirror goes. */
-  mirrorReadOnly(): void {
-    this.notify(touch()
-      ? 'Заголовок зеркала правится в оригинале — коснитесь ромбика'
-      : 'Заголовок зеркала правится в оригинале (клик по ромбику); удалить зеркало — Backspace в начале строки');
+  /** Does the row show one of two or more copies of a bullet (model/mirrors.ts)? Backspace at its start takes out that copy alone. */
+  isCopy(key: RowKey): boolean {
+    const id = nodeOf(key);
+    return !!this.doc.nodes.get(id)?.mirrorOf || this.doc.isCopy(id);
   }
 
   /** What the row shows: its bullet, or a mirror's original (model/mirrors.ts). */
@@ -563,6 +557,25 @@ export class Outliner {
     });
   }
 
+  /**
+   * How bullets fold under each mirror (model/rows.ts `folds`) lasts on this
+   * device for the document `name`, as the theme does: read now, written
+   * whenever it changes.
+   */
+  keepFolds(name: string): void {
+    const key = `listik-folds:${name}`;
+    try {
+      const entries: unknown = JSON.parse(readSetting(key) ?? '[]');
+      if (Array.isArray(entries)) this.rows.loadFolds(entries.filter((e): e is [string, boolean] => Array.isArray(e) && typeof e[0] === 'string' && typeof e[1] === 'boolean'));
+    } catch {
+      // Unreadable: every mirror folds as its bullets do.
+    }
+    this.rows.onFolds = () => {
+      const entries = this.rows.foldEntries();
+      writeSetting(key, entries.length ? JSON.stringify(entries) : null);
+    };
+  }
+
   /** Ctrl+O: hides completed bullets, or shows them again. */
   toggleShowDone(): void {
     const show = !this.showDone();
@@ -689,6 +702,13 @@ export class Outliner {
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
+    } else if (contextOf(key)) {
+      // Under a mirror: folded there only, a view state, not an undo step.
+      batch(() => {
+        setCollapsed(this.ctx, key, folded ?? !this.rows.folded(key));
+        this.syncRows();
+        this.moveFocus(keep ?? null);
+      });
     } else {
       const n = this.doc.get(id);
       this.run((ctx) => setCollapsed(ctx, id, folded ?? !n.collapsed), keep);
@@ -727,7 +747,6 @@ export class Outliner {
    * `caret` characters into it (between the brackets of `[[]]`).
    */
   insert(at: Focus, text: string, back = 0, caret = text.length): void {
-    if (this.isMirror(at.id)) return this.mirrorReadOnly();
     this.run((ctx) => {
       const n = ctx.doc.content(nodeOf(at.id));
       const old = at.note ? n.note : n.text;
@@ -746,10 +765,6 @@ export class Outliner {
    */
   format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
     if (this.readOnly) return null;
-    if (this.isMirror(at.id)) {
-      this.mirrorReadOnly();
-      return null;
-    }
     const n = this.contentOf(at.id);
     const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
     const place = (caret: number): Focus => (at.note ? { id: at.id, caret, note: true } : { id: at.id, caret });

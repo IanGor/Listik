@@ -72,6 +72,8 @@ export class Doc {
   readonly root: NodeId;
   private listeners = new Set<DocListener>();
   private pending: Op[] | null = null;
+  /** Bullet → the bullets that mirror it (`mirrorOf`), in the outline or the trash. */
+  private mirrored = new Map<NodeId, Set<NodeId>>();
 
   constructor(root: NodeId = 'root') {
     this.root = root;
@@ -115,6 +117,40 @@ export class Doc {
     if (!n.mirrorOf) return n;
     const o = this.nodes.get(this.origin(id));
     return o && !o.mirrorOf ? o : null;
+  }
+
+  /**
+   * The copies of a bullet (model/mirrors.ts): the one behind them all
+   * (`origin`, which holds the text, note, task state and children) and
+   * every mirror of it, the ones in the outline. All of them look alike and
+   * change together; a bullet with no mirrors is its only copy.
+   */
+  copies(id: NodeId): NodeId[] {
+    const origin = this.origin(id);
+    const out: NodeId[] = [];
+    const seen = new Set<NodeId>();
+    const stack = [origin];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      if (this.nodes.has(cur) && this.inOutline(cur)) out.push(cur);
+      for (const m of this.mirrored.get(cur) ?? []) stack.push(m);
+    }
+    return out;
+  }
+
+  /** Is the bullet one of two or more copies (a diamond for its bullet)? */
+  isCopy(id: NodeId): boolean {
+    const n = this.nodes.get(id);
+    if (!n || (!n.mirrorOf && !this.mirrored.get(id)?.size)) return false;
+    const copies = this.copies(id);
+    return copies.length > 1 && copies.includes(id);
+  }
+
+  /** Has the bullet mirrors pointing at it (in the outline or the trash)? */
+  hasMirrors(id: NodeId): boolean {
+    return !!this.mirrored.get(id)?.size;
   }
 
   /** Is `id` the bullet `ancestor` or inside it? */
@@ -290,7 +326,9 @@ export class Doc {
         const n = this.get(op.id);
         if (n.mirrorOf !== op.from) throw new Error(`setMirror: stale target for ${op.id}`);
         if (op.to === op.id) throw new Error(`setMirror: ${op.id} cannot mirror itself`);
+        this.unlinkMirror(n);
         n.mirrorOf = op.to;
+        this.linkMirror(n);
         break;
       }
     }
@@ -310,6 +348,7 @@ export class Doc {
       };
       this.nodes.set(n.id, n);
       this.attach(n);
+      this.linkMirror(n);
       // Reversed so children pop in order and each attach appends instead of splicing at 0.
       for (let k = s.children.length - 1; k >= 0; k--) stack.push([n.id, s.children[k]]);
     }
@@ -320,9 +359,25 @@ export class Doc {
     const stack = [n.id];
     while (stack.length) {
       const id = stack.pop()!;
-      for (const c of this.get(id).children) stack.push(c);
+      const node = this.get(id);
+      for (const c of node.children) stack.push(c);
+      this.unlinkMirror(node);
       this.nodes.delete(id);
     }
+  }
+
+  private linkMirror(n: OutlineNode): void {
+    if (!n.mirrorOf) return;
+    let set = this.mirrored.get(n.mirrorOf);
+    if (!set) this.mirrored.set(n.mirrorOf, (set = new Set()));
+    set.add(n.id);
+  }
+
+  private unlinkMirror(n: OutlineNode): void {
+    if (!n.mirrorOf) return;
+    const set = this.mirrored.get(n.mirrorOf);
+    set?.delete(n.id);
+    if (set && !set.size) this.mirrored.delete(n.mirrorOf);
   }
 
   /** Inserts `n` into its parent's children, keeping them sorted by order, then by id for equal orders. */

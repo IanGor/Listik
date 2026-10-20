@@ -55,7 +55,6 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
     case 'Enter':
       return handle(() => {
         if (mod) return;
-        if (e.shiftKey && o.isMirror(id)) return o.mirrorReadOnly();
         if (e.shiftKey) return o.setFocus({ id, caret: o.contentOf(id).note.length, note: true });
         o.run((ctx) => {
           const text = ctx.doc.content(nodeOf(id)).text;
@@ -71,16 +70,16 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       if (mod && e.shiftKey) return handle(() => o.run((ctx) => cmd.deleteNode(ctx, id)));
       if (!collapsed || start !== 0) return;
       // On a touch screen a held Backspace runs on into the bullet above:
-      // there it only removes an empty bullet, never joins two texts. (It
-      // never reaches the start of a mirror's heading, which takes no edits.)
-      if (touch() && o.contentOf(id).text && !o.isMirror(id)) return;
+      // there it only removes an empty bullet, never joins two texts. (At a
+      // copy's start it takes out that copy, as it does with a keyboard.)
+      if (touch() && o.contentOf(id).text && !o.isCopy(id)) return;
       return handle(() => o.run((ctx) => cmd.mergeUp(ctx, id), here));
 
     case 'Delete': {
       if (!collapsed || start !== o.contentOf(id).text.length) return;
       const next = o.rows.ids[o.rows.indexOf(id) + 1];
-      // A mirror below is taken out only from its own start, not pulled in by Delete.
-      if (next && !o.isMirror(next)) handle(() => o.run((ctx) => cmd.mergeUp(ctx, next), here));
+      // A copy below is taken out only from its own start, not pulled in by Delete.
+      if (next && !o.isCopy(next)) handle(() => o.run((ctx) => cmd.mergeUp(ctx, next), here));
       return;
     }
 

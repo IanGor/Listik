@@ -90,8 +90,12 @@ export function Row(props: RowProps) {
     o.nodes.acquire(target);
     onCleanup(() => o.nodes.release(target));
   }));
-  const mirror = () => !!node()?.mirrorOf;
-  const orphan = () => mirror() && !o.doc.nodes.has(node()!.mirrorOf!);
+  /** One of two or more copies of a bullet (model/mirrors.ts): a diamond, wherever it is. */
+  const mirror = () => {
+    o.rowsVersion();
+    return !!node() && o.doc.isCopy(nid);
+  };
+  const orphan = () => !!node()?.mirrorOf && !o.doc.nodes.has(node()!.mirrorOf!);
   const focused = () => !o.readOnly && o.focus()?.id === id;
   const editingText = () => focused() && !inNote(o.focus());
   const editingNote = () => focused() && inNote(o.focus());
@@ -183,7 +187,7 @@ export function Row(props: RowProps) {
         classList={{ collapsed: folded(), todo: !!content()?.todo, checked: !!content()?.done, mirror: mirror() }}
         role={content()?.todo ? 'checkbox' : undefined}
         aria-checked={content()?.todo ? !!content()?.done : undefined}
-        title={mirror() ? 'Зеркало: тот же пункт в другом месте; точка ведёт к оригиналу' : undefined}
+        title={mirror() ? 'Зеркало: этот пункт есть и в других местах, правка меняет все копии' : undefined}
         // No default on mousedown: DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
         // A held finger is a drag, not the browser's context menu.
@@ -251,7 +255,7 @@ const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: stri
 
 /**
  * Before the browser edits the text: undo/redo from its menu (which bypasses
- * keydown), no edits on a mirror's heading, `]` stepping over a link's closing bracket, Backspace taking out
+ * keydown), `]` stepping over a link's closing bracket, Backspace taking out
  * an empty `[]` pair whole. `read`/`write` give the element's text. With
  * `mirror` (a bullet's text, not a note) the last `)` typed of `((title))`
  * makes the mirror (`Outliner.mirrorTitled`).
@@ -266,11 +270,6 @@ function beforeInput(
   if (e.inputType === 'historyRedo') {
     e.preventDefault();
     return o.redo();
-  }
-  // A mirror's heading takes no edits (model/commands.ts); what cannot be refused here, `restore` puts back.
-  if (o.isMirror(id)) {
-    if (e.cancelable) e.preventDefault();
-    return o.mirrorReadOnly();
   }
   if (e.isComposing || !e.cancelable) return;
   const sel = selectionIn(el);
@@ -292,12 +291,6 @@ function beforeInput(
   }
 }
 
-/** An edit the browser made anyway (a composing keyboard) in a mirror's heading: the DOM goes back to the model. */
-function restore(el: HTMLElement, text: string): void {
-  const caret = selectionIn(el)?.[0];
-  el.textContent = text;
-  setCaret(el, Math.min(caret ?? 0, text.length));
-}
 
 /** Places the caret for a focus request: at an offset, or at a horizontal position on the first/last line. */
 function placeCaret(el: HTMLElement, f: FocusRequest): void {
@@ -346,7 +339,6 @@ function Editable(props: { o: Outliner; id: RowKey }) {
   });
 
   const onInput = (e: InputEvent) => {
-    if (o.isMirror(id)) return restore(el, text());
     const t = el.textContent ?? '';
     if (el.childNodes.length > 1 || el.firstElementChild || t.includes('\n')) {
       const caret = selectionIn(el)?.[0] ?? t.length;
@@ -362,7 +354,6 @@ function Editable(props: { o: Outliner; id: RowKey }) {
     const pasted = e.clipboardData?.getData('text/plain');
     if (pasted == null) return;
     e.preventDefault();
-    if (o.isMirror(id)) return o.mirrorReadOnly();
     const [start, end] = selectionIn(el) ?? [0, 0];
     // Several lines: an indented list (Markdown, Workflowy, plain) becomes a tree.
     if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));
@@ -420,7 +411,6 @@ function NoteEditable(props: { o: Outliner; id: RowKey }) {
   });
 
   const onInput = (e: InputEvent) => {
-    if (o.isMirror(id)) return restore(el, note().endsWith('\n') ? `${note()}\n` : note());
     // Other browsers may insert <br> for a new line: turn it back into text.
     if (el.querySelector('br')) {
       const caret = selectionIn(el)?.[0];

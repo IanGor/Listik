@@ -55,6 +55,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   console.info(`loaded ${doc.nodes.size - 2} bullets in ${Math.round(performance.now() - started)} ms`);
   const outliner = new Outliner(doc);
   outliner.bare = new URLSearchParams(location.search).has('empty');
+  outliner.keepFolds(name);
   // A new document starts with the structure (model/calendar.ts).
   if (fresh) outliner.firstStructure(true);
   outliner.persistence = persistence;

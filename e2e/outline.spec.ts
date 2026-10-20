@@ -1288,7 +1288,7 @@ test.describe('touch screen', () => {
     await expect(mirrors).toBeVisible();
     await page.keyboard.type('Часть втор');
     await mirrors.getByRole('option').first().tap();
-    await expect(page.locator('.row.mirror')).toHaveCount(1);
+    await expect(page.locator('.row.mirror')).toHaveCount(2);
 
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await page.keyboard.press('Control+End');
@@ -1694,7 +1694,7 @@ test.describe('mirrors', () => {
   const list = (page: Page) => page.getByRole('listbox', { name: 'Зеркала' });
   const crumbs = (page: Page) => page.locator('.crumbs .crumb');
 
-  test('(( offers bullets; taking one makes the bullet a mirror: a diamond, the original\'s text, the dot leads to the original', async ({ page }) => {
+  test('(( offers bullets; taking one makes two copies: a diamond on each, either one edits both, a dot leads to where it lives', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await page.keyboard.type('((');
@@ -1703,42 +1703,37 @@ test.describe('mirrors', () => {
     await page.keyboard.type('Часть втор');
     await page.keyboard.press('Enter');
     await expect(list(page)).toHaveCount(0);
-    const mirror = page.locator('.row.mirror');
-    await expect(mirror).toHaveCount(1);
-    await expect(mirror.locator('.bullet')).toHaveClass(/mirror/);
+    const copies = page.locator('.row.mirror');
+    await expect(copies).toHaveCount(2);
+    await expect(copies.locator('.bullet')).toHaveClass([/mirror/, /mirror/]);
     await expect(editing(page)).toHaveText('Часть вторая');
 
-    // The mirror's heading takes no edits: typing, erasing and pasting leave the original as it is.
+    // Typed in the new copy, it changes in both.
     await page.keyboard.press('Control+End');
     await page.keyboard.type(' (зеркало)');
-    await page.keyboard.press('Backspace');
-    await expect(editing(page)).toHaveText('Часть вторая');
-    await expect(page.locator('.toast')).toContainText('Заголовок зеркала правится в оригинале');
     await page.keyboard.press('Escape');
-    await expect(page.locator('.row .text', { hasText: 'Часть вторая' })).toHaveCount(2);
-    // Typed in the original, it changes in the mirror.
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Часть вторая (зеркало)', 'Часть вторая (зеркало)']);
+    // And in the first one too.
     await edit(page, 'Часть вторая');
-    await page.keyboard.type(' (зеркало');
+    await page.keyboard.press('Backspace');
     await page.keyboard.press('Escape');
-    await expect(page.locator('.row .text', { hasText: 'Часть вторая (зеркало' })).toHaveCount(2);
-    await expect(page.locator('.row.mirror .text')).toHaveText('Часть вторая (зеркало');
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Часть вторая (зеркало', 'Часть вторая (зеркало']);
 
-    // The mirror's dot leads to the original, where it stands in the outline.
-    await page.locator('.row.mirror .bullet').click();
+    // A dot leads to where the bullet lives in the outline.
+    await copies.last().locator('.bullet').click();
     await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая (зеркало']);
   });
 
-  test('a mirror shows everything under its original; edits there are the original\'s, the caret stays in the mirror', async ({ page }) => {
+  test('a copy shows everything under it; edits there show in every copy; folding is each copy\'s own', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await page.keyboard.type('((Том перв');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Escape');
-    const all = await outline(page);
-    expect(all).toEqual([...DEMO, ...DEMO.slice(0, 5)]);
-    await expect(page.locator('.row.mirror')).toHaveCount(1);
+    expect(await outline(page)).toEqual([...DEMO, ...DEMO.slice(0, 5)]);
+    await expect(page.locator('.row.mirror')).toHaveCount(2);
 
-    // Enter at the end of a bullet inside the mirror: the new bullet is the original's, edited in the mirror.
+    // Enter at the end of a bullet inside the copy: the new bullet shows in both, edited in this one.
     const inMirror = page.locator('.row[data-id*="/"]', { hasText: 'Часть вторая' });
     await inMirror.locator('.text').click();
     await page.keyboard.press('Control+End');
@@ -1748,18 +1743,42 @@ test.describe('mirrors', () => {
     await expect(page.locator('.row .text', { hasText: 'Часть третья' })).toHaveCount(2);
     expect((await outline(page)).slice(0, 7)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй']);
 
-    // The mirror folds on its own; the original stays open.
+    // A bullet folded inside one copy stays open in the other, and back.
     await page.keyboard.press('Escape');
-    await page.locator('.row.mirror .toggle').click();
-    expect(await outline(page)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй', 'Том первый']);
+    const top = [...DEMO.slice(0, 5), '  Часть третья', 'Том второй'];
+    await page.locator('.row[data-id*="/"]', { hasText: 'Часть первая' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual([...top, 'Том первый', '  Часть первая', '  Часть вторая', '  Часть третья']);
+    await page.locator('.row:not([data-id*="/"])', { hasText: 'Часть первая' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', '  Часть третья', 'Том второй', 'Том первый', '  Часть первая', '  Часть вторая', '  Часть третья']);
+    await page.locator('.row[data-id*="/"]', { hasText: 'Часть первая' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', '  Часть третья', 'Том второй', ...top.slice(0, 6)]);
 
-    // Backspace at the start of the mirror takes out the link alone: the original keeps its title and bullets.
-    await page.locator('.row.mirror .text').click();
+    // The copy folds on its own too.
+    await page.locator('.row.mirror').last().locator('.toggle').click();
+    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', '  Часть третья', 'Том второй', 'Том первый']);
+
+    // Backspace at the start of a copy takes out that copy alone: the other keeps the title and bullets, now a plain bullet.
+    await page.locator('.row.mirror').last().locator('.text').click();
     await page.keyboard.press('Control+Home');
     await page.keyboard.press('Backspace');
     await expect(page.locator('.row.mirror')).toHaveCount(0);
-    expect(await outline(page)).toEqual([...DEMO.slice(0, 5), '  Часть третья', 'Том второй']);
+    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', '  Часть третья', 'Том второй']);
     await expect(editing(page)).toHaveText('Том второй');
+  });
+
+  test('deleting the copy that lives in the outline leaves the other with everything', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Том перв');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.locator('.row .text', { hasText: 'Том первый' }).first().click();
+    await page.keyboard.press('Control+Shift+Backspace');
+    expect(await outline(page)).toEqual(['Том второй', ...DEMO.slice(0, 5)]);
+    await expect(page.locator('.row.mirror')).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual([...DEMO, ...DEMO.slice(0, 5)]);
+    await expect(page.locator('.row.mirror')).toHaveCount(2);
   });
 
   test('deleting a mirror with what it shows selected leaves the original whole', async ({ page }) => {
@@ -1780,8 +1799,8 @@ test.describe('mirrors', () => {
     await page.keyboard.press('Enter');
     await page.keyboard.type('см. ((Том перв');
     await page.keyboard.press('Enter');
-    await expect(page.locator('.row.mirror')).toHaveCount(1);
-    await expect(page.locator('.row.mirror .text')).toHaveText('Том первый');
+    await expect(page.locator('.row.mirror')).toHaveCount(2);
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Том первый', 'Том первый']);
     await expect(page.locator('.row .text', { hasText: /^см\.\s*$/ })).toHaveCount(1);
     await page.keyboard.press('Escape');
     await edit(page, 'Том второй');
@@ -1809,16 +1828,16 @@ test.describe('mirrors', () => {
     const create = page.getByRole('option', { name: 'Создать «Новая тема» в Inbox' });
     await expect(create).toHaveCount(1);
     await create.click();
-    await expect(page.locator('.row.mirror .text')).toHaveText(['Новая тема']);
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Новая тема', 'Новая тема']);
     expect(await outline(page)).toEqual([...DEMO, 'Inbox', '  Новая тема', 'Новая тема']);
     await page.keyboard.press('Escape');
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await page.keyboard.type('((Вторая))');
-    await expect(page.locator('.row.mirror .text')).toHaveText(['Вторая', 'Новая тема']);
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Вторая', 'Новая тема', 'Вторая', 'Новая тема']);
     expect(await outline(page)).toEqual([...DEMO, 'Вторая', 'Inbox', '  Новая тема', '  Вторая', 'Новая тема']);
     await page.keyboard.press('Control+z');
-    await expect(page.locator('.row.mirror')).toHaveCount(1);
+    await expect(page.locator('.row.mirror')).toHaveCount(2);
     expect((await outline(page)).filter((r) => r.trim() === 'Вторая')).toEqual([]);
     // An existing title gets no such offer.
     await edit(page, 'Том второй');
@@ -1867,6 +1886,31 @@ test('no editing bar with a mouse and a keyboard', async ({ page }) => {
 });
 
 test.describe('persistence', () => {
+  test('a bullet folded under a copy stays so there after a reload, open in the other', async ({ page }) => {
+    await page.goto('/?db=e2e-folds&empty');
+    await page.locator('.row .text').first().click();
+    await page.keyboard.type('a');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('b');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('c');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.type('((a');
+    await page.getByRole('option', { name: /^a/ }).first().click();
+    await page.keyboard.press('Escape');
+    expect(await outline(page)).toEqual(['a', '  b', '    c', 'a', '  b', '    c']);
+    await page.locator('.row[data-id*="/"]', { hasText: 'b' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['a', '  b', '    c', 'a', '  b']);
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(5);
+    expect(await outline(page)).toEqual(['a', '  b', '    c', 'a', '  b']);
+  });
+
   test('edits survive a reload', async ({ page }) => {
     await page.goto('/?db=e2e&empty');
     await expect(page.locator('.row')).toHaveCount(1);

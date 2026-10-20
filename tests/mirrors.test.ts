@@ -36,22 +36,27 @@ describe('(( token and pair', () => {
 });
 
 describe('mirrors', () => {
-  it('an empty bullet with ((title)) becomes a mirror: it reads the original\'s text and note, edits to them stay with the original; the checkbox is shared', () => {
+  it('an empty bullet with ((title)) becomes a copy: both show a diamond, either one edits the text, note and task of both', () => {
     const { doc, ctx, rows, run } = setup(['Пьер', 'Наташа', '']);
     run(() => cmd.setText(ctx, '', '((Пьер))'));
     const m = rows.ids[2];
+    expect(doc.isCopy('Пьер')).toBe(false);
     run(() => cmd.makeMirror(ctx, m, 'Пьер', 0, 8));
     expect(doc.get(m).mirrorOf).toBe('Пьер');
     expect(doc.get(m).text).toBe('');
     expect(doc.content(m).text).toBe('Пьер');
     expect(isMirror(doc, m)).toBe(true);
-    // The mirror's heading takes no edits: the original's text and note change only where it is.
-    expect(doc.transact(() => cmd.setText(ctx, m, ''))).toEqual([]);
-    expect(doc.transact(() => { cmd.setNote(ctx, m, 'заметка'); })).toEqual([]);
-    expect(doc.transact(() => { cmd.split(ctx, m, 2); })).toHaveLength(1); // a new bullet, the heading stays whole
-    expect(doc.get('Пьер').text).toBe('Пьер');
-    run(() => cmd.setText(ctx, 'Пьер', 'Пьер Безухов'));
-    expect(doc.content(m).text).toBe('Пьер Безухов');
+    expect(doc.isCopy('Пьер')).toBe(true);
+    expect(doc.isCopy(m)).toBe(true);
+    expect(doc.isCopy('Наташа')).toBe(false);
+    expect(doc.copies(m).sort()).toEqual([m, 'Пьер'].sort());
+    run(() => cmd.setText(ctx, m, 'Пьер Безухов'));
+    expect(doc.get('Пьер').text).toBe('Пьер Безухов');
+    run(() => cmd.setNote(ctx, m, 'заметка'));
+    expect(doc.get('Пьер').note).toBe('заметка');
+    const f = run(() => cmd.split(ctx, m, 4));
+    expect(doc.content(m).text).toBe('Пьер');
+    expect(doc.get(f.id).text).toBe(' Безухов');
     run(() => cmd.cycleTask(ctx, [m]));
     expect(doc.get('Пьер').todo).toBe(true);
     run(() => cmd.toggleDone(ctx, [m]));
@@ -106,18 +111,26 @@ describe('mirrors', () => {
     checkInvariants(doc);
   });
 
-  it('Backspace at the start of a mirror takes out the link alone; the original keeps its text, note and bullets; nothing merges into a mirror', () => {
+  it('Backspace at the start of either copy takes out that copy alone; the other keeps the text, note and bullets', () => {
     const { doc, ctx, rows, run } = mirrored(['a', '  b', 'm', 'c'], { m: 'a' });
     run(() => cmd.setNote(ctx, 'a', 'заметка'));
-    expect(run(() => cmd.mergeUp(ctx, 'm/b'))).toBeUndefined(); // b has text: nothing to join it to in the heading
     run(() => cmd.setCollapsed(ctx, 'm', true));
-    expect(run(() => cmd.mergeUp(ctx, 'c'))).toBeUndefined();
-    expect(doc.get('c').text).toBe('c');
+    // Text joins a copy above as it joins any bullet: every copy shows it.
+    expect(run(() => cmd.mergeUp(ctx, 'c'))).toEqual({ id: 'm', caret: 1 });
+    expect(doc.get('a').text).toBe('ac');
     expect(run(() => cmd.mergeUp(ctx, 'm'))).toEqual({ id: 'b', caret: 1 });
     expect(doc.get('m').parent).toBe(TRASH);
-    expect(dump(doc)).toEqual(['a', '  b', 'c']);
+    expect(dump(doc)).toEqual(['ac', '  b']);
     expect(doc.get('a').note).toBe('заметка');
-    expect(rows.ids).toEqual(['a', 'b', 'c']);
+    expect(rows.ids).toEqual(['a', 'b']);
+    expect(doc.isCopy('a')).toBe(false);
+
+    const two = mirrored(['x', 'a', '  b', 'm'], { m: 'a' });
+    expect(two.run(() => cmd.mergeUp(two.ctx, 'a'))).toEqual({ id: 'x', caret: 1 });
+    expect(dump(two.doc)).toEqual(['x', 'a', '  b']);
+    expect(two.doc.get('m').mirrorOf).toBeNull();
+    expect(two.rows.ids).toEqual(['x', 'm', 'b']);
+    checkInvariants(two.doc);
   });
 
   it('deleting a mirror, or a selection that holds it with what it shows, leaves the original whole', () => {
@@ -133,20 +146,46 @@ describe('mirrors', () => {
     expect(dump(three.doc)).toEqual(['a', 'm']);
   });
 
-  it('deleting the original keeps the mirror readable; the indexes see the original only', () => {
-    const { doc, ctx, rows, run } = setup(['Пьер #x', '']);
-    const m = rows.ids[1];
-    run(() => cmd.makeMirror(ctx, m, 'Пьер #x', 0, 0));
+  it('deleting the copy that holds it all hands everything to the first other copy; copies stay copies; undo puts it back', () => {
+    const { doc, ctx, rows, run } = mirrored(['m1', 'a #x', '  b', '  c', 'm2'], { m1: 'a #x', m2: 'a #x' });
+    run(() => cmd.setNote(ctx, 'a #x', 'заметка'));
+    run(() => cmd.cycleTask(ctx, ['a #x']));
     const tags = new TagIndex(doc);
     const text = new TextIndex(doc);
-    expect(tags.nodesWith('x').size).toBe(1);
-    expect(text.find(['пьер']).size).toBe(1);
-    run(() => cmd.deleteNode(ctx, 'Пьер #x'));
-    expect(doc.content(m).text).toBe('Пьер #x');
-    expect(isMirror(doc, m)).toBe(true);
-    doc.apply({ t: 'remove', parent: TRASH, node: doc.snapshot('Пьер #x') });
-    expect(isMirror(doc, m)).toBe(false);
-    expect(doc.content(m).id).toBe(m);
+    const before = dump(doc);
+    const ops = doc.transact(() => { cmd.deleteNode(ctx, 'a #x'); });
+    expect(doc.get('m1').mirrorOf).toBeNull();
+    expect(doc.get('m1').text).toBe('a #x');
+    expect(doc.get('m1').note).toBe('заметка');
+    expect(doc.get('m1').todo).toBe(true);
+    expect(doc.get('m1').children).toEqual(['b', 'c']);
+    expect(doc.get('m2').mirrorOf).toBe('m1');
+    expect(doc.isCopy('m1') && doc.isCopy('m2')).toBe(true);
+    expect(viewRows(rows, doc)).toEqual(['a #x', '  b', '  c', '◇ a #x', '  b', '  c']);
+    expect(tags.nodesWith('x')).toEqual(new Set(['m1']));
+    expect(text.find(['заметка']).size).toBe(1);
+    checkInvariants(doc);
+    run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(dump(doc)).toEqual(before);
+    expect(doc.get('m1').mirrorOf).toBe('a #x');
+    expect(doc.get('m2').mirrorOf).toBe('a #x');
+    // Of two copies, the one left is a plain bullet.
+    run(() => cmd.deleteNode(ctx, 'm1'));
+    run(() => cmd.deleteNode(ctx, 'm2'));
+    expect(doc.isCopy('a #x')).toBe(false);
+    expect(rows.ids).toEqual(['a #x', 'b', 'c']);
+  });
+
+  it('a mirror whose original went without handing over (an older document) reads it until the trash is purged', () => {
+    const { doc, run } = mirrored(['a', 'm'], { m: 'a' });
+    const n = doc.get('a');
+    run(() => doc.apply({ t: 'move', id: 'a', from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: '0' } }));
+    expect(doc.content('m').text).toBe('a');
+    expect(isMirror(doc, 'm')).toBe(true);
+    expect(doc.isCopy('m')).toBe(false);
+    doc.apply({ t: 'remove', parent: TRASH, node: doc.snapshot('a') });
+    expect(isMirror(doc, 'm')).toBe(false);
+    expect(doc.content('m').id).toBe('m');
   });
 
   it('undo goes through the merge layer; setMirror merges and inverts', () => {
@@ -232,15 +271,31 @@ describe('a mirror shows the subtree of its original', () => {
     checkInvariants(doc);
   });
 
-  it('folds on its own; a bullet folded inside it folds in the original too (one bullet)', () => {
+  it('each copy folds on its own, and so does every bullet shown under it', () => {
     const { doc, ctx, rows, run } = mirrored(['a', '  b', '    c', 'm'], { m: 'a' });
     run(() => cmd.setCollapsed(ctx, 'm', true));
     expect(rows.ids).toEqual(['a', 'b', 'c', 'm']);
     expect(rows.hasHiddenChildren('m')).toBe(true);
     run(() => cmd.setCollapsed(ctx, 'm', false));
-    run(() => cmd.setCollapsed(ctx, 'm/b', true));
-    expect(doc.get('b').collapsed).toBe(true);
+    // Where the bullet lives: the mirror keeps showing it as it did.
+    run(() => cmd.setCollapsed(ctx, 'b', true));
+    expect(rows.ids).toEqual(['a', 'b', 'm', 'm/b', 'm/c']);
+    // Under the mirror: there only, and never an op.
+    expect(doc.transact(() => cmd.setCollapsed(ctx, 'm/b', true))).toEqual([]);
     expect(rows.ids).toEqual(['a', 'b', 'm', 'm/b']);
+    run(() => cmd.setCollapsed(ctx, 'b', false));
+    expect(rows.ids).toEqual(['a', 'b', 'c', 'm', 'm/b']);
+    expect(rows.folded('m/b')).toBe(true);
+    const fresh = new VisibleRows(doc);
+    fresh.loadFolds(rows.foldEntries());
+    expect(fresh.ids).toEqual(rows.ids);
+    fresh.dispose();
+    // Tab into a bullet folded under the mirror unfolds it there only.
+    const two = mirrored(['a', '  b', '    c', '  d', 'm'], { m: 'a' });
+    two.run(() => cmd.setCollapsed(two.ctx, 'm/b', true));
+    expect(two.run(() => cmd.indent(two.ctx, 'm/d'))).toBe('m/d');
+    expect(two.rows.ids).toEqual(['a', 'b', 'c', 'd', 'm', 'm/b', 'm/c', 'm/d']);
+    expect(two.doc.get('b').collapsed).toBe(false);
   });
 
   it('a mirror inside what it mirrors, directly or through another mirror, shows no children', () => {
@@ -316,6 +371,7 @@ describe('a mirror shows the subtree of its original', () => {
           fresh.setTop(rows.top);
           fresh.setHideDone(rows.hidesDone);
           if (filter) fresh.setFilter(filter);
+          fresh.loadFolds(rows.foldEntries());
           fresh.dispose();
           const at = `seed ${seed} step ${step}`;
           expect(rows.ids, at).toEqual(fresh.ids);

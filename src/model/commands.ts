@@ -1,6 +1,7 @@
 import { generateKeyBetween } from 'fractional-indexing';
 import { clock } from './clock';
 import { TRASH, newId, trashKey, type Doc } from './doc';
+import { compareOrder } from './links';
 import { countTrees, type Tree } from './outline-text';
 import { contextOf, keyIn, nodeOf, type RowKey, type VisibleRows } from './rows';
 import type { Focus, NodeId, NodeSnapshot } from './types';
@@ -75,34 +76,73 @@ function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
   });
 }
 
-/** Deleting a bullet moves it into the trash, keyed by the time (see TRASH in doc.ts). */
+/**
+ * Deleting a bullet moves it into the trash, keyed by the time (see TRASH in
+ * doc.ts). Copies elsewhere of a bullet in it stay whole (`handOver`).
+ */
 function remove(doc: Doc, id: NodeId): void {
+  handOver(doc, id);
   const n = doc.get(id);
   doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: trashKey(clock.now()) } });
 }
 
-function expand(doc: Doc, id: NodeId): void {
-  const n = doc.get(id);
-  if (n.collapsed) doc.apply({ t: 'setCollapsed', id, from: true, to: false });
+/**
+ * All copies of a bullet are alike (model/mirrors.ts), but one of them, the
+ * origin, holds the text, note, task state and children. Before the subtree
+ * of `id` goes, each origin in it with copies outside hands all that over to
+ * the first of those copies in the outline, which stops being a mirror; the
+ * other copies then mirror it. Whichever copy goes, the rest stay as they were.
+ */
+function handOver(doc: Doc, id: NodeId): void {
+  const origins: NodeId[] = [];
+  doc.walk(id, (n) => {
+    if (!n.mirrorOf && doc.hasMirrors(n.id)) origins.push(n.id);
+  });
+  for (const o of origins) {
+    const rest = doc.copies(o).filter((c) => !doc.within(c, id));
+    if (!rest.length) continue;
+    const heir = rest.reduce((a, b) => (compareOrder(doc, b, a) < 0 ? b : a));
+    const from = doc.get(o);
+    const to = doc.get(heir);
+    const now = clock.now();
+    doc.apply({ t: 'setMirror', id: heir, from: to.mirrorOf, to: null });
+    if (to.text !== from.text) doc.apply({ t: 'setText', id: heir, from: to.text, to: from.text, at: now });
+    if (to.note !== from.note) doc.apply({ t: 'setNote', id: heir, from: to.note, to: from.note, at: now });
+    if (to.todo !== from.todo) doc.apply({ t: 'setTodo', id: heir, from: to.todo, to: from.todo });
+    if (to.done !== from.done) doc.apply({ t: 'setDone', id: heir, from: to.done, to: from.done });
+    for (const c of [...from.children]) {
+      const order = doc.get(c).order;
+      doc.apply({ t: 'move', id: c, from: { parent: o, order }, to: { parent: heir, order } });
+    }
+    for (const m of rest) {
+      const mirrorOf = doc.get(m).mirrorOf;
+      if (m !== heir && mirrorOf !== heir) doc.apply({ t: 'setMirror', id: m, from: mirrorOf, to: heir });
+    }
+  }
 }
 
-// Text, note and task state belong to the bullet a row shows (`Doc.content`).
-// A mirror's own row is a heading to read: its text and note change only
-// where the original is, so taking a mirror out or typing over it never
-// touches the original. Task state does change through it (the checkbox),
-// and so do the bullets below it, which are the original's.
+/**
+ * Unfolds the row `key`. Under a mirror only there (`VisibleRows.setFold`:
+ * each copy shows its bullets folded its own way); elsewhere in the doc,
+ * the copies that show the bullet keeping how they show it.
+ */
+function unfold({ doc, rows }: Ctx, key: RowKey): void {
+  if (contextOf(key)) return rows.setFold(key, false);
+  const n = doc.get(nodeOf(key));
+  if (!n.collapsed) return;
+  rows.freeze(n.id);
+  doc.apply({ t: 'setCollapsed', id: n.id, from: true, to: false });
+}
 
-/** Is the row a mirror's own (its heading, not a bullet shown under it)? */
-const mirrorHeading = (doc: Doc, key: RowKey) => doc.get(nodeOf(key)).mirrorOf !== null;
+// Text, note and task state belong to the bullet a row shows (`Doc.content`):
+// every copy of a bullet (model/mirrors.ts) shows and edits the same ones.
 
 export function setText({ doc }: Ctx, id: RowKey, text: string): void {
-  if (mirrorHeading(doc, id)) return;
   const n = doc.content(nodeOf(id));
   if (n.text !== text) doc.apply({ t: 'setText', id: n.id, from: n.text, to: text, at: clock.now() });
 }
 
 export function setNote({ doc }: Ctx, id: RowKey, note: string): void {
-  if (mirrorHeading(doc, id)) return;
   const n = doc.content(nodeOf(id));
   if (n.note !== note) doc.apply({ t: 'setNote', id: n.id, from: n.note, to: note, at: clock.now() });
 }
@@ -163,12 +203,19 @@ export function untask({ doc }: Ctx, ids: RowKey[]): void {
   }
 }
 
-/** Folds the row's bullet; a mirror folds on its own, apart from its original. */
-export function setCollapsed({ doc }: Ctx, key: RowKey, value: boolean): void {
+/**
+ * Folds the row's bullet. Each copy folds on its own (model/mirrors.ts), and
+ * so do the bullets shown under it: under a mirror the fold is the place's
+ * (`VisibleRows.setFold`, kept by the view, never an op); elsewhere it is the
+ * bullet's, and the copies that show it keep how they show it (`freeze`).
+ */
+export function setCollapsed({ doc, rows }: Ctx, key: RowKey, value: boolean): void {
   const n = doc.get(nodeOf(key));
-  if ((doc.host(n.id)?.children.length ?? 0) > 0 && n.collapsed !== value) {
-    doc.apply({ t: 'setCollapsed', id: n.id, from: n.collapsed, to: value });
-  }
+  if ((doc.host(n.id)?.children.length ?? 0) === 0) return;
+  if (contextOf(key)) return rows.setFold(key, value);
+  if (n.collapsed === value) return;
+  rows.freeze(n.id);
+  doc.apply({ t: 'setCollapsed', id: n.id, from: n.collapsed, to: value });
 }
 
 /** Collapses every child of `parent` that has children of its own (the logo: home, all folded). */
@@ -192,9 +239,9 @@ export function appendChild({ doc }: Ctx, parent: NodeId): Focus {
 }
 
 /**
- * Enter: split the bullet at the caret (a mirror's heading stays whole);
- * with children shown, the new bullet is the first of them (in a mirror:
- * of the original's), otherwise a plain sibling.
+ * Enter: split the bullet at the caret (any copy of it: model/mirrors.ts);
+ * with children shown, the new bullet is the first of them (in a mirror: of
+ * the origin's), otherwise a plain sibling.
  */
 export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
   const id = nodeOf(key);
@@ -205,8 +252,7 @@ export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
     insertNew(doc, parent, doc.index(id), '');
     return { id: key, caret: 0 };
   }
-  // A mirror's heading is not split: Enter anywhere in it adds an empty bullet.
-  const after = n.mirrorOf ? '' : c.text.slice(caret);
+  const after = c.text.slice(caret);
   setText({ doc, rows }, id, c.text.slice(0, caret));
   const host = rows.host(key);
   // Open (even with all its children completed and hidden): the new bullet is its first child.
@@ -304,15 +350,13 @@ export function mergeUp({ doc, rows }: Ctx, key: RowKey): Focus | void {
   const prevId = nodeOf(prevKey);
   const prev = doc.content(prevId);
   const caret = prev.text.length;
-  // A mirror is a link: Backspace at its start takes out the link alone; the original keeps its text, note and bullets.
-  if (n.mirrorOf) {
+  // A copy goes alone: Backspace at its start takes out this copy; the others keep the text, note and bullets.
+  if (n.mirrorOf || doc.isCopy(id)) {
     remove(doc, id);
     return { id: prevKey, caret };
   }
   if (n.children.length > 0 || c.note) return;
-  // Nothing is merged into a mirror's heading: its text is the original's.
-  if (c.text && doc.get(prevId).mirrorOf) return;
-  // The row above may show the same bullet (a mirror right below its original): nothing to join.
+  // The row above may show the same bullet (a copy right below another): nothing to join.
   if (c.text && prev === c) return;
   if (c.text) setText({ doc, rows }, prevId, prev.text + c.text);
   remove(doc, id);
@@ -342,7 +386,7 @@ export function indent({ doc, rows }: Ctx, key: RowKey): RowKey | void {
   const prevId = doc.get(doc.get(id).parent!).children[i - 1];
   const host = hostFor(doc, prevId, id);
   if (host === null) return;
-  expand(doc, prevId);
+  unfold({ doc, rows }, keyIn(contextOf(key), prevId));
   moveTo(doc, id, host, doc.get(host).children.length);
   return rows.childKey(keyIn(contextOf(key), prevId), id);
 }
@@ -389,7 +433,7 @@ export function moveUp({ doc, rows }: Ctx, key: RowKey): RowKey | void {
   const target = doc.get(p.parent).children[pi - 1];
   const host = hostFor(doc, target, id);
   if (host === null) return;
-  expand(doc, target);
+  unfold({ doc, rows }, keyIn(contextOf(p.key), target));
   moveTo(doc, id, host, doc.get(host).children.length);
   return rows.childKey(keyIn(contextOf(p.key), target), id);
 }
@@ -408,7 +452,7 @@ export function moveDown({ doc, rows }: Ctx, key: RowKey): RowKey | void {
   const target = uncles[pi + 1];
   const host = hostFor(doc, target, id);
   if (host === null) return;
-  expand(doc, target);
+  unfold({ doc, rows }, keyIn(contextOf(p.key), target));
   moveTo(doc, id, host, 0);
   return rows.childKey(keyIn(contextOf(p.key), target), id);
 }
@@ -505,7 +549,7 @@ export function moveManyTo({ doc, rows }: Ctx, keys: RowKey[], parentKey: RowKey
   while (k >= 0 && moving.has(children[k])) k--; // dropped right after a moving bullet: after its predecessor
   const orders = doc.ordersAt(parent, k + 1, ids.length);
   if (ids.length > 2) rows.expectMany();
-  if (nodeOf(parentKey) !== doc.root) expand(doc, nodeOf(parentKey));
+  if (nodeOf(parentKey) !== doc.root) unfold({ doc, rows }, parentKey);
   ids.forEach((id, i) => {
     const n = doc.get(id);
     doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent, order: orders[i] } });

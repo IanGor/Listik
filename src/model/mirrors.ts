@@ -5,13 +5,16 @@ import type { NodeId } from './types';
 /**
  * Mirrors, as in Workflowy: `((` typed in a bullet closes to `(())` and
  * offers bullets by title (the same completion as `[[links]]`); the one
- * taken does not become text but turns the bullet into a *mirror* of it:
- * `OutlineNode.mirrorOf`. A mirror shows, and edits, the text, note and
- * task state of the bullet it mirrors (`Doc.content`), so the same bullet
- * can be worked on in several places and every place changes at once.
- * Its own children it has none: zooming into a mirror leads to the
- * original, where the children are. A mirror of a mirror points at the
- * original (`Doc.origin`).
+ * taken does not become text but makes the bullet another *copy* of it.
+ * Copies are alike: each shows a diamond, shows and edits the same text,
+ * note, task state and children, and folds on its own (model/rows.ts
+ * `folds`). Taking one out leaves the rest; of two, the one left is a
+ * plain bullet again.
+ *
+ * Underneath, one copy holds it all (`Doc.origin`) and the others point at
+ * it (`OutlineNode.mirrorOf`, `Doc.content`, `Doc.copies`); when that one
+ * goes, it hands everything to another (commands.ts `handOver`). A mirror
+ * has no children of its own: zooming into it leads to where they are.
  *
  * `((title))` typed out to its last `)` mirrors the bullet so titled, or a
  * new one made last in the structure's Inbox (`Outliner.mirrorTitled`); with
