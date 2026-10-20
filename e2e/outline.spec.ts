@@ -474,6 +474,20 @@ test.describe('zoom', () => {
     await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
   });
 
+  test('gone up by the path to the very bullet searched for: everything inside it shows', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
+    await page.locator('.search').fill('Часть первая');
+    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await crumbs(page).filter({ hasText: 'Часть первая' }).click();
+    await expect(title(page)).toHaveText('Часть первая');
+    await expect(page.locator('.search')).toHaveValue('Часть первая');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+    // One level up the search shows its path again.
+    await crumbs(page).filter({ hasText: 'Том первый' }).click();
+    expect(await outline(page)).toEqual([DEMO[1].trim()]);
+  });
+
   test('inside a zoom, search covers only the zoomed-in bullet and Shift+Tab cannot leave it', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('Том');

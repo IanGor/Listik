@@ -812,9 +812,14 @@ export class Outliner {
         if (cur) this.setFocus(cur);
       } else {
         let matches = findMatches(query, this.tags, this.text, this.doc);
-        // Zoomed in: search only inside the zoomed-in bullet.
-        if (this.zoom()) matches = new Set([...matches].filter((id) => this.rows.contains(id)));
-        this.rows.setFilter({ keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });
+        const zoom = this.zoom();
+        // The zoomed-in bullet is found itself (gone up to it by the path): all that is inside it shows, as below a match.
+        const self = zoom !== null && matches.has(zoom);
+        // Zoomed in: search only inside the zoomed-in bullet, and the bullet itself.
+        if (zoom) matches = new Set([...matches].filter((id) => id === zoom || this.rows.contains(id)));
+        this.rows.setFilter(self
+          ? { keep: new Set([zoom]), open: new Set([zoom]) }
+          : { keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });
         this.setFilterSignal({ query, matches, count: matches.size });
         this.setFocus(null);
       }
