@@ -1585,7 +1585,8 @@ test.describe('touch screen', () => {
     await expect.poll(left).toBe(0);
     await insert.evaluate((el) => (el.scrollLeft = el.scrollWidth));
     await expect(insert).not.toHaveClass(/more/);
-    expect(await left()).toBe(0);
+    // Sticky settles on the frame after the scroll.
+    await expect.poll(left).toBe(0);
     await page.keyboard.press('Control+Home');
     await action(page, 'Время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');
