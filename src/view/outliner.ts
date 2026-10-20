@@ -28,6 +28,8 @@ const TRASH_OPEN = 'listik-trash-open';
 const SAVED_SEARCHES = 'listik-saved-searches';
 /** Saved searches kept at most: saving one more lets the oldest go. */
 export const SAVED_MAX = 20;
+/** Places gone to lately, kept at most (the search box shows fewer). */
+const RECENT_MAX = 20;
 
 function readSaved(): string[] {
   try {
@@ -141,6 +143,11 @@ export class Outliner {
   /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
+  /** Places zoomed into lately, newest first, calendar periods aside: the search box offers them before anything is typed. */
+  readonly recentPlaces: Accessor<NodeId[]>;
+  private setRecentPlaces: Setter<NodeId[]>;
+  /** Where `recentPlaces` last on this device (`keepRecent`); null: for this page only. */
+  private recentKey: string | null = null;
   /** Rows being dragged (with their subtrees), shown dimmed. */
   readonly dragged: Accessor<ReadonlySet<RowKey>>;
   readonly setDragged: Setter<ReadonlySet<RowKey>>;
@@ -229,6 +236,7 @@ export class Outliner {
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
+    [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
     [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
@@ -433,7 +441,44 @@ export class Outliner {
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
     });
-    if (target) this.enterDay(target);
+    if (target) {
+      this.enterDay(target);
+      this.visited(target);
+    }
+  }
+
+  /** A place zoomed into goes first among the recent ones; calendar periods are reached by the logo and ‹ ›. */
+  private visited(id: NodeId): void {
+    if (periodAt(this.doc, id)) return;
+    const next = [id, ...this.recentPlaces().filter((r) => r !== id)].slice(0, RECENT_MAX);
+    this.setRecentPlaces(next);
+    if (this.recentKey) writeSetting(this.recentKey, JSON.stringify(next));
+  }
+
+  /** The recent places last on this device for the document `name`, as the folds do. */
+  keepRecent(name: string): void {
+    this.recentKey = `listik-recent:${name}`;
+    try {
+      const list: unknown = JSON.parse(readSetting(this.recentKey) ?? '[]');
+      if (Array.isArray(list)) this.setRecentPlaces(list.filter((id): id is string => typeof id === 'string').slice(0, RECENT_MAX));
+    } catch {
+      // Unreadable: none yet.
+    }
+  }
+
+  /**
+   * A place taken in the search box's list: the search goes and the view
+   * zooms into it. With `edit` (the keyboard) the caret goes on into its
+   * first bullet, or its title, as Alt+→ does.
+   */
+  goToPlace(id: NodeId, edit: boolean): void {
+    if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      if (edit) this.zoomIn(id);
+      else this.zoomTo(id);
+    });
   }
 
   /**
