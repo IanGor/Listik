@@ -17,10 +17,7 @@ import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { NodeSignals } from './node-signals';
-import { narrow } from './screen';
 
-/** The tree panel is open; per browser, like the theme. */
-const TREE_OPEN = 'listik-tree-open';
 /** The trash panel is open; per browser, like the theme. */
 const TRASH_OPEN = 'listik-trash-open';
 /** Saved searches (the star in the search box), newest first; per browser, like the theme. */
@@ -84,16 +81,8 @@ export class Outliner {
   readonly tags: TagIndex;
   readonly text: TextIndex;
   readonly ctx: Ctx;
-  /** Shared with the tree panel's outliner (TreeOutliner): one history of edits, one set of node signals. */
-  readonly history: History;
-  readonly nodes: NodeSignals;
-  /** The bullet to mark as the place the outline is in (the tree panel marks the outline's zoom); none here. */
-  current(): NodeId | null {
-    return null;
-  }
-  /** Bumped with a row to scroll into view without editing it (the tree panel follows the outline). */
-  readonly revealRequests: Accessor<RowKey | null>;
-  protected setRevealRequests: Setter<RowKey | null>;
+  readonly history = new History();
+  readonly nodes = new NodeSignals();
   /** Changes whenever the visible rows change. */
   readonly rowsVersion: Accessor<number>;
   /** The row being edited; null when nothing is. A new object on every request, even for the same row. */
@@ -157,7 +146,7 @@ export class Outliner {
    * then on the empty bullet) goes to the trash whole: `keepErased` gives
    * it that text back there. Typing more forgets it.
    */
-  private erased: Map<NodeId, string>;
+  private erased = new Map<NodeId, string>();
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -165,11 +154,6 @@ export class Outliner {
   private setSyncRequests: Setter<number>;
   /** Another tab holds the document: nothing here may change it. */
   readonly readOnly: boolean;
-  /** The stored document's name (`?db=`), once known: what per-device settings of it are keyed by. */
-  docName: string | null = null;
-  /** The tree panel (TreePanel.tsx) is open beside the outline; per browser. */
-  readonly treeOpen: Accessor<boolean>;
-  private setTreeOpen: Setter<boolean>;
   /** `?empty`: a new document stays a lone empty bullet, without the structure (tests start from it). */
   bare = false;
   private setRowsVersion: Setter<number>;
@@ -186,18 +170,12 @@ export class Outliner {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSearch: number | null = null;
 
-  constructor(doc: Doc, options: { readOnly?: boolean; shared?: Outliner } = {}) {
+  constructor(doc: Doc, options: { readOnly?: boolean } = {}) {
     this.doc = doc;
-    const shared = options.shared;
-    this.readOnly = options.readOnly ?? shared?.readOnly ?? false;
-    // A second view of the doc (the tree panel) has rows of its own, folded its own way, and shares the rest.
-    this.rows = new VisibleRows(doc, { detached: !!shared });
-    this.tags = shared?.tags ?? new TagIndex(doc);
-    this.text = shared?.text ?? new TextIndex(doc);
-    this.history = shared?.history ?? new History();
-    this.nodes = shared?.nodes ?? new NodeSignals();
-    this.erased = shared?.erased ?? new Map();
-    [this.revealRequests, this.setRevealRequests] = createSignal<RowKey | null>(null, { equals: false });
+    this.readOnly = options.readOnly ?? false;
+    this.rows = new VisibleRows(doc);
+    this.tags = new TagIndex(doc);
+    this.text = new TextIndex(doc);
     this.ctx = { doc, rows: this.rows };
     [this.rowsVersion, this.setRowsVersion] = createSignal(this.rows.version);
     [this.focus, this.setFocusSignal] = createSignal<FocusRequest | null>(null, { equals: false });
@@ -217,10 +195,9 @@ export class Outliner {
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
     [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
-    [this.treeOpen, this.setTreeOpen] = createSignal(!shared && !narrow() && readSetting(TREE_OPEN) === '1');
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
-    if (!shared) doc.subscribe(this.nodes);
+    doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
@@ -233,7 +210,7 @@ export class Outliner {
       },
     });
     // Ready before the first search in practice, without blocking input meanwhile.
-    if (!shared) this.text.warmUpInIdle();
+    this.text.warmUpInIdle();
   }
 
   /** Moves the caret; editing a row ends a selection. */
@@ -596,7 +573,6 @@ export class Outliner {
    * whenever it changes.
    */
   keepFolds(name: string): void {
-    this.docName = name;
     const key = `listik-folds:${name}`;
     try {
       const entries: unknown = JSON.parse(readSetting(key) ?? '[]');
@@ -608,12 +584,6 @@ export class Outliner {
       const entries = this.rows.foldEntries();
       writeSetting(key, entries.length ? JSON.stringify(entries) : null);
     };
-  }
-
-  /** The header's button, Ctrl+\\: opens the tree panel, or closes it; remembered per browser (not on a phone, where it is a drawer). */
-  showTree(open = !this.treeOpen()): void {
-    this.setTreeOpen(open);
-    if (!narrow()) writeSetting(TREE_OPEN, open ? '1' : null);
   }
 
   /** The menu: opens the trash panel beside the outline, or closes it; remembered per browser. */
@@ -753,8 +723,8 @@ export class Outliner {
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
-    } else if (contextOf(key) || this.rows.detached) {
-      // Under a mirror, or in the tree panel: folded there only, a view state, not an undo step.
+    } else if (contextOf(key)) {
+      // Under a mirror: folded there only, a view state, not an undo step.
       batch(() => {
         setCollapsed(this.ctx, key, folded ?? !this.rows.folded(key));
         this.syncRows();
@@ -947,7 +917,7 @@ export class Outliner {
     });
   }
 
-  protected syncRows(): void {
+  private syncRows(): void {
     this.setRowsVersion(this.rows.version);
   }
 

@@ -134,7 +134,7 @@ function handOver(doc: Doc, id: NodeId): void {
  * the copies that show the bullet keeping how they show it.
  */
 function unfold({ doc, rows }: Ctx, key: RowKey): void {
-  if (contextOf(key) || rows.detached) return rows.setFold(key, false);
+  if (contextOf(key)) return rows.setFold(key, false);
   const n = doc.get(nodeOf(key));
   if (!n.collapsed) return;
   rows.freeze(n.id);
@@ -219,7 +219,7 @@ export function untask({ doc }: Ctx, ids: RowKey[]): void {
 export function setCollapsed({ doc, rows }: Ctx, key: RowKey, value: boolean): void {
   const n = doc.get(nodeOf(key));
   if ((doc.host(n.id)?.children.length ?? 0) === 0) return;
-  if (contextOf(key) || rows.detached) return rows.setFold(key, value);
+  if (contextOf(key)) return rows.setFold(key, value);
   if (n.collapsed === value) return;
   rows.freeze(n.id);
   doc.apply({ t: 'setCollapsed', id: n.id, from: n.collapsed, to: value });

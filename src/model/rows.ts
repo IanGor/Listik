@@ -108,16 +108,8 @@ export class VisibleRows implements DocListener {
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
 
-  /**
-   * Folds of its own for every row, never the doc's (`collapsed`): the tree
-   * panel (view/TreePanel.tsx), whose folding leaves the outline as it is.
-   * A row without an entry is folded there: the panel opens on the top level.
-   */
-  readonly detached: boolean;
-
-  constructor(doc: Doc, options: { detached?: boolean } = {}) {
+  constructor(doc: Doc) {
     this.doc = doc;
-    this.detached = options.detached ?? false;
     this.top = doc.root;
     this.rebuild();
     this.unsubscribe = doc.subscribe(this);
@@ -223,25 +215,18 @@ export class VisibleRows implements DocListener {
 
   /** Is the row folded: under a mirror the way it folds there, elsewhere as its bullet does. */
   folded(key: RowKey): boolean {
-    if (this.detached) return this.folds.get(this.foldKey(key)) ?? true;
     const n = this.doc.get(nodeOf(key));
     if (this.folds.size && key.includes(SEP)) return this.folds.get(this.foldKey(key)) ?? n.collapsed;
     return n.collapsed;
   }
 
-  /**
-   * Folds or unfolds a row under a mirror, there only: the other copies show
-   * the bullet as they did. Detached, any row: the doc is never touched.
-   */
+  /** Folds or unfolds a row under a mirror, there only: the other copies show the bullet as they did. */
   setFold(key: RowKey, folded: boolean): void {
-    if ((!contextOf(key) && !this.detached) || this.folded(key) === folded) return;
+    if (!contextOf(key) || this.folded(key) === folded) return;
     this.folds.set(this.foldKey(key), folded);
     // The fold is the mirror's: every row of that mirror on the list shows it.
     const mirror = nodeOf(contextOf(key));
-    if (!this.stale) {
-      if (!contextOf(key)) this.refreshRow(key);
-      else for (const m of [...this.mirrors]) if (nodeOf(m) === mirror) this.refreshRow(keyIn(m, nodeOf(key)));
-    }
+    if (!this.stale) for (const m of [...this.mirrors]) if (nodeOf(m) === mirror) this.refreshRow(keyIn(m, nodeOf(key)));
     this.version++;
     this.onFolds?.();
   }
@@ -274,28 +259,10 @@ export class VisibleRows implements DocListener {
     this.folds.clear();
     for (const [key, folded] of entries) {
       const i = key.indexOf(SEP);
-      const m = i === 0 ? null : this.doc.nodes.get(key.slice(0, i));
-      // A detached row's own entry has no mirror in front (`/id`).
-      if ((i === 0 ? this.detached : !!m?.mirrorOf) && this.doc.has(key.slice(i + 1))) this.folds.set(key, folded);
+      const m = this.doc.nodes.get(key.slice(0, i));
+      if (m?.mirrorOf && this.doc.has(key.slice(i + 1))) this.folds.set(key, folded);
     }
     this.rebuild();
-  }
-
-  /** Detached: unfolds every row on the way to `id`, so that it is listed. */
-  reveal(id: NodeId): void {
-    if (!this.detached) return;
-    const path: NodeId[] = [];
-    for (let p = this.doc.nodes.get(id)?.parent ?? null; p !== null && p !== this.top; p = this.doc.get(p).parent) path.unshift(p);
-    let changed = false;
-    for (const p of path) {
-      if (this.folds.get(SEP + p) !== false) {
-        this.folds.set(SEP + p, false);
-        changed = true;
-      }
-    }
-    if (!changed) return;
-    this.rebuild();
-    this.onFolds?.();
   }
 
   showsChildren(key: RowKey): boolean {
