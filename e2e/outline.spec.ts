@@ -1938,6 +1938,29 @@ test.describe('links', () => {
     await expect(page.locator('.row .link')).toHaveText('Часть вторая');
   });
 
+  test('a retitled bullet takes its links along once the caret leaves it; one undo step brings the old ones back', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('см. [[Часть вторая]] и [[Том первый]]');
+    await page.keyboard.press('Escape');
+
+    await edit(page, 'Часть вторая');
+    await page.keyboard.type(' (Шерер)');
+    // While the title is typed, links stay as they are.
+    await expect(page.locator('.row .link').first()).toHaveText('Часть вторая');
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('.row .link')).toHaveText(['Часть вторая (Шерер)', 'Том первый']);
+    await expect(page.locator('.toast')).toContainText('Ссылки на «Часть вторая (Шерер)» обновлены в 1 пункте');
+    await page.locator('.row .link').first().click();
+    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая (Шерер)']);
+
+    await page.goBack();
+    await expect(crumbs(page)).toHaveText(['Главная']);
+    // Undo: the old links, the caret right in that bullet.
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('см. [[Часть вторая]] и [[Том первый]]');
+  });
+
   test('] steps over the closing brackets, Backspace takes out an empty pair, a link to nothing says so', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');

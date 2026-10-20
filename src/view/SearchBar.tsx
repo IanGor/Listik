@@ -85,7 +85,11 @@ export function SearchBar(props: { o: Outliner }) {
         value={o.query()}
         onInput={(e) => o.setQuery(e.currentTarget.value)}
         onKeyDown={onKeyDown}
-        onFocus={() => setFocused(true)}
+        onFocus={() => {
+          // Links follow a title just retyped before the search sees it.
+          o.settleTitle();
+          setFocused(true);
+        }}
         onBlur={() => setFocused(false)}
       />
       <Show when={o.filter()}>

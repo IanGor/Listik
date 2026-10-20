@@ -1,7 +1,8 @@
 import { generateKeyBetween } from 'fractional-indexing';
 import { clock } from './clock';
 import { TRASH, newId, type Doc } from './doc';
-import { compareOrder } from './links';
+import { compareOrder, relinkText, retitledLinks, titleOf } from './links';
+import { normalize, type TextIndex } from './search';
 import { countTrees, type Tree } from './outline-text';
 import { deletedKey } from './trash';
 import { contextOf, keyIn, nodeOf, type RowKey, type VisibleRows } from './rows';
@@ -152,6 +153,31 @@ export function setText({ doc }: Ctx, id: RowKey, text: string): void {
 export function setNote({ doc }: Ctx, id: RowKey, note: string): void {
   const n = doc.content(nodeOf(id));
   if (n.note !== note) doc.apply({ t: 'setNote', id: n.id, from: n.note, to: note, at: clock.now() });
+}
+
+/**
+ * The bullet `id` was retitled, from the text `before`: links that led to
+ * it under the old title are rewritten to the new one, so they still do
+ * (model/links.ts `retitledLinks`). Returns how many bullets changed, or
+ * `taken` when an earlier bullet has the new title already: then nothing
+ * changes, lest the links lead there.
+ */
+export function relink({ doc }: Ctx, index: TextIndex, id: NodeId, before: string): number | 'taken' {
+  const found = retitledLinks(doc, index, id, before);
+  if (!found) return 0;
+  if (found.taken) return 'taken';
+  const from = normalize(titleOf(before));
+  let changed = 0;
+  for (const other of found.ids) {
+    const n = doc.content(other);
+    const [oldText, oldNote] = [n.text, n.note];
+    const text = relinkText(oldText, from, found.title);
+    const note = relinkText(oldNote, from, found.title);
+    if (text !== oldText) doc.apply({ t: 'setText', id: n.id, from: oldText, to: text, at: clock.now() });
+    if (note !== oldNote) doc.apply({ t: 'setNote', id: n.id, from: oldNote, to: note, at: clock.now() });
+    if (text !== oldText || note !== oldNote) changed++;
+  }
+  return changed;
 }
 
 /**

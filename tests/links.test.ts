@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { tokenBefore } from '../src/model/complete';
-import type { Doc } from '../src/model/doc';
+import { invert, type Doc } from '../src/model/doc';
+import { relink } from '../src/model/commands';
+import { VisibleRows } from '../src/model/rows';
 import { plainText } from '../src/model/format';
 import { backlinks, closesLink, compareOrder, findTargets, linkBefore, linkEnd, opensLink, resolveLink, titleOf } from '../src/model/links';
 import { TextIndex, decorate } from '../src/model/search';
@@ -184,5 +186,53 @@ describe('backlinks', () => {
     const index = new TextIndex(doc);
     expect(backlinks(doc, index, 'Итоги')).toEqual(['[[Итоги]]']);
     expect(backlinks(doc, index, 'second')).toEqual([]);
+  });
+});
+
+describe('relink: links follow a retitled bullet', () => {
+  /** Retitles `id` to `text` and settles its links, as the editor does once the caret moves on. */
+  function retitle(doc: Doc, id: NodeId, text: string) {
+    const before = doc.get(id).text;
+    const index = new TextIndex(doc);
+    let result!: number | 'taken';
+    const ops = doc.transact(() => {
+      doc.apply({ t: 'setText', id, from: before, to: text });
+      result = relink({ doc, rows: new VisibleRows(doc) }, index, id, before);
+    });
+    return { result, ops };
+  }
+
+  it('rewrites links in texts and notes, any case, and leaves other links alone', () => {
+    const doc = build(['Пьер', 'Война', '  см. [[пьер]] и [[Война]]', '  второй', 'Мир']);
+    doc.apply({ t: 'setNote', id: 'второй', from: '', to: 'в заметке [[ПЬЕР]]' });
+    const { result, ops } = retitle(doc, 'Пьер', 'Пьер **Безухов**');
+    expect(result).toBe(2);
+    expect(doc.get('  см. [[пьер]] и [[Война]]'.trim()).text).toBe('см. [[Пьер Безухов]] и [[Война]]');
+    expect(doc.get('второй').note).toBe('в заметке [[Пьер Безухов]]');
+    expect(backlinks(doc, new TextIndex(doc), 'Пьер')).toEqual(['см. [[пьер]] и [[Война]]', 'второй']);
+    // One transaction: undone together, the old title and the old links come back.
+    doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(doc.get('см. [[пьер]] и [[Война]]').text).toBe('см. [[пьер]] и [[Война]]');
+    expect(doc.get('второй').note).toBe('в заметке [[ПЬЕР]]');
+  });
+
+  it('changes nothing when only formatting or case changed, or the old title could not be linked', () => {
+    const doc = build(['Пьер', '  [[Пьер]]', '']);
+    expect(retitle(doc, 'Пьер', '**пьер**').result).toBe(0);
+    expect(doc.get('[[Пьер]]').text).toBe('[[Пьер]]');
+    expect(retitle(doc, '', 'Новый').result).toBe(0);
+  });
+
+  it('leaves links that led to an earlier bullet with the old title', () => {
+    const doc = build(['Итоги', '  [[Итоги]]']);
+    add(doc, doc.root, 'second', 'Итоги');
+    expect(retitle(doc, 'second', 'Итоги года').result).toBe(0);
+    expect(doc.get('[[Итоги]]').text).toBe('[[Итоги]]');
+  });
+
+  it('leaves links alone when an earlier bullet has the new title: they would lead there', () => {
+    const doc = build(['Мир', 'Пьер', '  [[Пьер]]']);
+    expect(retitle(doc, 'Пьер', 'Мир').result).toBe('taken');
+    expect(doc.get('[[Пьер]]').text).toBe('[[Пьер]]');
   });
 });

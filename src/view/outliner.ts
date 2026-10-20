@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -17,6 +17,7 @@ import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
 import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
+import { plural } from '../util/plural';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
@@ -112,7 +113,7 @@ export class Outliner {
   private setCameFrom: Setter<{ to: NodeId; from: NodeId } | null>;
   /** The zoom title or its note being edited: the editing bar (EditBar.tsx) serves them too. */
   readonly titleEdit: Accessor<TitleEdit>;
-  readonly editTitle: Setter<TitleEdit>;
+  private setTitleEdit: Setter<TitleEdit>;
   /** Bumped to open the keyboard shortcuts panel. */
   readonly helpRequests: Accessor<number>;
   private setHelpRequests: Setter<number>;
@@ -170,6 +171,12 @@ export class Outliner {
    * it that text back there. Typing more forgets it.
    */
   private erased = new Map<NodeId, string>();
+  /**
+   * The bullet whose text is being typed, with the text it had before:
+   * once editing moves on (`settleTitle`), links to its old title follow it
+   * to the new one.
+   */
+  private retitled: { id: NodeId; before: string } | null = null;
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -209,7 +216,7 @@ export class Outliner {
     [this.searchRequests, this.setSearchRequests] = createSignal(0);
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
-    [this.titleEdit, this.editTitle] = createSignal<TitleEdit>(null);
+    [this.titleEdit, this.setTitleEdit] = createSignal<TitleEdit>(null);
     [this.cameFrom, this.setCameFrom] = createSignal<{ to: NodeId; from: NodeId } | null>(null);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.helpRequests, this.setHelpRequests] = createSignal(0);
@@ -244,6 +251,7 @@ export class Outliner {
 
   /** Moves the caret; editing a row ends a selection. */
   setFocus(f: FocusRequest | null): void {
+    if (this.retitled && (!f || !this.doc.has(nodeOf(f.id)) || this.contentOf(f.id).id !== this.retitled.id)) this.settleTitle();
     batch(() => {
       if (f && this.selection()) this.setSelectionSignal(null);
       this.setFocusSignal(f);
@@ -252,6 +260,7 @@ export class Outliner {
 
   /** Selects rows from `anchor` to `head` (null clears); leaves editing. */
   select(selection: Selection | null): void {
+    if (selection) this.settleTitle();
     batch(() => {
       this.setSelectionSignal(selection);
       if (selection) this.setFocusSignal(null);
@@ -369,6 +378,7 @@ export class Outliner {
    * makes its bullet, last in the structure's Inbox (one undo step).
    */
   followLink(title: string, from?: RowKey): void {
+    this.settleTitle();
     let id = resolveLink(this.doc, this.text, title);
     const inbox = id ? null : findInbox(this.doc);
     if (!id && inbox !== null && !this.readOnly) {
@@ -408,6 +418,7 @@ export class Outliner {
    * over the new place, so its results show level after level.
    */
   zoomTo(key: RowKey | null, keepSearch = false): void {
+    this.settleTitle();
     let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
     if (id && this.doc.has(id)) id = this.doc.origin(id);
@@ -1054,11 +1065,41 @@ export class Outliner {
     return true;
   }
 
+  /** The zoom title or its note starts or stops being edited (ZoomHeader.tsx, EditBar.tsx); leaving it settles a new title. */
+  readonly editTitle = (edit: TitleEdit): void => {
+    if (!edit) this.settleTitle();
+    this.setTitleEdit(edit);
+  };
+
+  /**
+   * Editing has moved on from a bullet whose text was typed: if its title
+   * changed, links that led to it under the old one are rewritten to the new
+   * one (model/commands.ts `relink`), one undo step, and a toast tells how
+   * many. Not while typing: a title half typed may name another bullet.
+   */
+  settleTitle(): void {
+    const r = this.retitled;
+    this.retitled = null;
+    if (!r || this.readOnly || !this.doc.has(r.id) || !this.doc.inOutline(r.id)) return;
+    let result = 0 as number | 'taken';
+    const before = r.before;
+    this.run((ctx) => {
+      result = relink(ctx, this.text, r.id, before);
+    }, this.keepFocus());
+    const title = titleOf(this.doc.get(r.id).text);
+    if (result === 'taken') this.notify(`Ссылки на «${titleOf(before)}» не изменены: «${title}» уже есть выше в документе`);
+    else if (result) this.notify(`Ссылки на «${title}» обновлены в ${result} ${plural(result, 'пункте', 'пунктах', 'пунктах')}`);
+  }
+
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: RowKey, text: string): void {
     if (this.readOnly) return;
     // Erasing: the text it had before goes with the bullet, if it is then deleted (`keepErased`).
     const n = this.doc.content(nodeOf(id));
+    if (this.retitled?.id !== n.id) {
+      this.settleTitle();
+      this.retitled = { id: n.id, before: n.text };
+    }
     if (text.length < n.text.length) {
       if (!this.erased.has(n.id)) this.erased.set(n.id, n.text);
     } else if (text.length > n.text.length) this.erased.delete(n.id);
