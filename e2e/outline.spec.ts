@@ -453,11 +453,25 @@ test.describe('zoom', () => {
     await expect(page.locator('.search')).toHaveValue('');
     await expect(page.locator('.searchbar .count')).toHaveCount(0);
     expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
-    // Leaving by the path does not bring the search back either.
+  });
+
+  test('going up by the path keeps the search: its results show at every level', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('шерер');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[3].trim()]);
+    await crumbs(page).filter({ hasText: 'Том первый' }).click();
+    await expect(title(page)).toHaveText('Том первый');
+    await expect(page.locator('.search')).toHaveValue('шерер');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    expect(await outline(page)).toEqual([DEMO[1].trim(), `  ${DEMO[3].trim()}`]);
     await crumbs(page).filter({ hasText: 'Главная' }).click();
-    await expect(page.locator('.search')).toHaveValue('');
-    expect(await outline(page)).toEqual(DEMO);
+    await expect(title(page)).toHaveCount(0);
+    await expect(page.locator('.search')).toHaveValue('шерер');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
+    // Wider up, more is found: what the search covers is the place.
+    await page.locator('.search').fill('Часть');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
   });
 
   test('inside a zoom, search covers only the zoomed-in bullet and Shift+Tab cannot leave it', async ({ page }) => {
@@ -518,13 +532,13 @@ test.describe('zoom', () => {
   });
 });
 
-test('"Главная" goes home, and there folds the top level: out of zoom and search, one undo step', async ({ page }) => {
+test('"Главная" goes home with the search, and there folds the top level: out of the search, one undo step', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   await expect(page.locator('.zoom-title')).toHaveCount(0);
-  expect(await outline(page)).toEqual(DEMO);
-  await page.locator('.search').fill('шерер');
+  await expect(page.locator('.search')).toHaveValue('шерер');
+  expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   await expect(page.locator('.zoom-title')).toHaveCount(0);
   await expect(page.locator('.search')).toHaveValue('');

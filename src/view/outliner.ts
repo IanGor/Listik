@@ -360,9 +360,11 @@ export class Outliner {
   /**
    * Zoom into a bullet: it becomes the title, its children the top level.
    * A search in progress is cleared: you went to a place found, so it shows
-   * whole (a search started inside a zoom covers only that bullet).
+   * whole (a search started inside a zoom covers only that bullet). With
+   * `keepSearch` (a crumb: up the path), the search stays and runs again
+   * over the new place, so its results show level after level.
    */
-  zoomTo(key: RowKey | null): void {
+  zoomTo(key: RowKey | null, keepSearch = false): void {
     let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
     if (id && this.doc.has(id)) id = this.doc.origin(id);
@@ -372,7 +374,7 @@ export class Outliner {
       // The new top first: under the filter that rebuild lists only the paths, and the clear then lists the place.
       this.rows.setTop(target ?? this.doc.root);
       this.setZoomSignal(target);
-      if (this.query() || this.filter()) this.setQuery('', true);
+      if (this.query() || this.filter()) this.setQuery(keepSearch ? this.query() : '', true);
       this.syncRows();
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
