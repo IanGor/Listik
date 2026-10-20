@@ -10,9 +10,9 @@ import type { Focus, NodeId } from './types';
 /**
  * Templates: a bullet tagged `#template` is one, with everything inside it;
  * its name is its text without the tag. `/template` in any bullet (or `/`
- * and a few letters of a name, view/Suggest.tsx) offers them, and the one
- * taken comes in as a copy: in place of the bullet if it holds nothing
- * else, otherwise as the next bullet at the same level.
+ * and a few letters of a name, view/Suggest.tsx) offers them, and what is
+ * inside the one taken comes in as a copy, at the bullet's level: from the
+ * bullet itself if it holds nothing else, otherwise after it.
  */
 
 export const TEMPLATE_TAG = 'template';
@@ -58,31 +58,39 @@ export function templateTree(doc: Doc, id: NodeId): Tree {
 
 /**
  * A template taken from the suggestions, its `/template…` token at
- * [start, end) of the row's text: the row becomes the template if nothing
- * else is in it (no other text, note or bullets), else the template comes
- * in as the next bullet at the row's level. The caret goes to the end of
- * the template's name.
+ * [start, end) of the row's text: what is inside the template comes in at
+ * the row's level, without the template's own bullet (its name and tag).
+ * An empty row (no other text, note or bullets) takes the first of them,
+ * the rest following it; otherwise they all come in after the row. The
+ * caret goes to the end of the first. A template with nothing inside only
+ * loses its token: null then.
  */
-export function insertTemplate(ctx: Ctx, key: RowKey, template: NodeId, start: number, end: number): Focus | void {
+export function insertTemplate(ctx: Ctx, key: RowKey, template: NodeId, start: number, end: number): Focus | null {
   const { doc } = ctx;
-  if (!doc.has(template)) return;
+  if (!doc.has(template)) return null;
   const id = nodeOf(key);
-  const tree = templateTree(doc, template);
+  const trees = templateTree(doc, template).children;
   const c = doc.content(id);
   const host = doc.host(id);
   const rest = c.text.slice(0, start) + c.text.slice(end);
+  const parent = doc.get(id).parent!;
+  const after = doc.index(id) + 1;
+  if (!trees.length) {
+    setText(ctx, key, rest);
+    return null;
+  }
   if (host && !rest.trim() && !c.note && !host.children.length) {
-    setText(ctx, key, tree.text);
-    if (tree.note) setNote(ctx, key, tree.note);
-    if (tree.todo && !c.todo) doc.apply({ t: 'setTodo', id: c.id, from: false, to: true });
-    placeTrees(ctx, host.id, 0, tree.children);
-    return { id: key, caret: tree.text.length };
+    const [first, ...others] = trees;
+    setText(ctx, key, first.text);
+    if (first.note) setNote(ctx, key, first.note);
+    if (first.todo && !c.todo) doc.apply({ t: 'setTodo', id: c.id, from: false, to: true });
+    placeTrees(ctx, host.id, 0, first.children);
+    placeTrees(ctx, parent, after, others);
+    return { id: key, caret: first.text.length };
   }
   setText(ctx, key, rest);
-  const parent = doc.get(id).parent!;
-  const index = doc.index(id) + 1;
-  const made = placeTrees(ctx, parent, index, [tree]) as Focus;
-  return { id: made.id, caret: tree.text.length };
+  const made = placeTrees(ctx, parent, after, trees) as Focus;
+  return { id: made.id, caret: trees[0].text.length };
 }
 
 /**

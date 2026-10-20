@@ -910,9 +910,15 @@ export class Outliner {
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
   }
 
-  /** A template taken from the `/` suggestions (model/templates.ts): one undo step, the caret at the end of its name. */
+  /** A template taken from the `/` suggestions (model/templates.ts): what is inside it comes in, one undo step. */
   insertTemplate(id: RowKey, template: NodeId, start: number, end: number): void {
-    this.run((ctx) => insertTemplate(ctx, id, template, start, end), { id, caret: start });
+    let empty = false;
+    this.run((ctx) => {
+      const f = insertTemplate(ctx, id, template, start, end);
+      empty = f === null;
+      return f ?? { id, caret: start };
+    }, { id, caret: start });
+    if (empty) this.notify('В шаблоне пока ничего нет: добавьте в него пункты');
   }
 
   /**

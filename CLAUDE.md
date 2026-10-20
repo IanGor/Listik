@@ -45,7 +45,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **тольк
   - `format.ts` — `**жирный**`, `*курсив*`, скобки `[[ссылок]]`, веб-адреса (`webLinks`, флаг `URL`): флаги символов, `plainText`, `toggleFormat` (Ctrl+B/I, `Outliner.format`);
   - `links.ts` — ссылки `[[название]]`: `titleOf`, `resolveLink` (первый в порядке документа), `linkBefore`, пара скобок (`opensLink`/`closesLink`), подсказки `findTargets`, обратные ссылки `backlinks`/`linkEnd`; переход — `Outliner.followLink` (запоминает `cameFrom`), назад — `Outliner.goToBacklink`;
   - `mirrors.ts` — зеркала `((название))`: `mirrorBefore`, пара скобок, `isMirror`; поле `OutlineNode.mirrorOf`, операция `setMirror`, `Doc.content(id)` (чьи текст/заметку/задачу показывает строка), `Doc.origin(id)`, `Doc.host(id)` (чьи дети под строкой); команда `makeMirror`;
-  - `templates.ts` — шаблоны: пункты с `#template` (`findTemplates`, `templateTitle`, `matchTemplates`), вставка копии через `/template` (`insertTemplate`: в пустой пункт или следующим соседом);
+  - `templates.ts` — шаблоны: пункты с `#template` (`findTemplates`, `templateTitle`, `matchTemplates`), вставка содержимого (без заголовка, на уровне строки) через `/template` (`insertTemplate`: с пустого пункта или после пункта с текстом);
   - `complete.ts` — подсказки `/команд`, `#тегов` и `[[ссылок`: токен перед курсором, фильтр, предел по высоте окна (показывает `view/Suggest.tsx`);
   - `search.ts` — `parseQuery` (Clause, OR, `-`, `is:`), `TextIndex` (ленивая нормализованная копия), `findMatches`, `decorate`;
   - `history.ts` — undo/redo, набор текста группируется по словам;
@@ -87,7 +87,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **тольк
 - **Подсказка** (`Suggest.tsx`) — список команд `/`, тегов `#`/`@` и пунктов для `[[ссылки` под курсором.
 - **Ссылка** — `[[название]]` в тексте пункта; ведёт в первый по документу пункт с таким названием.
 - **Зеркало / копии** — `((название))` делает пункт ещё одной копией другого. Все копии равноправны: ромбик у каждой (`Doc.isCopy`), текст, заметка, задача и поддерево общие, правка из любой. Внутри данные в одной копии (origin), остальные — пункты с `mirrorOf` без своих детей. Удаление копии убирает только её (origin передаёт всё следующей: `handOver`); одна оставшаяся — обычный пункт. Свёрнутость под каждым зеркалом своя (`VisibleRows.folds`, на устройстве).
-- **Шаблон** (`templates.ts`) — пункт с `#template` со всем вложенным; `/template` вставляет копию.
+- **Шаблон** (`templates.ts`) — пункт с `#template` со всем вложенным; `/template` вставляет копию содержимого без самого заголовка.
 - **Быстрая запись** (`QuickCapture.tsx`) — одна строка «Мысль → Inbox» поверх списка; запись — в конец Inbox, курсор возвращается на место. Не «+»: «+» значит «добавить здесь».
 - **Ключ строки** (`RowKey`) — адрес строки в списке: id пункта, а под зеркалом `ключ-зеркала/id`.
 

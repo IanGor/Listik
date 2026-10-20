@@ -1629,7 +1629,7 @@ test.describe('time', () => {
 });
 
 test.describe('templates', () => {
-  test('a bullet tagged #template is offered for /: it fills an empty bullet, or comes in as the next one; tasks unchecked', async ({ page }) => {
+  test('a bullet tagged #template is offered for /: what is inside it comes in at the row\'s level, without its own bullet; tasks unchecked', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     await page.keyboard.type('Встреча #template');
@@ -1642,28 +1642,28 @@ test.describe('templates', () => {
     await page.keyboard.press('Control+l');
     await page.keyboard.press('Escape');
 
-    // In an empty bullet: it becomes the template, with all inside it.
+    // In an empty bullet: it takes the first, the rest follow at its level.
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Enter');
     await page.keyboard.type('/встр');
     const option = page.getByRole('option', { name: /Встреча/ });
     await expect(option).toContainText('шаблон');
     await page.keyboard.press('Enter');
-    await expect(editing(page)).toHaveText('Встреча');
-    expect((await outline(page)).slice(4, 8)).toEqual(['  Часть вторая', '  Встреча', '    Повестка', '    Итоги']);
+    await expect(editing(page)).toHaveText('Повестка');
+    expect((await outline(page)).slice(4, 8)).toEqual(['  Часть вторая', '  Повестка', '  Итоги', 'Том второй']);
     // Copied unchecked, a task still.
     const copy = page.locator('.row', { hasText: 'Итоги' }).first();
     await expect(copy.locator('.bullet')).toHaveClass(/todo/);
     await expect(copy).not.toHaveClass(/done/);
 
-    // In a bullet with text: the template comes in as the next bullet, and /template lists them all.
+    // In a bullet with text: it all comes in after it, and /template lists them all.
     await page.keyboard.press('Escape');
     await edit(page, 'Часть первая');
     await page.keyboard.type(' /template');
     await expect(page.getByRole('option', { name: /Встреча/ })).toHaveCount(1);
     await page.getByRole('option', { name: /Встреча/ }).click();
-    await expect(editing(page)).toHaveText('Встреча');
-    expect((await outline(page)).slice(1, 6)).toEqual(['  Часть первая ', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Встреча', '    Повестка']);
+    await expect(editing(page)).toHaveText('Повестка');
+    expect((await outline(page)).slice(1, 6)).toEqual(['  Часть первая ', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Повестка', '  Итоги']);
     // One undo step takes it back.
     await page.keyboard.press('Control+z');
     expect((await outline(page)).slice(1, 5)).toEqual(['  Часть первая /template', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Часть вторая']);

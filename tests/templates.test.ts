@@ -72,26 +72,32 @@ describe('templates', () => {
     expect(t).toEqual({ text: 'Чек', note: '', todo: false, children: [{ text: 'пункт', note: '', todo: true, children: [] }] });
   });
 
-  it('fills an empty bullet with it, or else comes in as the next bullet at the same level', () => {
+  it('puts in what is inside it, at the row\'s level and without its own bullet: from an empty row, or after a row with text', () => {
     const { doc, ctx, run } = withTokens();
-    expect(run(() => insertTemplate(ctx, 'пустой', 'Встреча #template', 0, 9))).toEqual({ id: 'пустой', caret: 7 });
+    expect(run(() => insertTemplate(ctx, 'пустой', 'Встреча #template', 0, 9))).toEqual({ id: 'пустой', caret: 8 });
     const g = run(() => insertTemplate(ctx, 'текст', 'Встреча #template', 10, 19))!;
-    expect(dump(doc).slice(-10)).toEqual([
+    expect(dump(doc).slice(-8)).toEqual([
       'место',
-      '  Встреча',
-      '    Повестка',
-      '      вопрос',
-      '    Итоги',
+      '  Повестка',
+      '    вопрос',
+      '  Итоги',
       '  уже текст  тут',
-      '  Встреча',
-      '    Повестка',
-      '      вопрос',
-      '    Итоги',
+      '  Повестка',
+      '    вопрос',
+      '  Итоги',
     ]);
-    expect(doc.get(g.id).text).toBe('Встреча');
-    expect(g.caret).toBe(7);
+    expect(doc.get(g.id).text).toBe('Повестка');
+    expect(g.caret).toBe(8);
+    expect(dump(doc).join('\n')).not.toContain('Встреча\n    Повестка');
     // The template itself stays as it was.
     expect(dump(doc).slice(0, 4)).toEqual(lines.slice(0, 4));
     checkInvariants(doc);
+  });
+
+  it('a template with nothing inside only takes the token out', () => {
+    const { doc, ctx, run } = setup(['Пусто #template', 'место']);
+    run(() => doc.apply({ t: 'setText', id: 'место', from: 'место', to: 'а /template' }));
+    expect(run(() => insertTemplate(ctx, 'место', 'Пусто #template', 2, 11))).toBeNull();
+    expect(dump(doc)).toEqual(['Пусто #template', 'а ']);
   });
 });
