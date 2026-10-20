@@ -9,6 +9,8 @@ export interface Tree {
   /** A task: `- [ ]`, or `- [x]` when done. */
   todo?: boolean;
   done?: boolean;
+  /** Folded (the structure's quarters, the calendar's days); import and export leave it out. */
+  collapsed?: boolean;
   children: Tree[];
 }
 

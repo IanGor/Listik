@@ -1,75 +1,76 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calendarTree, createCalendar, dayOf, findCalendar, findPeriod, findYear, neighbour, openYear, periodAt, periodOf, periodText,
-  type Period,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findPeriod, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
+  periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
 import type { Tree } from '../src/model/outline-text';
 import { TagIndex } from '../src/model/tags';
-import { dump, setup } from './helpers';
+import { dump, dumpRows, setup } from './helpers';
 
 const count = (t: Tree): number => 1 + t.children.reduce((n, c) => n + count(c), 0);
-const day = (m: number, d: number): Period => ({ kind: 'day', m, d });
+const day = (y: number, m: number, d: number): Period => ({ kind: 'day', y, m, d });
 
-describe('calendar tree', () => {
-  it('has 4 quarters, 12 months and 366 days, named by tags with two digits', () => {
-    const t = calendarTree();
-    expect(count(t)).toBe(1 + 4 + 12 + 366);
-    expect(t.text).toBe('@календарь');
-    expect(t.children.map((q) => q.text)).toEqual(['@q1', '@q2', '@q3', '@q4']);
-    const feb = t.children[0].children[1];
-    expect(feb.text).toBe('@m02');
-    expect(feb.children.map((d) => d.text).slice(-2)).toEqual(['@d28 @m02', '@d29 @m02']);
-    expect(t.children[3].children[0].children[18].text).toBe('@d19 @m10');
+describe('weeks', () => {
+  it('are ISO weeks: from Monday, week 1 holds the first Thursday', () => {
+    expect(isoWeek(2026, 1, 1)).toBe(1);
+    expect(isoWeek(2025, 12, 29)).toBe(1);
+    expect(isoWeek(2027, 1, 1)).toBe(53);
+    expect(isoWeek(2026, 10, 18)).toBe(42);
+    expect(isoWeek(2026, 10, 19)).toBe(43);
+  });
+
+  it('of a month: a week spanning two months is in both', () => {
+    expect(weeksOf(2026, 10)).toEqual([40, 41, 42, 43, 44]);
+    expect(weeksOf(2026, 11)).toEqual([44, 45, 46, 47, 48, 49]);
   });
 });
 
-describe('periodOf', () => {
-  it('reads a period from the bullet’s own tags', () => {
-    expect(periodOf('@d19 @m10')).toEqual(day(10, 19));
-    expect(periodOf('@m10 @d19 планы')).toEqual(day(10, 19));
-    expect(periodOf('@m10')).toEqual({ kind: 'month', m: 10 });
-    expect(periodOf('@q4')).toEqual({ kind: 'quarter', q: 4 });
-    expect(periodText(periodOf('@d01 @m01')!)).toBe('@d01 @m01');
+describe('structure', () => {
+  it('a year in a quarter: its months, weeks and days, named by tags, the days folded', () => {
+    const t = yearTree(2026, 4);
+    expect(t.text).toBe('@y2026');
+    expect(t.children.map((m) => m.text)).toEqual(['@m10', '@m11', '@m12']);
+    const oct = t.children[0];
+    expect(oct.children.map((w) => w.text)).toEqual(['@w40', '@w41', '@w42', '@w43', '@w44']);
+    expect(oct.children[0].children.map((d) => d.text)).toEqual([
+      '@d01 @m10 @четверг', '@d02 @m10 @пятница', '@d03 @m10 @суббота', '@d04 @m10 @воскресенье',
+    ]);
+    expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @понедельник', collapsed: true, children: [] });
+    expect(count(t)).toBe(1 + 3 + 5 + 6 + 5 + 92);
+    expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @вторник');
   });
 
-  it('is null for other bullets and impossible dates', () => {
-    expect(periodOf('@y2026')).toBeNull();
-    expect(periodOf('созвон')).toBeNull();
-    expect(periodOf('@d31 @m02')).toBeNull();
-    expect(periodOf('@m13')).toBeNull();
-    expect(periodOf('@m1')).toBeNull();
-    expect(periodOf('@d19')).toBeNull();
-    expect(periodOf('@q5')).toBeNull();
-  });
-});
-
-describe('neighbour', () => {
-  it('steps over months and the year’s end', () => {
-    expect(neighbour(day(10, 31), 1, 2026)).toEqual(day(11, 1));
-    expect(neighbour(day(11, 1), -1, 2026)).toEqual(day(10, 31));
-    expect(neighbour(day(12, 31), 1, 2026)).toEqual(day(1, 1));
-    expect(neighbour(day(1, 1), -1, 2026)).toEqual(day(12, 31));
+  it('nine bullets with notes; the quarters folded, with the year', () => {
+    const trees = structureTrees(2026);
+    expect(trees.map((t) => t.text)).toEqual(['Inbox', '@q1', '@q2', '@q3', '@q4', 'Projects', 'Hubs', 'Reference', 'Archive']);
+    expect(trees.map((t) => t.note)).toEqual(STRUCTURE.map((s) => s.note));
+    expect(trees.every((t) => t.note)).toBe(true);
+    expect(trees[4].collapsed).toBe(true);
+    expect(trees[4].children.map((y) => y.text)).toEqual(['@y2026']);
+    expect(trees[0].children).toEqual([]);
   });
 
-  it('skips 29 February in a common year only', () => {
-    expect(neighbour(day(2, 28), 1, 2026)).toEqual(day(3, 1));
-    expect(neighbour(day(3, 1), -1, 2026)).toEqual(day(2, 28));
-    expect(neighbour(day(2, 28), 1, 2028)).toEqual(day(2, 29));
-    expect(neighbour(day(3, 1), -1, 2028)).toEqual(day(2, 29));
-    expect(neighbour(day(2, 28), 1, 2100)).toEqual(day(3, 1));
-    expect(neighbour(day(2, 28), 1, 2000)).toEqual(day(2, 29));
-  });
-
-  it('wraps months and quarters', () => {
-    expect(neighbour({ kind: 'month', m: 12 }, 1, 2026)).toEqual({ kind: 'month', m: 1 });
-    expect(neighbour({ kind: 'month', m: 1 }, -1, 2026)).toEqual({ kind: 'month', m: 12 });
-    expect(neighbour({ kind: 'quarter', q: 4 }, 1, 2026)).toEqual({ kind: 'quarter', q: 1 });
-  });
-
-  it('takes the date of a Date', () => {
-    expect(dayOf(new Date(2026, 9, 19, 23, 59))).toEqual(day(10, 19));
+  it('goes in last at the top level, whatever is there, and twice if asked', () => {
+    const { doc, ctx, rows, run } = setup(['а']);
+    const tags = new TagIndex(doc);
+    expect(hasStructure(doc, tags)).toBe(false);
+    const first = run(() => createStructure(ctx, 2026));
+    expect(doc.get(doc.get(doc.root).children[1]).text).toBe('Inbox');
+    expect(doc.get(first).text).toBe('Inbox');
+    expect(dumpRows(rows, doc)).toEqual(['а', 'Inbox', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]', 'Projects', 'Hubs', 'Reference', 'Archive']);
+    expect(hasStructure(doc, tags)).toBe(true);
+    const q4 = findQuarter(doc, tags, 4)!;
+    expect(findPeriod(doc, tags, day(2026, 2, 28))).not.toBeNull();
+    expect(findPeriod(doc, tags, day(2026, 10, 19))).not.toBeNull();
+    run(() => createStructure(ctx, 2026));
+    expect(doc.get(doc.root).children.length).toBe(1 + 18);
+    // The first one stays the calendar.
+    expect(findQuarter(doc, tags, 4)).toBe(q4);
+    const oct19 = findPeriod(doc, tags, day(2026, 10, 19))!;
+    expect(doc.within(oct19, q4)).toBe(true);
+    checkInvariants(doc);
   });
 });
 
@@ -77,87 +78,134 @@ describe('finding periods', () => {
   const lines = [
     'проект',
     '  созвон @d19 @m10',
-    '@календарь',
-    '  @q4',
+    '  @q4 вложенный',
+    '@q4',
+    '  @y2025',
+    '    @m10 прошлый',
+    '      @w42',
+    '        @d19 @m10 @воскресенье',
+    '  @y2026',
     '    @m10',
-    '      @d18 @m10',
-    '      @d19 @m10',
-    '        @y2026',
-    '          запись @d19 @m10',
-    '      @d20 @m10',
+    '      @w43',
+    '        @d19 @m10 @понедельник',
+    '          запись @d24 @m10',
+    '          @m11 внутри дня',
+    '        @d20 @m10 @вторник',
   ];
 
-  it('finds the calendar, the day, the month and the quarter by their tags', () => {
+  it('by tags and the periods around them, year by year', () => {
     const { doc } = setup(lines);
     const tags = new TagIndex(doc);
-    const cal = findCalendar(doc, tags)!;
-    expect(cal).toBe('@календарь');
-    // Not the entry that mentions the day, inside the day or elsewhere.
-    expect(findPeriod(doc, tags, cal, day(10, 19))).toBe('@d19 @m10');
-    expect(findPeriod(doc, tags, cal, { kind: 'month', m: 10 })).toBe('@m10');
-    expect(findPeriod(doc, tags, cal, { kind: 'quarter', q: 4 })).toBe('@q4');
-    expect(findPeriod(doc, tags, cal, day(10, 21))).toBeNull();
+    expect(findQuarter(doc, tags, 4)).toBe('@q4');
+    expect(findPeriod(doc, tags, day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
+    expect(findPeriod(doc, tags, day(2025, 10, 19))).toBe('@d19 @m10 @воскресенье');
+    expect(findPeriod(doc, tags, { kind: 'month', y: 2026, m: 10 })).toBe('@m10');
+    expect(findPeriod(doc, tags, { kind: 'month', y: 2025, m: 10 })).toBe('@m10 прошлый');
+    expect(findPeriod(doc, tags, { kind: 'week', y: 2026, m: 10, w: 43 })).toBe('@w43');
+    expect(findPeriod(doc, tags, { kind: 'quarter', y: 2026, q: 4 })).toBe('@y2026');
+    expect(findPeriod(doc, tags, { kind: 'quarter', y: 2027, q: 4 })).toBeNull();
   });
 
-  it('follows a renamed day, and loses one without its tags', () => {
-    const { doc, run } = setup(lines.slice(0, 7));
-    const tags = new TagIndex(doc);
-    run(() => doc.apply({ t: 'setText', id: '@d19 @m10', from: '@d19 @m10', to: '@d19 @m10 день рождения' }));
-    expect(findPeriod(doc, tags, '@календарь', day(10, 19))).toBe('@d19 @m10');
-    run(() => doc.apply({ t: 'setText', id: '@d19 @m10', from: '@d19 @m10 день рождения', to: 'день рождения' }));
-    expect(findPeriod(doc, tags, '@календарь', day(10, 19))).toBeNull();
-  });
-
-  it('never takes an entry in another day for a missing day', () => {
-    const { doc } = setup([...lines, '        созвон @d24 @m10', '        @m11']);
-    const tags = new TagIndex(doc);
-    expect(findPeriod(doc, tags, '@календарь', day(10, 24))).toBeNull();
-    expect(findPeriod(doc, tags, '@календарь', { kind: 'month', m: 11 })).toBeNull();
-    expect(periodAt(doc, '@календарь', '@d20 @m10')).toEqual(day(10, 20));
-    expect(periodAt(doc, '@календарь', 'запись @d19 @m10')).toBeNull();
-    expect(periodAt(doc, '@календарь', 'созвон @d19 @m10')).toBeNull();
-  });
-
-  it('finds the year’s bullet among the day’s children', () => {
+  it('never takes an entry for a period, nor a quarter below the top level', () => {
     const { doc } = setup(lines);
-    expect(findYear(doc, '@d19 @m10', 2026)).toBe('@y2026');
-    expect(findYear(doc, '@d19 @m10', 2025)).toBeNull();
+    const tags = new TagIndex(doc);
+    expect(findPeriod(doc, tags, day(2026, 10, 24))).toBeNull();
+    expect(findPeriod(doc, tags, { kind: 'month', y: 2026, m: 11 })).toBeNull();
+    expect(periodAt(doc, 'созвон @d19 @m10')).toBeNull();
+    expect(periodAt(doc, 'запись @d24 @m10')).toBeNull();
+    expect(periodAt(doc, '@m11 внутри дня')).toBeNull();
+    expect(periodAt(doc, '@q4 вложенный')).toBeNull();
+    expect(findQuarter(doc, tags, 4)).toBe('@q4');
+    expect(periodAt(doc, '@d20 @m10 @вторник')).toEqual(day(2026, 10, 20));
+    expect(periodAt(doc, '@w43')).toEqual({ kind: 'week', y: 2026, m: 10, w: 43 });
+  });
+
+  it('follows a renamed or moved day, and loses one without its tags', () => {
+    const { doc, run } = setup(lines);
+    const tags = new TagIndex(doc);
+    const id = '@d20 @m10 @вторник';
+    run(() => doc.apply({ t: 'setText', id, from: id, to: '@d20 @m10 @вторник день рождения' }));
+    expect(findPeriod(doc, tags, day(2026, 10, 20))).toBe(id);
+    const n = doc.get(id);
+    run(() => doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: '@m10', order: doc.orderAt('@m10', 1) } }));
+    expect(findPeriod(doc, tags, day(2026, 10, 20))).toBe(id);
+    run(() => doc.apply({ t: 'setText', id, from: '@d20 @m10 @вторник день рождения', to: 'день рождения' }));
+    expect(findPeriod(doc, tags, day(2026, 10, 20))).toBeNull();
   });
 });
 
-describe('openYear', () => {
-  it('makes this year’s bullet first, with an empty entry for the caret; undone whole', () => {
-    const { doc, ctx, run } = setup(['@календарь', '  @d19 @m10', '    @y2025', '      было']);
+describe('neighbour', () => {
+  it('steps days over months and years, 29 February only in a leap year', () => {
+    expect(neighbour(day(2026, 10, 31), 1)).toEqual(day(2026, 11, 1));
+    expect(neighbour(day(2026, 12, 31), 1)).toEqual(day(2027, 1, 1));
+    expect(neighbour(day(2027, 1, 1), -1)).toEqual(day(2026, 12, 31));
+    expect(neighbour(day(2027, 2, 28), 1)).toEqual(day(2027, 3, 1));
+    expect(neighbour(day(2028, 2, 28), 1)).toEqual(day(2028, 2, 29));
+  });
+
+  it('steps months and quarters over years', () => {
+    expect(neighbour({ kind: 'month', y: 2026, m: 12 }, 1)).toEqual({ kind: 'month', y: 2027, m: 1 });
+    expect(neighbour({ kind: 'month', y: 2026, m: 1 }, -1)).toEqual({ kind: 'month', y: 2025, m: 12 });
+    expect(neighbour({ kind: 'quarter', y: 2026, q: 4 }, 1)).toEqual({ kind: 'quarter', y: 2027, q: 1 });
+    expect(neighbour({ kind: 'quarter', y: 2026, q: 1 }, -1)).toEqual({ kind: 'quarter', y: 2025, q: 4 });
+  });
+
+  it('steps weeks as the outline has them: a week in two months twice', () => {
+    expect(neighbour({ kind: 'week', y: 2026, m: 10, w: 43 }, 1)).toEqual({ kind: 'week', y: 2026, m: 10, w: 44 });
+    expect(neighbour({ kind: 'week', y: 2026, m: 10, w: 44 }, 1)).toEqual({ kind: 'week', y: 2026, m: 11, w: 44 });
+    expect(neighbour({ kind: 'week', y: 2026, m: 11, w: 44 }, -1)).toEqual({ kind: 'week', y: 2026, m: 10, w: 44 });
+    expect(neighbour({ kind: 'week', y: 2026, m: 12, w: 53 }, 1)).toEqual({ kind: 'week', y: 2027, m: 1, w: 53 });
+  });
+
+  it('takes the date of a Date, and names periods', () => {
+    expect(dayOf(new Date(2026, 9, 19, 23, 59))).toEqual(day(2026, 10, 19));
+    expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
+    expect(periodName(day(2026, 10, 19))).toBe('19.10.2026');
+    expect(periodName({ kind: 'quarter', y: 2026, q: 4 })).toBe('4 квартал 2026');
+  });
+});
+
+describe('addYear', () => {
+  it('puts the year into each quarter in order, once; undone whole', () => {
+    const { doc, ctx, run } = setup([]);
+    const tags = new TagIndex(doc);
+    run(() => createStructure(ctx, 2026));
     const before = dump(doc);
     const ops = doc.transact(() => {
-      const f = openYear(ctx, '@d19 @m10', 2026);
-      expect(doc.get(f.id).text).toBe('');
-      expect(doc.get(doc.get(f.id).parent!).text).toBe('@y2026');
+      expect(addYear(ctx, tags, 2027)).toBe(true);
+      expect(addYear(ctx, tags, 2025)).toBe(true);
     });
-    expect(dump(doc)).toEqual(['@календарь', '  @d19 @m10', '    @y2026', '      ', '    @y2025', '      было']);
+    for (let q = 1; q <= 4; q++) {
+      expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y2025', '@y2026', '@y2027']);
+    }
+    expect(findPeriod(doc, tags, day(2027, 1, 1))).not.toBeNull();
+    expect(run(() => addYear(ctx, tags, 2027))).toBe(false);
     checkInvariants(doc);
     run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
     expect(dump(doc)).toEqual(before);
   });
 
-  it('opens an existing year at the end of its last entry, unfolding it, and adds nothing', () => {
-    const { doc, ctx, run } = setup(['@календарь', '  @d19 @m10', '    @y2026 [+]', '      утро', '      вечер']);
-    const f = run(() => openYear(ctx, '@d19 @m10', 2026));
-    expect(f).toEqual({ id: 'вечер', caret: 5 });
-    expect(dump(doc)).toEqual(['@календарь', '  @d19 @m10', '    @y2026', '      утро', '      вечер']);
+  it('leaves out a quarter that is gone', () => {
+    const { doc, ctx, run } = setup(['@q1', '  @y2026']);
+    const tags = new TagIndex(doc);
+    expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
+    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027']);
   });
 });
 
-describe('createCalendar', () => {
-  it('puts the whole calendar last at the top level, quarters folded', () => {
-    const { doc, ctx, rows, run } = setup(['а']);
-    const cal = run(() => createCalendar(ctx));
-    expect(doc.get(doc.root).children).toEqual(['а', cal]);
-    const tags = new TagIndex(doc);
-    expect(findCalendar(doc, tags)).toBe(cal);
-    expect(doc.get(cal).children.every((q) => doc.get(q).collapsed)).toBe(true);
-    expect(rows.length).toBe(1 + 1 + 4);
-    expect(findPeriod(doc, tags, cal, day(2, 29))).not.toBeNull();
+describe('fillDay', () => {
+  it('gives an empty day notes, a todo list with a task, then the hours, once', () => {
+    const { doc, ctx, run } = setup(['@d19 @m10 @понедельник']);
+    const id = '@d19 @m10 @понедельник';
+    expect(run(() => fillDay(ctx, id))).toBe(true);
+    expect(dump(doc)).toEqual([id, '  #notes', '    ', '  todo', '    ', ...SLOTS.map((s) => `  ${s}`)]);
+    const [notes, todo] = doc.get(id).children;
+    expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
+    expect(doc.get(doc.get(todo).children[0]).todo).toBe(true);
+    expect(SLOTS[0]).toBe('09:00');
+    expect(SLOTS.at(-1)).toBe('18:00');
+    expect(SLOTS.length).toBe(19);
+    expect(run(() => fillDay(ctx, id))).toBe(false);
     checkInvariants(doc);
   });
 });

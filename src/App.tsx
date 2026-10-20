@@ -51,9 +51,12 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
     if (opened.config && opened.secret && e instanceof DOMException && e.name === 'OperationError') return { damaged: opened };
     throw e;
   }
-  const { doc, persistence } = stored;
+  const { doc, persistence, fresh } = stored;
   console.info(`loaded ${doc.nodes.size - 2} bullets in ${Math.round(performance.now() - started)} ms`);
   const outliner = new Outliner(doc);
+  outliner.bare = new URLSearchParams(location.search).has('empty');
+  // A new document starts with the structure (model/calendar.ts).
+  if (fresh) outliner.firstStructure(true);
   outliner.persistence = persistence;
   outliner.opened = opened;
   persistence.onError = (e) => outliner.notify(`Не удалось сохранить: ${e instanceof Error ? e.message : String(e)}`);

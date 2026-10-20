@@ -78,11 +78,12 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
 
 const PERIOD_NAMES = {
   day: ['Предыдущий день', 'Следующий день'],
+  week: ['Предыдущая неделя', 'Следующая неделя'],
   month: ['Предыдущий месяц', 'Следующий месяц'],
   quarter: ['Предыдущий квартал', 'Следующий квартал'],
 };
 
-/** ‹ › at the end of the path in a period of the forever calendar: the one before, the one after. */
+/** ‹ › at the end of the path in a period of the calendar: the one before, the one after. */
 function PeriodSteps(props: { o: Outliner; kind: keyof typeof PERIOD_NAMES }) {
   const names = () => PERIOD_NAMES[props.kind];
   return (

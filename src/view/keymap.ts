@@ -25,8 +25,8 @@ export function formatSelection(o: Outliner, id: RowKey, el: HTMLElement, note: 
 }
 
 /**
- * Ctrl+Alt+← / Ctrl+Alt+→ in a period of the forever calendar: the day (month,
- * quarter) before or after. Wherever the caret is; returns whether handled.
+ * Ctrl+Alt+← / Ctrl+Alt+→ in a period of the calendar: the day (week, month,
+ * quarter of the year) before or after. Wherever the caret is; returns whether handled.
  */
 export function periodKeys(e: KeyboardEvent, o: Outliner): boolean {
   if (!e.ctrlKey || !e.altKey || e.shiftKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;

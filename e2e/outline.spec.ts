@@ -503,7 +503,7 @@ test.describe('zoom', () => {
   });
 
   test('the zoom survives a reload of a stored document', async ({ page }) => {
-    await page.goto('/?db=e2e-zoom');
+    await page.goto('/?db=e2e-zoom&empty');
     await page.locator('.row .text').click();
     await page.keyboard.type('Глава');
     await page.keyboard.press('Enter');
@@ -535,90 +535,111 @@ test('"Главная" goes home, and there folds the top level: out of zoom and
   expect(await outline(page)).toEqual(DEMO);
 });
 
-test.describe('forever calendar', () => {
+test.describe('structure and calendar', () => {
   const create = async (page: Page) => {
     await page.locator('.menu-button').click();
-    await page.getByRole('menuitem', { name: /Создать календарь/ }).click();
+    await page.getByRole('menuitem', { name: /Создать структуру/ }).click();
   };
   const two = (n: number) => String(n).padStart(2, '0');
+  const WEEKDAYS = ['@воскресенье', '@понедельник', '@вторник', '@среда', '@четверг', '@пятница', '@суббота'];
+  const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)} ${WEEKDAYS[d.getDay()]}`;
   const now = new Date();
-  const today = `@d${two(now.getDate())} @m${two(now.getMonth() + 1)}`;
+  const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  const today = dayText(now);
   const year = `@y${now.getFullYear()}`;
+  const quarter = Math.floor(now.getMonth() / 3) + 1;
+  const STRUCTURE = ['Inbox', '@q1', '@q2', '@q3', '@q4', 'Projects', 'Hubs', 'Reference', 'Archive'];
+  const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
+  /** A day as it is first entered: notes, a todo list with an empty task, the hours. */
+  const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
   const title = (page: Page) => page.locator('.zoom-title');
+  const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
 
-  test('the menu builds it once, named by tags, and goes to today; undo takes it all back', async ({ page }) => {
+  test('the menu puts it last at the top level and goes to today, filled, with no caret; undo takes it back', async ({ page }) => {
     await create(page);
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual([year, '  ']);
-    await page.locator('.crumbs .crumb', { hasText: '@календарь' }).click();
-    expect(await outline(page)).toEqual(['@q1', '@q2', '@q3', '@q4']);
-    await page.locator('.row', { hasText: '@q4' }).locator('.toggle').click();
-    expect((await outline(page)).slice(4, 8)).toEqual(['  @m10', '    @d01 @m10', '    @d02 @m10', '    @d03 @m10']);
-    await page.locator('.menu-button').click();
-    await expect(page.getByRole('menuitem', { name: /Создать календарь/ })).toHaveCount(0);
-    await page.keyboard.press('Escape');
-    // The unfold, today's year and the calendar itself.
-    for (let i = 0; i < 3; i++) await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DAY);
+    await expect(page.locator('.row').nth(3).locator('.bullet')).toHaveClass(/todo/);
+    await expect(caret(page)).toHaveCount(0);
+    for (const crumb of [`@q${quarter}`, year, new RegExp(`^@m${two(now.getMonth() + 1)}$`), /^@w\d\d$/]) {
+      await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);
+    }
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
+    expect(await outline(page)).toEqual([...DEMO, ...STRUCTURE]);
+    // The menu offers it again: a second one would go last too.
+    await page.locator('.menu-button').click();
+    await expect(page.getByRole('menuitem', { name: /Создать структуру/ })).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    // The day's template, then the structure.
+    for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z');
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('the logo opens today: this year first, the caret at its last entry; no second year', async ({ page }) => {
+  test('the logo opens today, as it was left; nothing comes in twice', async ({ page }) => {
     await page.locator('.brand').click();
-    await expect(page.locator('.toast')).toContainText('Календаря ещё нет');
+    await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
-    await expect(editing(page)).toBeFocused();
+    await expect(title(page)).toHaveText(today);
+    await page.locator('.row .text').nth(1).click();
     await page.keyboard.type('утро');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
     await page.locator('.brand').click();
     await expect(title(page)).toHaveText(today);
-    await expect(editing(page)).toHaveText('утро');
-    await page.keyboard.type(', кофе');
-    expect(await outline(page)).toEqual([year, '  утро, кофе']);
+    await expect(caret(page)).toHaveCount(0);
+    expect(await outline(page)).toEqual(['#notes', '  утро', ...DAY.slice(2)]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
-  test('‹ › and Ctrl+Alt+←/→ step to the day, month or quarter before and after', async ({ page }) => {
-    const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)}`;
-    const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
+  test('‹ › and Ctrl+Alt+←/→ step to the day, week, month or quarter before and after', async ({ page }) => {
     await expect(page.locator('.period-steps')).toHaveCount(0);
     await create(page);
-    // While writing in today's entry.
-    await expect(editing(page)).toBeFocused();
     await page.keyboard.press('Control+Alt+ArrowRight');
     await expect(title(page)).toHaveText(dayText(shifted(1)));
+    // Entered for the first time: filled.
+    expect(await outline(page)).toEqual(DAY);
     await page.getByRole('button', { name: 'Следующий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(2)));
     await page.keyboard.press('Control+Alt+ArrowLeft');
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await expect(title(page)).toHaveText(today);
-    // Today's year was made by going there, the others were not.
-    expect(await outline(page)).toEqual([year, '  ']);
+    await page.locator('.crumbs .crumb', { hasText: /^@w\d\d$/ }).click();
+    const week = await title(page).textContent();
+    await page.getByRole('button', { name: 'Следующая неделя' }).click();
+    await expect(title(page)).toHaveText(/^@w\d\d$/);
+    await page.getByRole('button', { name: 'Предыдущая неделя' }).click();
+    await expect(title(page)).toHaveText(week!);
     await page.locator('.crumbs .crumb', { hasText: /^@m/ }).click();
     await page.getByRole('button', { name: 'Следующий месяц' }).click();
     await expect(title(page)).toHaveText(`@m${two(((now.getMonth() + 1) % 12) + 1)}`);
-    await page.locator('.crumbs .crumb', { hasText: /^@q/ }).click();
+    await page.locator('.crumbs .crumb', { hasText: /^@y/ }).click();
     await page.getByRole('button', { name: 'Предыдущий квартал' }).click();
-    await expect(title(page)).toHaveText(`@q${((Math.floor(now.getMonth() / 3) + 3) % 4) + 1}`);
-    await page.locator('.crumbs .crumb', { hasText: '@календарь' }).click();
+    // Before the first quarter, the year before comes in.
+    await expect(title(page)).toHaveText(quarter === 1 ? `@y${now.getFullYear() - 1}` : year);
+    const before = ((quarter + 2) % 4) + 1;
+    await page.locator('.crumbs .crumb', { hasText: `@q${before}` }).click();
+    await expect(title(page)).toHaveText(`@q${before}`);
     await expect(page.locator('.period-steps')).toHaveCount(0);
   });
 
-  test('a stored document opens on today; a reload stays where it was', async ({ page }) => {
+  test('a new document starts with it, on today; a reload stays where it was', async ({ page }) => {
     await page.goto('/?db=e2e-calendar');
-    await create(page);
     await expect(title(page)).toHaveText(today);
+    expect(await outline(page)).toEqual(DAY);
+    await page.locator('.row .text').nth(1).click();
     await page.keyboard.type('запись');
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual([year, '  запись']);
-    await expect(editing(page)).toHaveText('запись');
-    await page.locator('.crumbs .crumb', { hasText: /^@m/ }).click();
+    expect(await outline(page)).toEqual(['#notes', '  запись', ...DAY.slice(2)]);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    // In place of the lone empty bullet.
+    expect(await outline(page)).toEqual(STRUCTURE);
+    await page.locator('.row', { hasText: '@q1' }).locator('.bullet').click();
     await page.waitForTimeout(300);
     await page.reload();
-    await expect(title(page)).toHaveText(`@m${two(now.getMonth() + 1)}`);
+    await expect(title(page)).toHaveText('@q1');
   });
 });
 
@@ -782,7 +803,7 @@ test.describe('done and notes', () => {
   });
 
   test('notes and completion survive a reload', async ({ page }) => {
-    await page.goto('/?db=e2e-notes');
+    await page.goto('/?db=e2e-notes&empty');
     await page.locator('.row .text').click();
     await page.keyboard.type('пункт');
     await page.keyboard.press('Shift+Enter');
@@ -939,7 +960,7 @@ test.describe('export and import', () => {
   });
 
   test('a stored document offers automatic copies into a folder', async ({ page }) => {
-    await page.goto('/?db=e2e-backup');
+    await page.goto('/?db=e2e-backup&empty');
     await expect(page.locator('.row')).toHaveCount(1);
     await menu(page).click();
     await expect(item(page, 'Автокопия в папку…')).toBeVisible();
@@ -1796,7 +1817,7 @@ test('no editing bar with a mouse and a keyboard', async ({ page }) => {
 
 test.describe('persistence', () => {
   test('edits survive a reload', async ({ page }) => {
-    await page.goto('/?db=e2e');
+    await page.goto('/?db=e2e&empty');
     await expect(page.locator('.row')).toHaveCount(1);
     await page.locator('.row .text').click();
     await page.keyboard.type('Запись');
@@ -1843,14 +1864,14 @@ test.describe('persistence', () => {
   });
 
   test('a second tab is read-only until the first one closes, then takes over', async ({ context, page }) => {
-    await page.goto('/?db=e2e-tabs');
+    await page.goto('/?db=e2e-tabs&empty');
     await expect(page.locator('.row')).toHaveCount(1);
     await page.locator('.row .text').click();
     await page.keyboard.type('из первой вкладки');
     await page.waitForTimeout(500); // writes are batched for 300 ms
 
     const second = await context.newPage();
-    await second.goto('/?db=e2e-tabs');
+    await second.goto('/?db=e2e-tabs&empty');
     await expect(second.locator('.banner')).toContainText('только просмотр');
     await expect(second.locator('.row .text')).toHaveText('из первой вкладки');
     await second.locator('.row .text').click();
@@ -1869,7 +1890,7 @@ test.describe('persistence', () => {
     await edit(page, 'Том второй');
     await page.keyboard.type(' изменён');
     await page.waitForTimeout(500);
-    await page.goto('/?db=e2e');
+    await page.goto('/?db=e2e&empty');
     // The stored document loads asynchronously.
     await expect(page.locator('.row')).toHaveCount(1);
     expect(await outline(page)).toEqual(['']);

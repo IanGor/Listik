@@ -72,8 +72,8 @@ export class Persistence implements DocListener {
     doc.subscribe(this);
   }
 
-  /** Loads the doc (snapshot + log replay), or starts a new one with a single empty bullet. */
-  static async open(name = 'listik', codec: Codec = plainCodec): Promise<{ doc: Doc; persistence: Persistence }> {
+  /** Loads the doc (snapshot + log replay), or starts a new one with a single empty bullet (`fresh`). */
+  static async open(name = 'listik', codec: Codec = plainCodec): Promise<{ doc: Doc; persistence: Persistence; fresh: boolean }> {
     const db = await openDb(name);
     const { doc, logSize, stored } = await load(db, codec);
     if (!stored) await writeSnapshot(db, await codec.encodeSnapshot(serialize(doc)));
@@ -86,7 +86,7 @@ export class Persistence implements DocListener {
       document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
       void navigator.storage?.persist?.();
     }
-    return { doc, persistence };
+    return { doc, persistence, fresh: !stored };
   }
 
   /** The doc as stored, without saving anything back: for a read-only tab. */

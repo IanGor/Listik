@@ -244,7 +244,7 @@ export function Outline(props: { o: Outliner }) {
   }, { defer: true }));
 
   syncZoomWithHash(o);
-  // Opened without a place in the address (the installed app always is): today's day, if there is a calendar.
+  // Opened without a place in the address (the installed app always is): today's day, if there is the structure.
   if (!location.hash) o.goToday(true);
   const onVisible = () => document.visibilityState === 'visible' && o.resumed();
   document.addEventListener('visibilitychange', onVisible);

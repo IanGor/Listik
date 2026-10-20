@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('the built app is installable and opens offline, with its data', async ({ page, context }) => {
-  await page.goto('/?db=e2e-pwa');
+  await page.goto('/?db=e2e-pwa&empty');
   await expect(page.locator('.row')).toHaveCount(1);
   await page.locator('.row .text').click();
   await page.keyboard.type('без интернета');

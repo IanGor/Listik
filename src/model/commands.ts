@@ -220,7 +220,7 @@ export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
 function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
   let prev: string | null = null;
   return {
-    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: false,
+    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: tree.collapsed ?? false,
     todo: tree.todo ?? tree.done ?? false, done: tree.done ?? false,
     created: now, updated: now,
     children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now)),
@@ -271,12 +271,17 @@ export function insertText(ctx: Ctx, id: RowKey, start: number, end: number, lin
 }
 
 /** Import: the trees become the last children of `parent`. Focuses the first one. */
-export function appendTrees({ doc, rows }: Ctx, parent: NodeId, trees: Tree[]): Focus | void {
+export function appendTrees(ctx: Ctx, parent: NodeId, trees: Tree[]): Focus | void {
+  return placeTrees(ctx, parent, ctx.doc.get(parent).children.length, trees);
+}
+
+/** The trees become children of `parent` from `index` on, one insert each. Focuses the first one. */
+export function placeTrees({ doc, rows }: Ctx, parent: NodeId, index: number, trees: Tree[]): Focus | void {
   if (countTrees(trees) > 2) rows.expectMany();
   const now = clock.now();
   let first: NodeId | undefined;
   for (const tree of trees) {
-    const node = snapshotOf(tree, doc.orderAt(parent, doc.get(parent).children.length), now);
+    const node = snapshotOf(tree, doc.orderAt(parent, index++), now);
     doc.apply({ t: 'insert', parent, node });
     first ??= node.id;
   }

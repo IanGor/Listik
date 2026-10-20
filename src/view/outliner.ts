@@ -1,6 +1,8 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
-import { createCalendar, dayOf, findCalendar, findPeriod, findYear, neighbour, openYear, periodAt, periodText, type Period } from '../model/calendar';
-import { collapseChildren, cycleTask, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import {
+  addYear, createStructure, dayOf, fillDay, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
+} from '../model/calendar';
+import { collapseChildren, cycleTask, deleteNode, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -131,12 +133,12 @@ export class Outliner {
   private unwatchSync: (() => void) | null = null;
   /**
    * The server has been heard from since the start (or there is no sync):
-   * only then is today's year bullet made, lest a device not yet up to date
-   * add a second one beside another device's.
+   * only then does a calendar year or a day's template go in, lest a device
+   * not yet up to date add a second one beside another device's.
    */
   private synced = false;
-  /** Today's year bullet, waiting for `synced`. */
-  private afterSync: (() => void) | null = null;
+  /** A year or a day's template, waiting for `synced`. */
+  private afterSync: (() => void)[] = [];
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -144,6 +146,8 @@ export class Outliner {
   private setSyncRequests: Setter<number>;
   /** Another tab holds the document: nothing here may change it. */
   readonly readOnly: boolean;
+  /** `?empty`: a new document stays a lone empty bullet, without the structure (tests start from it). */
+  bare = false;
   private setRowsVersion: Setter<number>;
   private setFocusSignal: Setter<FocusRequest | null>;
   private setQuerySignal: Setter<string>;
@@ -379,21 +383,62 @@ export class Outliner {
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
     });
+    if (target) this.enterDay(target);
   }
 
   /**
-   * The logo, and the start: into today's day in the forever calendar
-   * (model/calendar.ts), ready to write: this year's bullet first in it,
-   * the caret at its end (`openYear`, one undo step). `quiet` (the start)
-   * says nothing when there is no calendar or no such day.
+   * A day of the calendar entered for the first time, by any way: its
+   * template goes in (model/calendar.ts `fillDay`, one undo step), the caret
+   * stays out. With sync, only once the server has been heard from, and
+   * only if the day is still where the user is.
+   */
+  private enterDay(id: NodeId): void {
+    if (this.readOnly || this.doc.get(id).children.length || periodAt(this.doc, id)?.kind !== 'day') return;
+    const fill = () => {
+      if (this.zoom() === id && this.doc.has(id)) this.run((ctx) => void fillDay(ctx, id), this.keepFocus());
+    };
+    if (this.syncing() && !this.synced) this.afterSync.push(fill);
+    else fill();
+  }
+
+  /** The caret where it is, for a command that should not move it. */
+  private keepFocus(): Focus | undefined {
+    const f = this.focus();
+    return f && 'caret' in f ? f : undefined;
+  }
+
+  /**
+   * Makes sure the calendar has the period's year (model/calendar.ts
+   * `addYear`, one undo step), and finds the period. With sync, a missing
+   * year waits for the server: null then.
+   */
+  private periodBullet(p: Period): NodeId | null {
+    const found = findPeriod(this.doc, this.tags, p);
+    if (found !== null || this.readOnly || findPeriod(this.doc, this.tags, quarterPeriod(p)) !== null) return found;
+    if (this.syncing() && !this.synced) return null;
+    this.run((ctx) => void addYear(ctx, this.tags, p.y), this.keepFocus());
+    return findPeriod(this.doc, this.tags, p);
+  }
+
+  /**
+   * The logo, and the start: into today's day in the calendar
+   * (model/calendar.ts), its year made first if this is the first time in
+   * it. The caret stays out. `quiet` (the start) says nothing when there is
+   * no structure or no such day.
    */
   goToday(quiet = false): void {
     const now = new Date();
-    const calendar = this.calendar();
-    const day = calendar && findPeriod(this.doc, this.tags, calendar, dayOf(now));
+    const today = dayOf(now);
+    if (!this.structure()) return quiet ? undefined : this.notify('Структуры ещё нет: меню «⋯» → «Создать структуру»');
+    const day = this.periodBullet(today);
     if (!day) {
-      if (quiet) return;
-      return this.notify(calendar ? `В календаре нет дня ${periodText(dayOf(now))}` : 'Календаря ещё нет: меню «⋯» → «Создать календарь»');
+      // A new year waits for the server: then here, if nothing else was done meanwhile.
+      if (this.syncing() && !this.synced) {
+        const zoom = this.zoom();
+        this.afterSync.push(() => this.zoom() === zoom && !this.focus() && this.goToday(true));
+        return;
+      }
+      return quiet ? undefined : this.notify(`В календаре нет дня ${periodName(today)}`);
     }
     batch(() => {
       this.setQuery('', true);
@@ -401,39 +446,34 @@ export class Outliner {
       this.zoomTo(day);
     });
     this.today = { day, date: now.toDateString() };
-    if (this.readOnly) return;
-    const year = now.getFullYear();
-    const open = () => {
-      // Made later (after sync): only if still there and not writing elsewhere meanwhile.
-      if (this.zoom() === day && !this.focus()) this.run((ctx) => openYear(ctx, day, year));
-    };
-    if (findYear(this.doc, day, year) === null && this.syncing() && !this.synced) this.afterSync = open;
-    else open();
   }
 
-  /** The calendar period (quarter, month, day) the zoom is in; null outside the calendar. Reactive. */
+  /** The calendar period (quarter of a year, month, week, day) the zoom is in; null outside the calendar. Reactive. */
   zoomPeriod(): Period | null {
+    this.rowsVersion();
     const z = this.zoom();
-    const calendar = this.calendar();
-    return z && calendar ? periodAt(this.doc, calendar, z) : null;
+    return z && this.doc.has(z) ? periodAt(this.doc, z) : null;
   }
 
   /**
    * ‹ › over the list, Ctrl+Alt+←/→: into the period before or after the one
-   * zoomed into, a day across months and years (model/calendar.ts
-   * `neighbour`). Periods missing from the calendar are passed over. Returns
-   * whether the zoom is in a period at all.
+   * zoomed into, across years (model/calendar.ts `neighbour`). A year not
+   * yet in the calendar comes in; periods missing from it otherwise are
+   * passed over. Returns whether the zoom is in a period at all.
    */
   stepPeriod(step: -1 | 1): boolean {
-    const from = this.zoomPeriod();
-    const calendar = this.calendar();
-    if (!from || !calendar) return false;
-    const year = new Date().getFullYear();
-    let p = from;
-    for (let i = 0; i < 366; i++) {
-      p = neighbour(p, step, year);
-      const id = findPeriod(this.doc, this.tags, calendar, p);
-      if (id === null) continue;
+    let p = this.zoomPeriod();
+    if (!p) return false;
+    for (let i = 0; i < 400; i++) {
+      p = neighbour(p, step);
+      const id = this.periodBullet(p);
+      if (id === null) {
+        if (this.syncing() && !this.synced) {
+          this.notify('Ждём ответа сервера синхронизации');
+          return true;
+        }
+        continue;
+      }
       batch(() => {
         this.setFocus(null);
         this.zoomTo(id);
@@ -464,17 +504,36 @@ export class Outliner {
     });
   }
 
-  /** The forever calendar's bullet (model/calendar.ts); null if the document has none. Reactive. */
-  calendar(): NodeId | null {
+  /** Is the structure in the document (a quarter at the top level, model/calendar.ts)? Reactive. */
+  structure(): boolean {
     this.rowsVersion();
-    return findCalendar(this.doc, this.tags);
+    return hasStructure(this.doc, this.tags);
   }
 
-  /** The menu: puts the forever calendar into the document, one undo step, and goes to today in it. */
-  createCalendar(): void {
+  /**
+   * The menu: the structure goes in at the end of the top level, whatever
+   * is there already (one undo step), and the app goes to today in it.
+   */
+  createStructure(): void {
     if (this.readOnly) return;
-    if (!this.calendar()) this.run((ctx) => void createCalendar(ctx));
+    this.run((ctx) => void createStructure(ctx, new Date().getFullYear()));
     this.goToday();
+  }
+
+  /**
+   * A new document's first start, or the first sync of one without the
+   * structure (`bare` aside): the structure goes in. At the start it takes
+   * the place of the lone empty bullet, and is no undo step: there was
+   * nothing before it.
+   */
+  firstStructure(start: boolean): void {
+    if (this.readOnly || this.bare || this.structure()) return;
+    if (!start) return this.run((ctx) => void createStructure(ctx, new Date().getFullYear()), this.keepFocus());
+    const [lone] = this.doc.get(this.doc.root).children;
+    this.doc.transact(() => {
+      createStructure(this.ctx, new Date().getFullYear());
+      if (lone && this.doc.get(lone).text === '' && !this.doc.get(lone).children.length) deleteNode(this.ctx, lone);
+    });
   }
 
   /** Alt+→: zoom into a bullet and edit its first child, or its title if it has none. */
@@ -596,8 +655,8 @@ export class Outliner {
   private heardFromServer(): void {
     this.synced = true;
     const pending = this.afterSync;
-    this.afterSync = null;
-    pending?.();
+    this.afterSync = [];
+    for (const fn of pending) fn();
   }
 
   /** Ctrl+F: put the caret into the search box. */

@@ -73,6 +73,8 @@ export function SyncDialog(props: { o: Outliner }) {
   const create = attempt(async () => {
     if (!o.persistence || !o.opened) throw new Error('Документ только в памяти');
     if (!passOk()) throw new Error('Пароли не совпадают или короче 8 знаков');
+    // The document starts on the server with the structure (model/calendar.ts).
+    o.firstStructure(false);
     o.syncHandle = await createSync(o.doc, o.opened, o.persistence, server(), pass());
     o.watchSync();
     dialog.close();

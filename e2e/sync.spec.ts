@@ -19,7 +19,7 @@ test.describe.configure({ mode: 'serial' });
 test('two browsers share one encrypted document through the server', async ({ browser }) => {
   test.setTimeout(120_000);
   const a = await (await browser.newContext()).newPage();
-  await a.goto('/?db=e2e-sync-a');
+  await a.goto('/?db=e2e-sync-a&empty');
   await expect(a.locator('.row')).toHaveCount(1);
   await a.locator('.row .text').click();
   await a.keyboard.type('общий пункт');
@@ -54,7 +54,7 @@ test('two browsers share one encrypted document through the server', async ({ br
 
   // B joins with the code and the passphrase; its own document is replaced.
   const b = await (await browser.newContext()).newPage();
-  await b.goto('/?db=e2e-sync-b');
+  await b.goto('/?db=e2e-sync-b&empty');
   await expect(b.locator('.row')).toHaveCount(1);
   await openSyncDialog(b);
   await b.getByRole('tab', { name: 'Подключиться к существующему' }).click();
@@ -106,7 +106,7 @@ test('two browsers share one encrypted document through the server', async ({ br
 test('a local copy that does not open with the key is restored from the server', async ({ browser }) => {
   test.setTimeout(120_000);
   const a = await (await browser.newContext()).newPage();
-  await a.goto('/?db=e2e-sync-damaged');
+  await a.goto('/?db=e2e-sync-damaged&empty');
   await a.locator('.row .text').click();
   await a.keyboard.type('с сервера');
   await a.waitForTimeout(400);
@@ -154,7 +154,7 @@ test('the sync state lives in the menu: a dot on its button while changes wait',
   test.setTimeout(120_000);
   const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
   const a = await context.newPage();
-  await a.goto('/?db=e2e-sync-phone');
+  await a.goto('/?db=e2e-sync-phone&empty');
   await expect(a.locator('.row')).toHaveCount(1);
   await openSyncDialog(a);
   await a.locator('.sync-dialog input[type="url"]').fill(SYNC);
