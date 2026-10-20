@@ -1628,6 +1628,61 @@ test.describe('time', () => {
   });
 });
 
+test.describe('open tasks under a bullet', () => {
+  test('a folded bullet shows its first open task above its note; ticking it brings the next; unfolded, it goes', async ({ page }) => {
+    for (const t of ['Eh bien', 'Анна Павловна']) {
+      await edit(page, t);
+      await page.keyboard.press('Control+l');
+    }
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('созвон в пятницу');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    const row = page.locator('.row', { hasText: 'Часть первая' }).first();
+    // Open: the tasks show in the list, nothing under the bullet.
+    await expect(row.locator('.pending')).toHaveCount(0);
+    await row.locator('.toggle').click();
+    await expect(row.locator('.pending-text')).toContainText('Eh bien');
+    await expect(row.locator('.pending-more')).toHaveText('+1');
+    // The task above the note, the note a line below.
+    const order = await row.locator('.pending, .note').evaluateAll((els) => els.map((e) => e.className.split(' ')[0]));
+    expect(order).toEqual(['pending', 'note']);
+    // Ticked from here: the next one, top first, takes its place.
+    await row.locator('.pending-box').click();
+    await expect(row.locator('.pending-text')).toContainText('Анна Павловна');
+    await expect(row.locator('.pending-more')).toHaveCount(0);
+    await row.locator('.pending-box').click();
+    await expect(row.locator('.pending')).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(row.locator('.pending-text')).toContainText('Анна Павловна');
+  });
+
+  test('a link and a mirror show the open task of the bullet they lead to; its text leads to the task', async ({ page }) => {
+    await edit(page, 'Анна Павловна');
+    await page.keyboard.press('Control+l');
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' см. [[Часть первая');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    const link = page.locator('.row', { hasText: 'Том второй' });
+    await expect(link.locator('.pending-text')).toContainText('Анна Павловна');
+    // A mirror, folded.
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Часть перв');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    const mirror = page.locator('.row.mirror').last();
+    await mirror.locator('.toggle').click();
+    await expect(mirror.locator('.pending-text')).toContainText('Анна Павловна');
+    // The text leads to where the task is, the caret at its end.
+    await link.locator('.pending-text').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    await expect(editing(page)).toContainText('Анна Павловна');
+  });
+});
+
 test.describe('templates', () => {
   test('a bullet tagged #template is offered for /: what is inside it comes in at the row\'s level, without its own bullet; tasks unchecked', async ({ page }) => {
     await edit(page, 'Том второй');

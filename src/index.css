@@ -2210,3 +2210,69 @@ body.is-dragging * {
   text-underline-offset: 3px;
   cursor: pointer;
 }
+
+/* --- Open task under a folded bullet (Row.tsx, model/tasks.ts) ----------- */
+
+/* One line between the text and the note, set like the note but read as
+   something to do: a coral box to tick, the task in ink, "+N" for the rest.
+   The note keeps its quiet colour below it, a line further down. */
+.pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: calc(14px * var(--font-scale));
+  line-height: 1.5;
+}
+
+.pending-box {
+  flex: none;
+  width: 0.8em;
+  height: 0.8em;
+  padding: 0;
+  border: 1.5px solid var(--primary);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out);
+}
+
+.pending-box:hover:not(:disabled) {
+  background: var(--chip);
+}
+
+.pending-box:disabled {
+  cursor: default;
+}
+
+.pending-text {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pending-text:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 3px;
+}
+
+.pending-more {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+/* A completed bullet's own line is struck through; its open tasks are not. */
+.row.done .pending-text {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .pending-box {
+    width: 14px;
+    height: 14px;
+  }
+}

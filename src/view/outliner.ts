@@ -4,11 +4,12 @@ import {
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
-import { toggleFormat } from '../model/format';
+import { LINK_RE, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
-import { linkEnd, resolveLink } from '../model/links';
+import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
-import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
+import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
+import { PendingTasks } from '../model/tasks';
 import { TagIndex, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
@@ -82,6 +83,13 @@ export class Outliner {
   readonly rows: VisibleRows;
   readonly tags: TagIndex;
   readonly text: TextIndex;
+  /** Open tasks, and the first one inside any bullet (model/tasks.ts). */
+  readonly tasks: PendingTasks;
+  /** Changes whenever open tasks, or where they lie, may have changed. */
+  readonly tasksVersion: Accessor<number>;
+  private setTasksVersion: Setter<number>;
+  /** `[[title]]` → its bullet, for the task under a row with a link; misses kept for one tasks version. */
+  private linkCache = new Map<string, { id: NodeId | null; version: number }>();
   readonly ctx: Ctx;
   readonly history = new History();
   readonly nodes = new NodeSignals();
@@ -188,6 +196,8 @@ export class Outliner {
     this.rows = new VisibleRows(doc);
     this.tags = new TagIndex(doc);
     this.text = new TextIndex(doc);
+    this.tasks = new PendingTasks(doc);
+    [this.tasksVersion, this.setTasksVersion] = createSignal(this.tasks.version);
     this.ctx = { doc, rows: this.rows };
     [this.rowsVersion, this.setRowsVersion] = createSignal(this.rows.version);
     [this.focus, this.setFocusSignal] = createSignal<FocusRequest | null>(null, { equals: false });
@@ -214,6 +224,7 @@ export class Outliner {
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
+        if (this.tasks.version !== this.tasksVersion()) this.setTasksVersion(this.tasks.version);
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
         const z = this.zoom();
         if (z && (!doc.has(z) || !doc.inOutline(z))) this.zoomTo(null);
@@ -636,6 +647,63 @@ export class Outliner {
       if (key) this.setFocus({ id: key, caret });
     });
     if (landed.length && !landed[0].home) this.notify('Прежнего места уже нет: пункт вернулся в конец списка');
+  }
+
+  /**
+   * The open task to show under a row (Row.tsx): the first one, top first,
+   * inside its bullet (a mirror's: its original's) while they are out of
+   * sight (folded, or kept out by a search), else the first of those its
+   * `[[links]]` lead to (the linked bullet itself or inside it). `more` —
+   * how many other open tasks there are. Reactive.
+   */
+  pendingFor(key: RowKey): { task: NodeId; more: number } | null {
+    const version = this.tasksVersion();
+    this.rowsVersion();
+    const id = nodeOf(key);
+    if (!this.doc.has(id)) return null;
+    const host = this.doc.host(id);
+    if (host && this.rows.hasHiddenChildren(key)) {
+      const r = this.tasks.inside(host.id);
+      if (r) return { task: r.task, more: r.count - 1 };
+    }
+    for (const m of this.doc.content(id).text.matchAll(LINK_RE)) {
+      const target = this.linkTarget(m[1], version);
+      if (target === null || target === id) continue;
+      const own = this.tasks.isOpen(target);
+      const r = this.tasks.inside(this.doc.host(target)?.id ?? target);
+      if (own) return { task: target, more: r?.count ?? 0 };
+      if (r) return { task: r.task, more: r.count - 1 };
+    }
+    return null;
+  }
+
+  /** Where `[[title]]` leads (`resolveLink`, a pass over every bullet), remembered while it still holds. */
+  private linkTarget(title: string, version: number): NodeId | null {
+    const key = normalize(title.trim());
+    const hit = this.linkCache.get(key);
+    if (hit?.id && this.doc.has(hit.id) && this.doc.inOutline(hit.id) && normalize(titleOf(this.doc.get(hit.id).text)) === key) return hit.id;
+    if (hit && hit.id === null && hit.version === version) return null;
+    const id = resolveLink(this.doc, this.text, title);
+    this.linkCache.set(key, { id, version });
+    return id;
+  }
+
+  /** The checkbox of the task shown under a row: checked; the next open one takes its place there. */
+  completeTask(task: NodeId): void {
+    const n = this.doc.nodes.get(task);
+    if (!n || !n.todo || n.done) return;
+    this.run(({ doc }) => doc.apply({ t: 'setDone', id: task, from: false, to: true }), this.keepFocus());
+  }
+
+  /** The text of the task shown under a row: to where it is, the caret at its end. */
+  goToTask(task: NodeId): void {
+    if (!this.doc.has(task)) return;
+    const n = this.doc.get(task);
+    batch(() => {
+      this.zoomTo(n.parent === this.doc.root ? null : n.parent);
+      const key = this.rows.locate(task);
+      if (key) this.setFocus({ id: key, caret: this.doc.content(task).text.length });
+    });
   }
 
   /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */

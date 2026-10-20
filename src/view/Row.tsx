@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
+import { plainText } from '../model/format';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
@@ -112,6 +113,27 @@ export function Row(props: RowProps) {
     o.rowsVersion();
     return !!content() && o.rows.unfolded(id);
   };
+  /**
+   * An open task inside the bullet while it is out of sight (folded, or
+   * through a link): shown under the text, so what is to be done here reads
+   * without opening it (Outliner.pendingFor). The task's own signal is held
+   * while it shows, so its text follows edits made elsewhere.
+   */
+  const pending = createMemo(() => (content() ? o.pendingFor(id) : null), undefined, {
+    equals: (a, b) => a?.task === b?.task && a?.more === b?.more,
+  });
+  createEffect(on(() => pending()?.task ?? null, (task) => {
+    if (!task) return;
+    o.nodes.acquire(task);
+    onCleanup(() => o.nodes.release(task));
+  }));
+  const pendingText = () => {
+    const p = pending();
+    if (!p) return '';
+    o.nodes.track(p.task);
+    const t = o.doc.nodes.get(p.task);
+    return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
+  };
   const terms = () => o.filter()?.query.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
   const notePieces = createMemo(() => decorate(content()?.note ?? '', terms()));
@@ -204,6 +226,26 @@ export function Row(props: RowProps) {
           }
         >
           <Editable o={o} id={id} />
+        </Show>
+        <Show when={pending()}>
+          {(p) => (
+            <div class="pending" title={`Незавершённая задача внутри${p().more ? ` (и ещё ${p().more})` : ''}`}>
+              <button
+                type="button"
+                class="pending-box"
+                aria-label={`Отметить выполненной: ${pendingText()}`}
+                disabled={o.readOnly}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => o.completeTask(p().task)}
+              />
+              <span class="pending-text" onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); o.goToTask(p().task); }}>
+                {pendingText()}
+              </span>
+              <Show when={p().more}>
+                <span class="pending-more">+{p().more}</span>
+              </Show>
+            </div>
+          )}
         </Show>
         <Show
           when={editingNote()}
