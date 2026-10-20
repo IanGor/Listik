@@ -1720,6 +1720,17 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('a tapped button does not stay lit: no hover on a touch screen', async ({ page }) => {
+    // A stored document opens on today, with ‹ › beside the path.
+    await page.goto('/?db=hover');
+    const next = page.locator('.period-step').last();
+    await next.tap();
+    await expect(next).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const crumb = page.locator('.crumb').first();
+    await crumb.tap();
+    await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+
   test('on a 320px phone the menu stays inside the window; long items wrap', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     // A stored document: its menu has the longest items (sync, backup).
