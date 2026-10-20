@@ -10,6 +10,7 @@ import { linkEnd, resolveLink } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, parseQuery, type Query } from '../model/search';
 import { TagIndex, tagText } from '../model/tags';
+import { insertTemplate } from '../model/templates';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId } from '../model/types';
 import type { Backup } from '../persist/backup';
@@ -907,6 +908,11 @@ export class Outliner {
    */
   makeMirror(id: RowKey, target: NodeId, start: number, end: number): void {
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
+  }
+
+  /** A template taken from the `/` suggestions (model/templates.ts): one undo step, the caret at the end of its name. */
+  insertTemplate(id: RowKey, template: NodeId, start: number, end: number): void {
+    this.run((ctx) => insertTemplate(ctx, id, template, start, end), { id, caret: start });
   }
 
   /**

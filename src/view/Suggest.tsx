@@ -2,6 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid
 import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from '../model/complete';
 import { findInbox } from '../model/calendar';
 import { findTargets } from '../model/links';
+import { asksTemplate, findTemplates, matchTemplates } from '../model/templates';
 import { tagKey, type Sigil } from '../model/tags';
 import { timeOfDay } from '../model/time';
 import { nodeOf, type RowKey } from '../model/rows';
@@ -19,6 +20,10 @@ interface Item {
   mirror?: NodeId;
   /** A `((mirror))` of a bullet not there yet: its title, for the original made in the Inbox. */
   create?: string;
+  /** A template (model/templates.ts): taking it puts a copy in. */
+  template?: NodeId;
+  /** Only says something (no templates yet): taking it does nothing. */
+  info?: boolean;
   /** What replaces the typed token. */
   text: () => string;
 }
@@ -104,8 +109,18 @@ function caretRect(el: HTMLElement): DOMRect {
 export function Suggest(props: { o: Outliner }) {
   const o = props.o;
 
-  const commands = (t: Token, limit: number): Item[] =>
-    matchCommands(t.query).slice(0, limit).map((c) => ({ label: `/${c.name}`, hint: c.hint, text: RUN[c.name] }));
+  /** Commands, then templates by name (not in a note: a template is bullets; not the template being typed in). */
+  const commands = (id: RowKey, t: Token, limit: number, note: boolean): Item[] => {
+    const items: Item[] = matchCommands(t.query).slice(0, limit).map((c) => ({ label: `/${c.name}`, hint: c.hint, text: RUN[c.name] }));
+    if (note) return items;
+    const self = o.contentOf(id).id;
+    const templates = matchTemplates(findTemplates(o.doc, o.tags).filter((tpl) => tpl.id !== self), t.query, limit - items.length);
+    for (const tpl of templates) items.push({ label: tpl.title, hint: 'шаблон', template: tpl.id, text: () => '' });
+    if (!templates.length && asksTemplate(t.query) && !findTemplates(o.doc, o.tags).length) {
+      items.push({ label: 'Шаблонов нет: пометьте пункт #template', info: true, text: () => '' });
+    }
+    return items;
+  };
 
   /** Tags of the token's own set (`#` or `@`), by name. */
   const tags = (id: RowKey, t: Token, text: string, limit: number): Item[] => {
@@ -188,7 +203,7 @@ export function Suggest(props: { o: Outliner }) {
     if (keyOf(f.id, note, token) === dismissed) return setOpen(null);
     const limit = suggestLimit(innerHeight, rowHeight());
     const items =
-      token.kind === '/' ? commands(token, limit) : token.kind === '[[' || token.kind === '((' ? links(f.id, token, limit, now) : tags(f.id, token, text, limit);
+      token.kind === '/' ? commands(f.id, token, limit, note) : token.kind === '[[' || token.kind === '((' ? links(f.id, token, limit, now) : tags(f.id, token, text, limit);
     if (!items) return;
     if (!items.length) return setOpen(null);
     const prev = open();
@@ -208,6 +223,8 @@ export function Suggest(props: { o: Outliner }) {
     setOpen(null);
     if (item.mirror) return o.makeMirror(s.id, item.mirror, s.token.start, s.token.end);
     if (item.create) return void o.mirrorTitled(s.id, item.create, s.token.start, s.token.end);
+    if (item.info) return;
+    if (item.template) return o.insertTemplate(s.id, item.template, s.token.start, s.token.end);
     o.insert(s.note ? { id: s.id, caret: s.token.end, note: true } : { id: s.id, caret: s.token.end }, insert, s.token.end - s.token.start);
   };
 
