@@ -1325,7 +1325,9 @@ mark,
   flex: none;
   height: 52px;
   padding-bottom: env(safe-area-inset-bottom);
-  overflow: hidden;
+  /* Clip, not hidden: a hidden box can still be scrolled, and a tap while a
+     set slides in (the sets away stick out by 32px) once left it 24px off. */
+  overflow: clip;
   background: var(--canvas);
   border-top: 1px solid var(--hairline);
 }

@@ -1590,6 +1590,19 @@ test.describe('touch screen', () => {
     expect(await insert.evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
+  test('quick taps between the sets, while they slide, leave the bar in place', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
+    await action(page, 'Вставить').tap();
+    await page.locator('.editbar-insert').getByRole('button', { name: 'Назад' }).tap();
+    // No waiting for the slide: the next set at once.
+    await action(page, 'Переместить').tap();
+    const move = page.locator('.editbar-move');
+    const left = async () => Math.round((await move.getByRole('button', { name: 'Назад' }).boundingBox())!.x);
+    await expect.poll(left).toBe(8);
+    expect(await page.locator('.editbar').evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
   test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await expect(editing(page)).toBeFocused();
