@@ -2498,13 +2498,6 @@ body.is-dragging * {
     position: relative;
   }
 
-  /* The logo's dot (phone: no name beside it) stays where it was. */
-  .brand {
-    justify-content: center;
-    min-width: 44px;
-    padding: 0;
-  }
-
   /* The crumbs: taller to hit, the path no closer to the rows. */
   .crumbs {
     padding-block: 8px;
@@ -2517,8 +2510,13 @@ body.is-dragging * {
   }
 }
 
+/* The logo on a phone is its dot alone, 30px wide: 44px to hit, the dot
+   where it was. */
 @media (pointer: coarse) and (max-width: 640px) {
   .brand {
+    justify-content: center;
+    min-width: 44px;
+    padding: 0;
     margin-left: -13px;
   }
 }
