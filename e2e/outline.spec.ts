@@ -1735,6 +1735,18 @@ test.describe('touch screen', () => {
     await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   });
 
+  test('fields are 16px at least, so a phone does not zoom in on them', async ({ page }) => {
+    await expect(page.locator('.search')).toHaveCSS('font-size', '16px');
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: /Корзина/ }).tap();
+    await expect(page.locator('.trash-filter')).toHaveCSS('font-size', '16px');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
+    await expect(page.locator('.capture-input')).toHaveCSS('font-size', '16px');
+  });
+
   test('the search field keeps its room: the count is a bare number', async ({ page }) => {
     await page.locator('.search').tap();
     await page.keyboard.type('#шерер');

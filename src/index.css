@@ -2470,3 +2470,17 @@ body.is-dragging * {
     opacity: 0;
   }
 }
+
+/* --- Fields on touch screens ------------------------------------------------ */
+
+/* 16px at least: Safari on an iPhone zooms the page in on a smaller field
+   when it takes focus, and leaves it zoomed. Last in the file, so it wins
+   over each field's own size. */
+@media (pointer: coarse) {
+  .search,
+  .field input,
+  .trash-filter,
+  .capture-input {
+    font-size: 16px;
+  }
+}
