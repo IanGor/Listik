@@ -769,6 +769,23 @@ export class Outliner {
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
   }
 
+  /**
+   * A mirror of the bullet titled `title` in place of [start, end): the
+   * first one so titled (model/links.ts `resolveLink`), or, when there is
+   * none, its original made last in the structure's Inbox — one undo step,
+   * the caret staying with the mirror. Returns whether a mirror was made:
+   * not without such a bullet and an Inbox, nor of the bullet itself.
+   */
+  mirrorTitled(id: RowKey, title: string, start: number, end: number): boolean {
+    const name = title.trim();
+    if (!name || this.readOnly) return false;
+    const target = resolveLink(this.doc, this.text, name);
+    const inbox = target === null ? findInbox(this.doc) : null;
+    if (target === null ? inbox === null : this.doc.origin(target) === this.doc.origin(nodeOf(id))) return false;
+    this.run((ctx) => makeMirror(ctx, id, target ?? (appendTrees(ctx, inbox!, [{ text: name, children: [] }]) as Focus).id, start, end), { id, caret: start });
+    return true;
+  }
+
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: RowKey, text: string): void {
     if (this.readOnly) return;

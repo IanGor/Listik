@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
 import { closesLink, opensLink } from '../model/links';
-import { closesMirror, opensMirror } from '../model/mirrors';
+import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
 import { nodeOf, type RowKey } from '../model/rows';
 import { decorate, type Piece } from '../model/search';
@@ -252,9 +252,13 @@ const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: stri
 /**
  * Before the browser edits the text: undo/redo from its menu (which bypasses
  * keydown), no edits on a mirror's heading, `]` stepping over a link's closing bracket, Backspace taking out
- * an empty `[]` pair whole. `read`/`write` give the element's text.
+ * an empty `[]` pair whole. `read`/`write` give the element's text. With
+ * `mirror` (a bullet's text, not a note) the last `)` typed of `((title))`
+ * makes the mirror (`Outliner.mirrorTitled`).
  */
-function beforeInput(e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void): void {
+function beforeInput(
+  e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void, mirror = false,
+): void {
   if (e.inputType === 'historyUndo') {
     e.preventDefault();
     return o.undo();
@@ -275,6 +279,9 @@ function beforeInput(e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, re
   const text = read();
   if (e.inputType === 'insertText' && ((e.data === ']' && closesLink(text, caret)) || (e.data === ')' && closesMirror(text, caret)))) {
     e.preventDefault();
+    // The last `)` of a mirror typed out: the mirror itself, of a new bullet in the Inbox if need be.
+    const token = mirror && e.data === ')' && !text.startsWith('))', caret) ? mirrorBefore(text, caret - 1) : null;
+    if (token && o.mirrorTitled(id, token.query, token.start, token.end)) return;
     setCaret(el, caret + 1);
   } else if (e.inputType === 'deleteContentBackward' && ((text[caret - 1] === '[' && text[caret] === ']') || (text[caret - 1] === '(' && text[caret] === ')'))) {
     e.preventDefault();
@@ -371,7 +378,7 @@ function Editable(props: { o: Outliner; id: RowKey }) {
       onInput={onInput}
       onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
       onPaste={onPaste}
-      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t))}
+      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t), true)}
     />
   );
 }

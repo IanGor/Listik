@@ -13,7 +13,9 @@ import type { NodeId } from './types';
  * original, where the children are. A mirror of a mirror points at the
  * original (`Doc.origin`).
  *
- * `(( ))` left as text (no suggestion taken) stays text.
+ * `((title))` typed out to its last `)` mirrors the bullet so titled, or a
+ * new one made last in the structure's Inbox (`Outliner.mirrorTitled`); with
+ * neither, it stays text.
  */
 
 const STOP = /[()\n]/;

@@ -1799,6 +1799,34 @@ test.describe('mirrors', () => {
     await page.keyboard.press('Backspace');
     await expect(editing(page)).toHaveText('');
   });
+
+  test('a mirror of nothing yet, with an Inbox: the original is made last there, by the suggestion or by closing ))', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Inbox');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Новая тема');
+    const create = page.getByRole('option', { name: 'Создать «Новая тема» в Inbox' });
+    await expect(create).toHaveCount(1);
+    await create.click();
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Новая тема']);
+    expect(await outline(page)).toEqual([...DEMO, 'Inbox', '  Новая тема', 'Новая тема']);
+    await page.keyboard.press('Escape');
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Вторая))');
+    await expect(page.locator('.row.mirror .text')).toHaveText(['Вторая', 'Новая тема']);
+    expect(await outline(page)).toEqual([...DEMO, 'Вторая', 'Inbox', '  Новая тема', '  Вторая', 'Новая тема']);
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.row.mirror')).toHaveCount(1);
+    expect((await outline(page)).filter((r) => r.trim() === 'Вторая')).toEqual([]);
+    // An existing title gets no such offer.
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('((Том второй');
+    await expect(page.getByRole('option', { name: 'Том второй' })).toHaveCount(1);
+    await expect(page.getByRole('option', { name: /Создать/ })).toHaveCount(0);
+  });
 });
 
 test.describe('bold and italic', () => {

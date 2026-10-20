@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from '../model/complete';
+import { findInbox } from '../model/calendar';
 import { findTargets } from '../model/links';
 import { tagKey, type Sigil } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -16,6 +17,8 @@ interface Item {
   link?: boolean;
   /** A `((mirror))`: the bullet to mirror; taking it changes the bullet, not the text. */
   mirror?: NodeId;
+  /** A `((mirror))` of a bullet not there yet: its title, for the original made in the Inbox. */
+  create?: string;
   /** What replaces the typed token. */
   text: () => string;
 }
@@ -147,7 +150,7 @@ export function Suggest(props: { o: Outliner }) {
         return null;
       }
       const mirror = t.kind === '((';
-      const items = findTargets(o.doc, o.text, t.query, o.contentOf(id).id, limit)
+      const items: Item[] = findTargets(o.doc, o.text, t.query, o.contentOf(id).id, limit)
         // A bullet cannot mirror itself or the bullet it already mirrors.
         .filter((target) => !mirror || o.doc.origin(target.id) !== o.doc.origin(nodeOf(id)))
         .map((target) => ({
@@ -157,6 +160,11 @@ export function Suggest(props: { o: Outliner }) {
           ...(mirror ? { mirror: target.id } : {}),
           text: () => (mirror ? `((${target.title}))` : `[[${target.title}]]`),
         }));
+      // No bullet of that very title: a mirror can still be made, of a new one in the Inbox.
+      const title = t.query.trim();
+      if (mirror && title && findInbox(o.doc) !== null && !items.some((item) => item.label.toLowerCase() === title.toLowerCase())) {
+        items.push({ label: `Создать «${title}» в Inbox`, link: true, create: title, text: () => `((${title}))` });
+      }
       found = { key, items };
     }
     return found.items;
@@ -199,6 +207,7 @@ export function Suggest(props: { o: Outliner }) {
     const insert = item.text() + (item.tag && !/\s/.test(text[s.token.end] ?? '') ? ' ' : '');
     setOpen(null);
     if (item.mirror) return o.makeMirror(s.id, item.mirror, s.token.start, s.token.end);
+    if (item.create) return void o.mirrorTitled(s.id, item.create, s.token.start, s.token.end);
     o.insert(s.note ? { id: s.id, caret: s.token.end, note: true } : { id: s.id, caret: s.token.end }, insert, s.token.end - s.token.start);
   };
 
