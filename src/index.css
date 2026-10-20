@@ -1099,13 +1099,6 @@ mark,
     display: none;
   }
 
-  /* Touch-sized items; long ones wrap rather than widen the menu. */
-  .menu button {
-    height: auto;
-    min-height: 44px;
-    white-space: normal;
-  }
-
   .crumbbar {
     padding-top: 10px;
   }
@@ -1227,6 +1220,8 @@ mark,
   display: flex;
   flex-direction: column;
   min-width: min(300px, calc(100vw - 24px));
+  /* Inside the window, whatever its items: they wrap on a small phone. */
+  max-width: calc(100vw - 24px);
   box-sizing: border-box;
   max-height: calc(100dvh - 80px);
   overflow-y: auto;
@@ -1254,6 +1249,24 @@ mark,
 
 .menu button:hover {
   background: var(--surface);
+}
+
+/* Phones: touch-sized items; long ones wrap rather than widen the menu.
+   After the rule above: the same weight, so only a later place wins. */
+@media (max-width: 640px) {
+  .menu {
+    width: min(340px, calc(100vw - 24px));
+  }
+
+  /* A hint that does not fit goes under its label, not beside it. */
+  .menu button {
+    flex-wrap: wrap;
+    row-gap: 0;
+    height: auto;
+    min-height: 44px;
+    padding-block: 6px;
+    white-space: normal;
+  }
 }
 
 .menu button.attention {

@@ -1720,6 +1720,18 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('on a 320px phone the menu stays inside the window; long items wrap', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    // A stored document: its menu has the longest items (sync, backup).
+    await page.goto('/?db=menu&empty');
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    const menu = page.getByRole('menu');
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(320);
+    expect(await menu.getByRole('menuitem').evaluateAll((items) => items.filter((b) => b.scrollWidth > b.clientWidth).length)).toBe(0);
+  });
+
   test('the menu speaks of gestures, not keys', async ({ page }) => {
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.locator('.menu .hint', { hasText: /Ctrl|\?/ })).toHaveCount(0);
