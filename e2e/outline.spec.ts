@@ -1382,6 +1382,9 @@ test.describe('theme', () => {
     // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    // The theme was light already: wait for the switch itself (the pick let go). Two switches
+    // within a frame never fire a change, as the query ends where it began.
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('listik-theme'))).toBeNull();
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
