@@ -1174,6 +1174,31 @@ mark,
   }
 }
 
+/* A landscape phone with its keyboard up (~190px of window): the line being
+   typed needs the room. The path waits until the keyboard goes down; the
+   header and the edit bar get slimmer. */
+@media (max-height: 300px) {
+  .topbar {
+    height: 44px;
+  }
+
+  .crumbbar {
+    display: none;
+  }
+
+  .editbar {
+    height: 42px;
+  }
+
+  .editbar-set {
+    inset: 1px 8px auto;
+  }
+
+  .editbar button {
+    height: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

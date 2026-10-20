@@ -1374,6 +1374,21 @@ test.describe('touch screen', () => {
     await expect(sheet).toBeVisible();
   });
 
+  test('a landscape phone with the keyboard up: no path, slimmer header and bar, the line in full above the bar', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 });
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.setViewportSize({ width: 915, height: 190 });
+    await expect(bar(page)).toBeVisible();
+    await expect(page.locator('.crumbbar')).toBeHidden();
+    const row = editing(page);
+    await expect.poll(async () => { const r = (await row.boundingBox())!; return r.y + r.height; })
+      .toBeLessThanOrEqual((await bar(page).boundingBox())!.y);
+    expect((await row.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator('.topbar').boundingBox())!.height);
+    // The keyboard down: the path is back.
+    await page.setViewportSize({ width: 915, height: 412 });
+    await expect(page.locator('.crumbbar')).toBeVisible();
+  });
+
   test('ten levels deep the text still has room: past the 4th a level indents less', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await page.keyboard.press('Control+End');
