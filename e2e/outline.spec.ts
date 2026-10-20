@@ -756,50 +756,18 @@ test.describe('done and notes', () => {
     await expect(page.locator('.zoom-note')).toHaveText('описание');
   });
 
-  test('Ctrl+O hides completed bullets: completing one moves the caret on; the choice is remembered', async ({ page }) => {
+  test('a completed bullet stays where it is, struck through; nothing hides it', async ({ page }) => {
     await edit(page, 'Часть вторая');
-    await page.keyboard.press('Control+o');
-    await expect(page.locator('.toast')).toContainText('Выполненные скрыты');
-    await page.keyboard.press('Control+l'); // a task now, still open: stays
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
+    const row = page.locator('.row', { hasText: 'Часть вторая' });
+    await expect(row).toHaveClass(/done/);
+    await expect(row.locator('.text')).toHaveCSS('text-decoration-line', 'line-through');
     expect(await outline(page)).toEqual(DEMO);
-    await page.keyboard.press('Control+l');
-    expect(await outline(page)).toEqual(DEMO.filter((l) => !l.includes('Часть вторая')));
-    await expect(editing(page)).toHaveText('Том второй');
-    await page.reload();
-    await expect(page.locator('.row')).toHaveCount(DEMO.length); // ?demo starts fresh, nothing is completed
-    await page.locator('.row .text', { hasText: 'Том второй' }).click();
-    await page.keyboard.press('Control+l');
-    await page.keyboard.press('Control+l');
-    expect(await outline(page)).toEqual(DEMO.slice(0, 5)); // still hidden after the reload
-    await page.keyboard.press('Control+o');
-    expect(await outline(page)).toEqual(DEMO);
-  });
-
-  test('with completed bullets hidden, a bullet holding only completed ones opens and folds, empty, with no halo', async ({ page }) => {
-    for (const text of ['Eh bien', 'Анна Павловна']) {
-      await edit(page, text);
-      await page.keyboard.press('Control+l');
-      await page.keyboard.press('Control+l');
-      await page.keyboard.press('Escape');
-    }
-    await page.keyboard.press('Control+o');
-    const row = page.locator('.row', { hasText: 'Часть первая' });
-    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
-    // Open, and empty: the arrow turned down, no halo saying something is folded away.
-    await expect(row.locator('.toggle')).toHaveClass(/open/);
-    await expect(row.locator('.bullet')).not.toHaveClass(/collapsed/);
-    await page.mouse.move(300, 120);
-    await row.locator('.toggle').click();
-    await expect(row.locator('.toggle')).not.toHaveClass(/open/);
-    await expect(row.locator('.bullet')).not.toHaveClass(/collapsed/);
-    await row.locator('.toggle').click();
-    await expect(row.locator('.toggle')).toHaveClass(/open/);
-    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
-    // Enter at its end starts its first child, inside it.
-    await edit(page, 'Часть первая');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('новое');
-    expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '    новое', '  Часть вторая', 'Том второй']);
+    await expect(editing(page)).toHaveText('Часть вторая');
+    await page.keyboard.press('Escape');
+    await page.locator('.menu-button').click();
+    await expect(page.getByRole('menuitem', { name: /выполненные/i })).toHaveCount(0);
   });
 
   test('notes and completion survive a reload', async ({ page }) => {

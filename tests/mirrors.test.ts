@@ -321,7 +321,7 @@ describe('a mirror shows the subtree of its original', () => {
     expect(doc.get('a').done).toBe(false);
   });
 
-  for (const mode of ['plain', 'zoom', 'hide done', 'filter'] as const) {
+  for (const mode of ['plain', 'zoom', 'filter'] as const) {
     it(`stays equal to a full rebuild under random editing through mirrors (${mode})`, () => {
       let steps = 0;
       const seeds = 20;
@@ -333,7 +333,6 @@ describe('a mirror shows the subtree of its original', () => {
           { m1: 'a', m2: 'e', m3: 'g' },
         );
         if (mode === 'zoom') rows.setTop('top');
-        if (mode === 'hide done') rows.setHideDone(true);
         const filter = mode === 'filter' ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']) } : null;
         if (filter) rows.setFilter(filter);
         const initial = dump(doc);
@@ -369,7 +368,6 @@ describe('a mirror shows the subtree of its original', () => {
           checkInvariants(doc);
           const fresh = new VisibleRows(doc);
           fresh.setTop(rows.top);
-          fresh.setHideDone(rows.hidesDone);
           if (filter) fresh.setFilter(filter);
           fresh.loadFolds(rows.foldEntries());
           fresh.dispose();

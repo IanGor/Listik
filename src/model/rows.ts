@@ -92,8 +92,6 @@ export class VisibleRows implements DocListener {
   private filter: Filter | null = null;
   /** Where the last `indexOf` found its row. */
   private hint = 0;
-  /** Completed bullets hidden (Ctrl+O). */
-  private hideDone = false;
   /** Ops patched in the current transaction, and whether patching gave up. */
   private patched = 0;
   private stale = false;
@@ -200,14 +198,8 @@ export class VisibleRows implements DocListener {
     return n.parent === this.host(context)?.id ? context : keyIn(context, n.parent!);
   }
 
-  /** Children of the row `key` (`top` for the top level) shown below it, assuming the row itself is shown. */
+  /** Children of the row `key` (`top` for the top level) shown below it, assuming the row itself is shown: what folding and the filter leave. */
   shownChildren(key: RowKey): NodeId[] {
-    const shown = this.unfoldedChildren(key);
-    return this.hideDone && shown.length ? shown.filter((c) => !this.doc.get(c).done) : shown;
-  }
-
-  /** The children folding and the filter leave under the row: what shows, but for hidden completed bullets. */
-  private unfoldedChildren(key: RowKey): NodeId[] {
     const n = this.doc.get(nodeOf(key));
     const kids = this.host(key)?.children ?? [];
     const f = this.filter;
@@ -273,39 +265,18 @@ export class VisibleRows implements DocListener {
     this.rebuild();
   }
 
-  get hidesDone(): boolean {
-    return this.hideDone;
-  }
-
-  /** Leaves completed bullets (with their subtrees) out of the rows, or shows them again. */
-  setHideDone(hide: boolean): void {
-    if (this.hideDone === hide) return;
-    this.hideDone = hide;
-    this.rebuild();
-  }
-
   showsChildren(key: RowKey): boolean {
     return this.shownChildren(key).length > 0;
   }
 
-  /**
-   * Is the row open: its arrow turned down, its children listed (or none,
-   * when all of them are completed and completed bullets are hidden: open,
-   * and empty)?
-   */
+  /** Is the row open: its arrow turned down, its children listed? */
   unfolded(key: RowKey): boolean {
-    return this.unfoldedChildren(key).length > 0;
+    return this.showsChildren(key);
   }
 
-  /**
-   * Has children that folding or the filter keep out of view: drawn as a
-   * folded bullet. Completed bullets hidden by Ctrl+O do not count: there is
-   * nothing to unfold for them.
-   */
+  /** Has children that folding or the filter keep out of view: drawn as a folded bullet. */
   hasHiddenChildren(key: RowKey): boolean {
-    const kids = this.host(key)?.children ?? [];
-    const could = this.hideDone ? kids.filter((c) => !this.doc.get(c).done).length : kids.length;
-    return could > this.shownChildren(key).length;
+    return (this.host(key)?.children.length ?? 0) > this.shownChildren(key).length;
   }
 
   /**
@@ -363,9 +334,8 @@ export class VisibleRows implements DocListener {
   }
 
   op(op: Op): void {
-    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo') return;
-    // Completion changes rows only while completed bullets are hidden.
-    if (op.t === 'setDone' && !this.hideDone) return;
+    // Text and task state change no rows: completed bullets always show, struck through.
+    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone') return;
     // Under a filter, edited bullets must stay visible (admit), which needs
     // the in-place patches; there, every op is patched.
     if (!this.filter && (this.stale || ++this.patched > PATCH_LIMIT)) {
@@ -393,10 +363,6 @@ export class VisibleRows implements DocListener {
       case 'setMirror':
         this.refreshAll(op.id);
         this.refreshMirrorsOf(op.id);
-        break;
-      case 'setDone':
-        if (op.to) this.hide(op.id);
-        else this.show(op.id);
         break;
     }
     this.version++;

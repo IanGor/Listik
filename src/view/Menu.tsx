@@ -104,10 +104,6 @@ export function DocumentMenu(props: { o: Outliner }) {
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
             <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
           </button>
-          <button type="button" role="menuitem" onClick={() => { close(); o.toggleShowDone(); }}>
-            {o.showDone() ? 'Скрыть выполненные' : 'Показать выполненные'}
-            <Show when={!touch()}><span class="hint">Ctrl+O</span></Show>
-          </button>
           <button
             type="button"
             role="menuitem"

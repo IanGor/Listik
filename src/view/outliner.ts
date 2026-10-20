@@ -16,9 +16,7 @@ import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { NodeSignals } from './node-signals';
-import { touch } from './screen';
 
-const HIDE_DONE = 'listik-hide-done';
 /** Saved searches (the star in the search box), newest first; per browser, like the theme. */
 const SAVED_SEARCHES = 'listik-saved-searches';
 /** Saved searches kept at most: saving one more lets the oldest go. */
@@ -113,9 +111,6 @@ export class Outliner {
   /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
-  /** Completed bullets are shown (Ctrl+O hides them); remembered per browser. */
-  readonly showDone: Accessor<boolean>;
-  private setShowDone: Setter<boolean>;
   /** Rows being dragged (with their subtrees), shown dimmed. */
   readonly dragged: Accessor<ReadonlySet<RowKey>>;
   readonly setDragged: Setter<ReadonlySet<RowKey>>;
@@ -186,9 +181,8 @@ export class Outliner {
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
-    const hideDone = readSetting(HIDE_DONE) === '1';
-    [this.showDone, this.setShowDone] = createSignal(!hideDone);
-    if (hideDone) this.rows.setHideDone(true);
+    // Completed bullets are no longer hidden (that setting is gone): forget it.
+    writeSetting('listik-hide-done', null);
     doc.subscribe(this.nodes);
     doc.subscribe({
       commit: () => {
@@ -576,20 +570,6 @@ export class Outliner {
     };
   }
 
-  /** Ctrl+O: hides completed bullets, or shows them again. */
-  toggleShowDone(): void {
-    const show = !this.showDone();
-    batch(() => {
-      this.rows.setHideDone(!show);
-      this.setShowDone(show);
-      writeSetting(HIDE_DONE, show ? null : '1');
-      this.syncRows();
-      const cur = this.focus();
-      if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
-    });
-    this.notify(show ? 'Выполненные показаны' : `Выполненные скрыты — ${touch() ? 'показать можно в меню «⋯»' : 'Ctrl+O, чтобы показать'}`);
-  }
-
   /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */
   cycleTask(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => cycleTask(ctx, ids), ids, keep);
@@ -615,22 +595,9 @@ export class Outliner {
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }
 
-  /**
-   * Applies a change to tasks. When completed tasks are hidden, completing
-   * one takes it out of the list, and the caret moves on to the row that
-   * took its place.
-   */
+  /** Applies a change to tasks: completed ones stay where they are, struck through. */
   private changeTasks(cmd: (ctx: Ctx) => void, ids: RowKey[], keep?: Focus): void {
-    if (!ids.length) return;
-    const first = this.rows.indexOf(ids[0]);
-    const last = this.rows.indexOf(ids[ids.length - 1]);
-    const end = last >= 0 ? this.rows.subtreeEnd(last) : -1;
-    const next = (end >= 0 ? this.rows.ids[end] : undefined) ?? (first > 0 ? this.rows.ids[first - 1] : undefined);
-    batch(() => {
-      this.run(cmd, keep);
-      if (keep && this.rows.indexOf(keep.id) < 0 && next) this.setFocus({ id: next, caret: 0 });
-      if (this.selection() && !this.selectedSet().size) this.select(null);
-    });
+    if (ids.length) this.run(cmd, keep);
   }
 
   /** Shows a message for a few seconds. */

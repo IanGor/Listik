@@ -221,9 +221,6 @@ export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   } else if (e.code === 'Slash') {
     e.preventDefault();
     o.showHelp();
-  } else if (e.code === 'KeyO') {
-    e.preventDefault();
-    o.toggleShowDone();
   } else if (e.code === 'KeyZ') {
     e.preventDefault();
     if (e.shiftKey) o.redo();
