@@ -1,6 +1,7 @@
 import { createSignal, type Accessor } from 'solid-js';
 import { moveManyTo } from '../model/commands';
 import type { RowKey } from '../model/rows';
+import { indentation } from './indent';
 import type { Outliner } from './outliner';
 
 /** Where a drop would land (rows: under a mirror row, into its original), and the line that shows it (px, relative to the spacer). */
@@ -102,11 +103,11 @@ export function createDrag(o: Outliner, el: () => Elements) {
       if (prevId && nextId && inside.has(prevId) && inside.has(nextId)) return null;
 
       // The level: from the pointer's x, between the next row's depth and one deeper than the previous row.
-      const indent = indentProbe.getBoundingClientRect().width || 20;
+      const indent = indentation(indentProbe);
       const base = windowEl.getBoundingClientRect().left;
       const maxDepth = prevId ? rows.depths[prev] + 1 : 0;
       const minDepth = nextId ? rows.depths[prev + 1] : 0;
-      const depth = Math.max(minDepth, Math.min(maxDepth, Math.round((pointer.x - base) / indent - 0.5)));
+      const depth = Math.max(minDepth, Math.min(maxDepth, indent.levelAt(pointer.x - base)));
 
       let parent: RowKey;
       let after: RowKey | null;
@@ -132,7 +133,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
       const top = anchor
         ? anchor.getBoundingClientRect().bottom - spacerRect.top
         : (rowEl?.getBoundingClientRect().top ?? spacerRect.top) - spacerRect.top;
-      return { parent, after, top, left: base - spacerRect.left + depth * indent };
+      return { parent, after, top, left: base - spacerRect.left + indent.at(depth) };
     };
 
     const autoScroll = () => {

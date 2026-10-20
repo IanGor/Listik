@@ -4,6 +4,7 @@ import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
 import { keyboard, touch } from './screen';
 import { createDrag } from './drag';
+import { indentation } from './indent';
 import { EditBar } from './EditBar';
 import { GoTo } from './GoTo';
 import { onGlobalKeys, onSelectionKeys, periodKeys } from './keymap';
@@ -71,6 +72,8 @@ export function Outline(props: { o: Outliner }) {
       setHead(0);
     });
   };
+  /** The keyboard is up for the trash's own filter: the trash stays, it is what is typed into. */
+  const [trashTyping, setTrashTyping] = createSignal(false);
   /** Height of the backlinks under a zoomed-in list (Backlinks.tsx), measured the same way. */
   const [foot, setFoot] = createSignal(0);
   const footObserver = new ResizeObserver(([entry]) => setFoot(entry.borderBoxSize[0].blockSize));
@@ -135,11 +138,11 @@ export function Outline(props: { o: Outliner }) {
     const ch = probe.getBoundingClientRect().width / 10;
     const lh = parseFloat(getComputedStyle(windowEl).lineHeight) || 20;
     const cols = Math.max(20, Math.floor(windowEl.clientWidth / ch));
-    // --indent changes with the viewport (index.css), so it is measured, not assumed.
-    const indent = indentProbe.getBoundingClientRect().width / ch;
+    // The indent changes with the viewport (index.css), so it is measured, not assumed.
+    const indent = indentation(indentProbe);
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
-      const perLine = Math.max(10, Math.floor(cols - indent * depth - (BULLET_GAP + (touch() ? FOLD_COLUMN : 0)) / ch));
+      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (touch() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
@@ -294,18 +297,20 @@ export function Outline(props: { o: Outliner }) {
     if (!row.classList?.contains('row')) return null;
     const depth = Number(row.dataset.depth);
     if (!depth) return null;
-    const indent = indentProbe.getBoundingClientRect().width;
+    const indent = indentation(indentProbe);
     const half = (parseFloat(getComputedStyle(row).getPropertyValue('--bullet')) || 20) / 2;
     const x = e.clientX - row.getBoundingClientRect().left;
-    const k = Math.round((x - half) / indent);
-    if (k < 0 || k >= depth || Math.abs(x - (k * indent + half)) > (touch() ? 10 : 5)) return null;
+    // The nearest line; past --deep they stand closer (index.css).
+    let k = 0;
+    for (let d = 1; d < depth; d++) if (Math.abs(x - indent.at(d) - half) < Math.abs(x - indent.at(k) - half)) k = d;
+    if (Math.abs(x - (indent.at(k) + half)) > (touch() ? 10 : 5)) return null;
     let key: RowKey | null = row.dataset.id!;
     for (let d = depth; d > k && key; d--) key = o.rows.parentKey(key);
     const i = key ? o.rows.indexOf(key) : -1;
     if (i < 0) return null;
     const from = v.offsetOf(i + 1);
     const to = v.offsetOf(o.rows.subtreeEnd(i));
-    return { key: key!, top: top() + from, height: to - from, left: windowEl.offsetLeft + k * indent + half };
+    return { key: key!, top: top() + from, height: to - from, left: windowEl.offsetLeft + indent.at(k) + half };
   };
   const [hotGuide, setHotGuide] = createSignal<{ key: RowKey; top: number; height: number; left: number } | null>(null);
   const onMouseMove = (e: MouseEvent) => {
@@ -399,6 +404,12 @@ export function Outline(props: { o: Outliner }) {
               <Show when={hotGuide()}>
                 {(g) => <div class="guide-hot" style={{ top: `${g().top}px`, height: `${g().height}px`, left: `${g().left}px` }} />}
               </Show>
+              {/* A search that finds nothing says so, rather than leaving a blank page. */}
+              <Show when={o.filter()?.count === 0}>
+                <p class="no-results" role="status" style={{ top: `${top()}px` }}>
+                  {o.zoom() ? 'Здесь ничего не найдено' : 'Ничего не найдено'}
+                </p>
+              </Show>
               <Show when={showAdd()}>
                 {/* Sits right under the last row: the rows above it end at `total`. */}
                 <button
@@ -425,12 +436,15 @@ export function Outline(props: { o: Outliner }) {
             </div>
           </div>
         </div>
-        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard. */}
-        <Show when={o.trashOpen() && !(touch() && keyboard())}>
-          <Trash o={o} />
+        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard, unless that keyboard types into its filter. */}
+        <Show when={o.trashOpen() && (!(touch() && keyboard()) || trashTyping())}>
+          <Trash o={o} onTyping={setTrashTyping} />
         </Show>
       </div>
-      <EditBar o={o} />
+      {/* Its buttons act on the row being edited; not while the keys go to the trash's filter. */}
+      <Show when={!trashTyping()}>
+        <EditBar o={o} />
+      </Show>
       <Suggest o={o} />
     </div>
   );

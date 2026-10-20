@@ -379,6 +379,10 @@ test.describe('tag filter', () => {
     await expect.poll(() => outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
     await search.pressSequentially('х');
     await expect(page.locator('.searchbar .count')).toHaveText(/^0 /);
+    // Nothing found says so, instead of a blank page.
+    await expect(page.locator('.no-results')).toHaveText('Ничего не найдено');
+    await search.press('Escape');
+    await expect(page.locator('.no-results')).toHaveCount(0);
   });
 
   test('clicking a tag shows only tagged bullets with their path; Esc clears', async ({ page }) => {
@@ -529,6 +533,21 @@ test.describe('zoom', () => {
     await expect(nav).not.toHaveClass(/clipped/);
     await crumbs(page).filter({ hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
+  });
+
+  test('a path only a little too wide does not scroll: the place\'s own crumb gives way', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 800 });
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await title(page).click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' — очень длинный заголовок пункта');
+    await page.keyboard.press('Escape');
+    const nav = page.locator('.crumbs');
+    // "Главная" whole and unfaded; the current crumb ends in an ellipsis instead.
+    await expect(nav).not.toHaveClass(/clipped/);
+    expect(await nav.evaluate((el) => el.scrollLeft)).toBe(0);
+    const current = page.locator('.crumbs [aria-current="page"]');
+    expect(await current.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
   });
 
   test('the title shows tags like a row: a click on one filters, a click elsewhere edits there', async ({ page }) => {
@@ -1390,6 +1409,9 @@ test.describe('theme', () => {
     // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    // The theme was light already: wait for the switch itself (the pick let go). Two switches
+    // within a frame never fire a change, as the query ends where it began.
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('listik-theme'))).toBeNull();
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
@@ -1525,6 +1547,10 @@ test.describe('touch screen', () => {
 
   test('quick capture comes first in the menu; no tray in the header; the line sits at the bottom', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
+    // Turned sideways the window is wider than 640px, still no tray.
+    await page.setViewportSize({ width: 915, height: 412 });
+    await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
+    await page.setViewportSize({ width: 412, height: 915 });
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.getByRole('menuitem').first()).toHaveText('Записать в Inbox');
     await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
@@ -1534,6 +1560,10 @@ test.describe('touch screen', () => {
     await page.keyboard.type('с телефона');
     await page.keyboard.press('Enter');
     expect((await outline(page)).slice(-2)).toEqual(['Inbox', '  с телефона']);
+    // The message and its action on one line, not squeezed into half the screen.
+    const toast = page.getByRole('status');
+    await expect(toast).toContainText('Отменить');
+    expect((await toast.boundingBox())!.height).toBeLessThan(50);
   });
 
   test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
@@ -1549,6 +1579,64 @@ test.describe('touch screen', () => {
     await expect(sheet).toHaveCount(0);
     await keyboard(page, false);
     await expect(sheet).toBeVisible();
+  });
+
+  test('a landscape phone with the keyboard up: no path, slimmer header and bar, the line in full above the bar', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 });
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.setViewportSize({ width: 915, height: 190 });
+    await expect(bar(page)).toBeVisible();
+    await expect(page.locator('.crumbbar')).toBeHidden();
+    const row = editing(page);
+    await expect.poll(async () => { const r = (await row.boundingBox())!; return r.y + r.height; })
+      .toBeLessThanOrEqual((await bar(page).boundingBox())!.y);
+    expect((await row.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator('.topbar').boundingBox())!.height);
+    // The keyboard down: the path is back.
+    await page.setViewportSize({ width: 915, height: 412 });
+    await expect(page.locator('.crumbbar')).toBeVisible();
+  });
+
+  test('ten levels deep the text still has room: past the 4th a level indents less', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await page.keyboard.press('Control+End');
+    for (let d = 1; d <= 10; d++) {
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Tab');
+      await page.keyboard.type(`уровень ${d}`);
+    }
+    await page.keyboard.press('Escape');
+    const text = (d: number) => page.locator(`.row[data-depth="${d}"] .text`).last().boundingBox();
+    // 28 px a level up to the 4th, 12 px after it.
+    expect(Math.round((await text(4))!.x - (await text(3))!.x)).toBe(28);
+    expect(Math.round((await text(5))!.x - (await text(4))!.x)).toBe(12);
+    expect((await text(10))!.width).toBeGreaterThan(100);
+    // A guide line deep down is still where its bullet is: a tap on it folds that bullet.
+    const parent = (await page.locator('.row', { hasText: 'уровень 6' }).locator('.bullet').boundingBox())!;
+    const child = (await page.locator('.row', { hasText: 'уровень 8' }).boundingBox())!;
+    await page.touchscreen.tap(parent.x + parent.width / 2, child.y + child.height / 2);
+    await expect(page.locator('.row', { hasText: 'уровень 7' })).toHaveCount(0);
+  });
+
+  test('the trash filter takes the keyboard: the sheet stays, without the edit bar', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: /Корзина/ }).tap();
+    const sheet = page.getByRole('complementary', { name: 'Корзина' });
+    const filter = sheet.getByRole('searchbox', { name: 'Найти в удалённом' });
+    await filter.tap();
+    await keyboard(page, true);
+    await expect(sheet).toBeVisible();
+    await expect(filter).toBeFocused();
+    await expect(bar(page)).toHaveCount(0);
+    await page.keyboard.type('Шер');
+    await expect(sheet.locator('.trash-item')).toHaveCount(1);
+    // Back in a row, the keyboard is the outline's again: the sheet steps aside, the bar comes.
+    await keyboard(page, false);
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await keyboard(page, true);
+    await expect(sheet).toHaveCount(0);
+    await expect(bar(page)).toBeVisible();
   });
 
   test('the search box lists no recent places: nothing drops over the outline', async ({ page }) => {
@@ -1784,13 +1872,27 @@ test.describe('touch screen', () => {
     await expect.poll(left).toBe(0);
     await insert.evaluate((el) => (el.scrollLeft = el.scrollWidth));
     await expect(insert).not.toHaveClass(/more/);
-    expect(await left()).toBe(0);
+    // Sticky settles on the frame after the scroll.
+    await expect.poll(left).toBe(0);
     await page.keyboard.press('Control+Home');
     await action(page, 'Время').tap();
     await expect(editing(page)).toHaveText('23:40Том второй');
     // Opened again, the set starts at its beginning.
     await action(page, 'Вставить').tap();
     expect(await insert.evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
+  test('quick taps between the sets, while they slide, leave the bar in place', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await keyboard(page, true);
+    await action(page, 'Вставить').tap();
+    await page.locator('.editbar-insert').getByRole('button', { name: 'Назад' }).tap();
+    // No waiting for the slide: the next set at once.
+    await action(page, 'Переместить').tap();
+    const move = page.locator('.editbar-move');
+    const left = async () => Math.round((await move.getByRole('button', { name: 'Назад' }).boundingBox())!.x);
+    await expect.poll(left).toBe(8);
+    expect(await page.locator('.editbar').evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
   test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
@@ -1847,6 +1949,58 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('a tapped button does not stay lit: no hover on a touch screen', async ({ page }) => {
+    // A stored document opens on today, with ‹ › beside the path.
+    await page.goto('/?db=hover');
+    const next = page.locator('.period-step').last();
+    await next.tap();
+    await expect(next).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const crumb = page.locator('.crumb').first();
+    await crumb.tap();
+    await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+
+  test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
+    expect((await page.locator('.brand').boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
+    // The "+" is drawn 24px; a tap just beside it still adds a bullet.
+    const add = (await page.getByRole('button', { name: 'Новый пункт' }).boundingBox())!;
+    expect(add.width).toBe(24);
+    await page.touchscreen.tap(add.x + add.width / 2, add.y + add.height + 8);
+    expect(await outline(page)).toEqual([...DEMO, '']);
+  });
+
+  test('fields are 16px at least, so a phone does not zoom in on them', async ({ page }) => {
+    await expect(page.locator('.search')).toHaveCSS('font-size', '16px');
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: /Корзина/ }).tap();
+    await expect(page.locator('.trash-filter')).toHaveCSS('font-size', '16px');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
+    await expect(page.locator('.capture-input')).toHaveCSS('font-size', '16px');
+  });
+
+  test('the search field keeps its room: the count is a bare number', async ({ page }) => {
+    await page.locator('.search').tap();
+    await page.keyboard.type('#шерер');
+    await expect(page.locator('.searchbar .count')).toHaveText('1');
+    await expect(page.locator('.searchbar .count')).toHaveAttribute('title', '1 bullet');
+  });
+
+  test('on a 320px phone the menu stays inside the window; long items wrap', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    // A stored document: its menu has the longest items (sync, backup).
+    await page.goto('/?db=menu&empty');
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    const menu = page.getByRole('menu');
+    const box = (await menu.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(320);
+    expect(await menu.getByRole('menuitem').evaluateAll((items) => items.filter((b) => b.scrollWidth > b.clientWidth).length)).toBe(0);
+  });
+
   test('the menu speaks of gestures, not keys', async ({ page }) => {
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.locator('.menu .hint', { hasText: /Ctrl|\?/ })).toHaveCount(0);
@@ -1854,9 +2008,17 @@ test.describe('touch screen', () => {
     const panel = page.getByRole('dialog', { name: 'Жесты и клавиши' });
     await expect(panel.locator('h3').first()).toHaveText('Касания');
     await expect(panel).toContainText('поднять пункт и перетащить');
+    // The arrows stand at the end of the row on a touch screen.
+    await expect(panel).toContainText('стрелка в конце строки');
     // The keys are still listed, for a keyboard attached to the phone.
     await expect(panel).toContainText('вложить / вынести');
     expect(await panel.evaluate((d) => d.scrollWidth <= d.clientWidth)).toBe(true);
+    // A pointer's doing is said in words, not cut into keycaps; no keycap sticks out of its column.
+    await expect(panel.locator('kbd', { hasText: /^(клик|знак)$/ })).toHaveCount(0);
+    await expect(panel.locator('dt.gesture', { hasText: 'клик по вертикальной линии' })).toHaveCount(1);
+    expect(await panel.locator('dt').evaluateAll((ds) => ds.filter((d) => d.scrollWidth > d.clientWidth + 1).length)).toBe(0);
+    // The descriptions of every section stand in one column.
+    expect(new Set(await panel.locator('dd').evaluateAll((ds) => ds.map((d) => Math.round(d.getBoundingClientRect().x)))).size).toBe(1);
   });
 
   test('fold arrows show without hover, stand in one column at the end of the rows, and fold at a tap', async ({ page }) => {
