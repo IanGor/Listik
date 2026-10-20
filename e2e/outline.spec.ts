@@ -595,7 +595,7 @@ test.describe('structure and calendar', () => {
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const STRUCTURE = ['Inbox', '@q1', '@q2', '@q3', '@q4', 'Projects', 'Hubs', 'Reference', 'Archive'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
-  /** A day as it is first entered: notes, a todo list with an empty task, the hours. */
+  /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
   const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
   const title = (page: Page) => page.locator('.zoom-title');
   const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
@@ -604,7 +604,8 @@ test.describe('structure and calendar', () => {
     await create(page);
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(DAY);
-    await expect(page.locator('.row').nth(3).locator('.bullet')).toHaveClass(/todo/);
+    // The bullet under "todo" is plain, as under the notes: no checkbox.
+    await expect(page.locator('.row').nth(3).locator('.bullet')).not.toHaveClass(/todo/);
     await expect(caret(page)).toHaveCount(0);
     for (const crumb of [`@q${quarter}`, year, new RegExp(`^@m${two(now.getMonth() + 1)}$`), /^@w\d\d$/]) {
       await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);

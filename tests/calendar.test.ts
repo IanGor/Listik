@@ -202,14 +202,15 @@ describe('findInbox', () => {
 });
 
 describe('fillDay', () => {
-  it('gives an empty day notes, a todo list with a task, then the hours, once', () => {
+  it('gives an empty day notes and a todo list, each with an empty plain bullet, then the hours, once', () => {
     const { doc, ctx, run } = setup(['@d19 @m10 @понедельник']);
     const id = '@d19 @m10 @понедельник';
     expect(run(() => fillDay(ctx, id))).toBe(true);
     expect(dump(doc)).toEqual([id, '  #notes', '    ', '  todo', '    ', ...SLOTS.map((s) => `  ${s}`)]);
     const [notes, todo] = doc.get(id).children;
     expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
-    expect(doc.get(doc.get(todo).children[0]).todo).toBe(true);
+    // Plain, like the one under the notes: no checkbox until it is made a task.
+    expect(doc.get(doc.get(todo).children[0]).todo).toBe(false);
     expect(SLOTS[0]).toBe('09:00');
     expect(SLOTS.at(-1)).toBe('18:00');
     expect(SLOTS.length).toBe(19);
