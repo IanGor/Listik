@@ -205,15 +205,135 @@ test.describe('saved searches', () => {
     await expect(list(page).getByRole('listitem')).toHaveCount(20);
     await expect(list(page).getByRole('listitem').first()).toHaveText('новый');
     await expect(list(page).getByRole('listitem').last()).toHaveText('поиск 18');
-    expect(await list(page).evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
-    await expect(list(page)).toHaveClass(/more/);
-    await list(page).evaluate((el) => (el.scrollTop = el.scrollHeight));
-    await expect(list(page)).not.toHaveClass(/more/);
+    const menu = page.locator('.search-menu');
+    expect(await menu.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    await expect(menu).toHaveClass(/more/);
+    await menu.evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await expect(menu).not.toHaveClass(/more/);
     // A OnePlus 8 with the keyboard up: 412 × 540.
     await page.setViewportSize({ width: 412, height: 540 });
-    const height = await list(page).evaluate((el) => el.getBoundingClientRect().height);
+    const height = await menu.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBeLessThanOrEqual(0.4 * 540 + 1);
     expect(height).toBeGreaterThan(150);
+  });
+});
+
+test.describe('places in the search box', () => {
+  const places = (page: Page) => page.getByRole('listbox', { name: 'Места' });
+  const recent = (page: Page) => page.getByRole('listbox', { name: 'Недавние места' });
+  const title = (page: Page) => page.locator('.zoom-title');
+
+  test('Ctrl+K and a name: places by title with their path, the first chosen; Enter goes in, the caret on its first bullet', async ({ page }) => {
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('.search')).toBeFocused();
+    await page.keyboard.type('часть пер');
+    await expect(places(page).getByRole('option')).toHaveText(['Часть первая' + 'Том первый']);
+    await expect(places(page).getByRole('option', { selected: true })).toHaveText(/^Часть первая/);
+    // The outline below still shows what matches.
+    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await page.keyboard.press('Enter');
+    await expect(title(page)).toHaveText('Часть первая');
+    await expect(page.locator('.search')).toHaveValue('');
+    await expect(editing(page)).toHaveText(DEMO[2].trim());
+  });
+
+  test('↓ chooses another place; a click goes there without editing; a tag lists no places', async ({ page }) => {
+    const search = page.locator('.search');
+    await search.click();
+    await search.pressSequentially('часть');
+    const options = places(page).getByRole('option');
+    await expect(options).toHaveCount(2);
+    await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+    await search.press('ArrowDown');
+    await expect(options.last()).toHaveAttribute('aria-selected', 'true');
+    await search.press('ArrowUp');
+    await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+    await places(page).getByRole('option', { name: /Часть вторая/ }).click();
+    await expect(title(page)).toHaveText('Часть вторая');
+    await expect(editing(page)).toHaveCount(0);
+
+    await search.click();
+    await search.fill('#шер');
+    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await expect(places(page)).toHaveCount(0);
+  });
+
+  test('before anything is typed, the places gone to lately, the newest first, without the one you are in', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'Том второй' }).locator('.bullet').click();
+    await expect(title(page)).toHaveText('Том второй');
+    await page.locator('.search').click();
+    await expect(recent(page).getByRole('option')).toHaveText(['Часть первая' + 'Том первый']);
+    // Nothing is chosen until ↓.
+    await expect(recent(page).getByRole('option', { selected: true })).toHaveCount(0);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(title(page)).toHaveText('Часть первая');
+    await page.locator('.search').click();
+    await expect(recent(page).getByRole('option')).toHaveText(['Том второй']);
+  });
+});
+
+test.describe('move to a place', () => {
+  const targets = (page: Page) => page.getByRole('listbox', { name: 'Куда переместить' });
+  const search = (page: Page) => page.locator('.search');
+
+  test('Ctrl+Shift+M: the box asks where to; a name and Enter move the bullet last there, the caret stays here; undo and the toast', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(search(page)).toBeFocused();
+    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить «Часть вторая» в…');
+    await page.keyboard.type('том вт');
+    // The outline is left as it is: the name is no search.
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(targets(page).getByRole('option', { selected: true })).toHaveText('Том второй');
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);
+    // On, to the row that followed it.
+    await expect(editing(page)).toHaveText('Том второй');
+    await expect(search(page)).toHaveValue('');
+    await expect(page.locator('.toast')).toContainText('Перемещено в');
+
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveText('Часть вторая');
+
+    // Where bullets went lately comes first, before anything is typed.
+    await page.keyboard.press('Control+Shift+m');
+    await expect(targets(page).getByRole('option').first()).toHaveText('Том второй');
+    // The toast's place leads there, to the moved bullet.
+    await page.keyboard.press('Enter');
+    await page.locator('.toast').getByRole('button', { name: 'Том второй' }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await expect(editing(page)).toHaveText('Часть вторая');
+  });
+
+  test('a bullet is never offered itself or what is inside it; Esc moves nothing and the caret goes back', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Control+Shift+m');
+    await page.keyboard.type('часть');
+    await expect(targets(page).getByRole('option')).toHaveText(['Часть вторая' + 'Том первый']);
+    await page.keyboard.type(' пер');
+    await expect(targets(page)).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('|');
+    await expect(editing(page)).toHaveText('Часть перва|я');
+    expect(await outline(page)).toHaveLength(DEMO.length);
+  });
+
+  test('selected bullets move together, in their order', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    // Down through its own bullets to the next part.
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Control+Shift+m');
+    await expect(search(page)).toHaveAttribute('placeholder', 'Переместить 2 пункта в…');
+    await page.keyboard.type('том вт');
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual(['Том первый', 'Том второй', '  Часть первая', '    ' + DEMO[2].trim(), '    ' + DEMO[3].trim(), '  Часть вторая']);
+    await expect(page.locator('.toast')).toContainText('2 пункта перемещены в');
   });
 });
 
@@ -283,14 +403,14 @@ test.describe('search', () => {
     await expect(page.locator('.row .tag.hit')).toHaveText(['шерер']);
   });
 
-  test('Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
-    await page.locator('.search').fill('вторая');
+  test('a search that lists no places: Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
+    await page.locator('.search').fill('#шерер');
     await page.keyboard.press('Enter');
-    await expect(editing(page)).toHaveText('Часть вторая');
+    await expect(editing(page)).toHaveText(DEMO[3].trim());
     await page.keyboard.type('!');
     await page.keyboard.press('Escape');
     await expect(page.locator('.search')).toHaveValue('');
-    await expect(editing(page)).toHaveText('!Часть вторая');
+    await expect(editing(page)).toHaveText('!' + DEMO[3].trim());
     expect(await outline(page)).toHaveLength(DEMO.length);
   });
 
@@ -496,6 +616,8 @@ test.describe('zoom', () => {
     await page.locator('.search').fill('шерер');
     await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
     expect(await outline(page)).toEqual([DEMO[3].trim()]);
+    // The box's list of places lies over the path: out of the box first.
+    await page.locator('.search').blur();
     await crumbs(page).filter({ hasText: 'Том первый' }).click();
     await expect(title(page)).toHaveText('Том первый');
     await expect(page.locator('.search')).toHaveValue('шерер');
@@ -514,6 +636,7 @@ test.describe('zoom', () => {
     await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
     await page.locator('.search').fill('Часть первая');
     await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await page.locator('.search').blur();
     await crumbs(page).filter({ hasText: 'Часть первая' }).click();
     await expect(title(page)).toHaveText('Часть первая');
     await expect(page.locator('.search')).toHaveValue('Часть первая');
@@ -621,6 +744,7 @@ test('the place\'s own crumb folds the first level inside, an overview; again, i
 test('"Главная" goes home with the search, and there folds the top level: out of the search, one undo step', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');
+  await page.locator('.search').blur();
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   await expect(page.locator('.zoom-title')).toHaveCount(0);
   await expect(page.locator('.search')).toHaveValue('шерер');
@@ -1233,10 +1357,11 @@ test.describe('theme', () => {
   const CREAM = 'rgb(250, 249, 245)';
   const DARK = 'rgb(38, 38, 36)';
 
-  test('follows the system until picked; the pick survives a reload', async ({ page }) => {
+  test('follows the system; a pick holds until the system switches, a reload too; then the system leads again', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
     expect(await background(page)).toBe(DARK);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     // The switch lives in the menu, as everything but search and quick capture does: the logo, the tray, the menu.
     await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
@@ -1249,12 +1374,41 @@ test.describe('theme', () => {
     await expect(page.getByRole('menuitem', { name: 'Ночная тема' })).toBeVisible();
     await page.keyboard.press('Escape');
 
+    // The system is as it was: the pick holds, after a reload too.
     await page.reload();
-    expect(await background(page)).toBe(CREAM);
-    // A system change no longer overrides the pick.
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect.poll(() => background(page)).toBe(CREAM);
+
+    // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.emulateMedia({ colorScheme: 'dark' });
-    expect(await background(page)).toBe(CREAM);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect.poll(() => background(page)).toBe(DARK);
+    await page.reload();
+    await expect.poll(() => background(page)).toBe(DARK);
+  });
+
+  test('a pick made under another system theme is dropped at the start', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/?demo');
+    await page.evaluate(() => {
+      localStorage.setItem('listik-theme', 'dark');
+      localStorage.setItem('listik-theme-system', 'dark');
+    });
+    await page.reload();
+    await expect.poll(() => background(page)).toBe(CREAM);
+  });
+
+  test('a system that tells no theme gets the dark one', async ({ page }) => {
+    // A browser without prefers-color-scheme: neither light nor dark matches.
+    await page.addInitScript(() => {
+      const own = window.matchMedia.bind(window);
+      window.matchMedia = (q: string) => (q.includes('prefers-color-scheme') ? { ...own('(max-width: 0px)'), matches: false, media: 'not all', addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList : own(q));
+    });
+    await page.goto('/?demo');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    expect(await background(page)).toBe(DARK);
   });
 });
 
@@ -1453,6 +1607,17 @@ test.describe('touch screen', () => {
     await keyboard(page, true);
     await expect(sheet).toHaveCount(0);
     await expect(bar(page)).toBeVisible();
+  });
+
+  test('"Куда…" in the move set: the search box asks where to, a tap on a place moves the bullet', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await keyboard(page, true);
+    await action(page, 'Переместить').tap();
+    await action(page, 'Куда…').tap();
+    await expect(page.locator('.search')).toBeFocused();
+    await page.keyboard.type('том вт');
+    await page.getByRole('listbox', { name: 'Куда переместить' }).getByRole('option', { name: /Том второй/ }).tap();
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), 'Том второй', '  Часть вторая']);
   });
 
   test('a bar under the list does what Tab, Ctrl+L and Ctrl+Z do; the keyboard stays', async ({ page }) => {
@@ -2095,6 +2260,29 @@ test.describe('links', () => {
     await page.goBack();
     await expect(crumbs(page)).toHaveText(['Главная']);
     await expect(page.locator('.row .link')).toHaveText('Часть вторая');
+  });
+
+  test('a retitled bullet takes its links along once the caret leaves it; one undo step brings the old ones back', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('см. [[Часть вторая]] и [[Том первый]]');
+    await page.keyboard.press('Escape');
+
+    await edit(page, 'Часть вторая');
+    await page.keyboard.type(' (Шерер)');
+    // While the title is typed, links stay as they are.
+    await expect(page.locator('.row .link').first()).toHaveText('Часть вторая');
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('.row .link')).toHaveText(['Часть вторая (Шерер)', 'Том первый']);
+    await expect(page.locator('.toast')).toContainText('Ссылки на «Часть вторая (Шерер)» обновлены в 1 пункте');
+    await page.locator('.row .link').first().click();
+    await expect(crumbs(page)).toHaveText(['Главная', 'Том первый', 'Часть вторая (Шерер)']);
+
+    await page.goBack();
+    await expect(crumbs(page)).toHaveText(['Главная']);
+    // Undo: the old links, the caret right in that bullet.
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('см. [[Часть вторая]] и [[Том первый]]');
   });
 
   test('] steps over the closing brackets, Backspace takes out an empty pair, a link to nothing says so', async ({ page }) => {

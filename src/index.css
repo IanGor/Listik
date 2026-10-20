@@ -4,8 +4,9 @@
  * depth comes from small lightness steps, coral marks state only.
  *
  * Every colour token holds its light and dark value: `light-dark()` resolves
- * them by `color-scheme`, which follows the system until a theme is picked
- * (`data-theme`, see view/theme.ts).
+ * them by `color-scheme`, set by `data-theme` (view/theme.ts: the system's
+ * theme, dark when it tells none, or a pick in the menu until the system
+ * switches).
  */
 :root {
   color-scheme: light dark;
@@ -314,10 +315,11 @@ kbd {
   scale: 0.85;
 }
 
-/* Saved searches, dropped below the focused box. At most 8.5 rows on a
-   computer, 40% of what the screen shows on a phone (with the keyboard up
-   on a OnePlus 8: about five rows); a half row says it scrolls. */
-.saved-searches {
+/* The box's list, dropped below it while it is focused: places to go to,
+   then saved searches. At most 8.5 rows on a computer, 40% of what the
+   screen shows on a phone (with the keyboard up on a OnePlus 8: about five
+   rows); a half row says it scrolls. */
+.search-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: -1px;
@@ -335,17 +337,53 @@ kbd {
   box-shadow: var(--shadow-pop);
 }
 
-.saved-searches.more {
+.search-menu.more {
   mask-image: linear-gradient(to top, transparent, #000 28px);
 }
 
-.saved-searches-label {
+.search-menu-label {
   position: sticky;
   top: 0;
+  z-index: 1;
   padding: 8px 8px 4px;
   font-size: 12px;
   color: var(--faint);
   background: var(--canvas);
+}
+
+/* A place: its title, and the path to it after, giving way to the title. */
+.place {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 36px;
+  padding: 0 8px;
+  white-space: nowrap;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.place-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.place-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* The entry Enter takes (↑/↓ move it; the pointer too). */
+.place[data-active],
+.saved-search[data-active] {
+  background: var(--surface);
 }
 
 .saved-search {
@@ -410,8 +448,12 @@ kbd {
 
 /* Finger-sized rows on a touch screen. */
 @media (pointer: coarse) {
-  .saved-searches {
+  .search-menu {
     max-height: min(calc(8.5 * 44px + 28px), 40dvh);
+  }
+
+  .place {
+    height: 44px;
   }
 
   .saved-search-run {

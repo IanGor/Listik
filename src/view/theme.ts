@@ -3,36 +3,67 @@ import { createSignal } from 'solid-js';
 export type Theme = 'light' | 'dark';
 
 /**
- * Light or dark Claude theme. Until one is picked in the UI, the system's
- * is used; a pick is remembered per browser. CSS reads `data-theme` on
- * <html> (index.css); index.html applies a saved pick before the first paint.
+ * Light or dark Claude theme, in step with the system's: when the system
+ * switches, so does the app. A system that tells no theme (no preference,
+ * or no `prefers-color-scheme` at all) gets the dark one. A pick in the menu
+ * holds until the system switches next: it is remembered per browser with
+ * the system's theme at that moment, and dropped once the system's differs
+ * (now, or by the next start). CSS reads `data-theme` on <html>
+ * (index.css), always set; index.html sets it before the first paint by
+ * the same rule.
  */
 const KEY = 'listik-theme';
-const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+/** The system's theme when the pick was made. */
+const SYSTEM_KEY = 'listik-theme-system';
+const lightMedia = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
 
-function saved(): Theme | null {
+function read(key: string): string | null {
   try {
-    const t = localStorage.getItem(KEY);
-    return t === 'light' || t === 'dark' ? t : null;
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
 
-const system = (): Theme => (media?.matches ? 'dark' : 'light');
+function write(key: string, value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    // Storage unavailable (private mode): the pick lasts for this page.
+  }
+}
 
-const [theme, setThemeSignal] = createSignal<Theme>(saved() ?? system());
+/** The system's theme: light only when it says so. */
+const system = (): Theme => (lightMedia?.matches ? 'light' : 'dark');
+
+/** The pick, while the system is as it was when it was made. */
+function picked(): Theme | null {
+  const t = read(KEY);
+  return (t === 'light' || t === 'dark') && read(SYSTEM_KEY) === system() ? t : null;
+}
+
+const DARK_BAR = '#262624';
+const LIGHT_BAR = '#faf9f5';
+
+function apply(t: Theme): void {
+  document.documentElement.dataset.theme = t;
+  // The browser's and the installed app's bar, whatever the system says.
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = t === 'dark' ? DARK_BAR : LIGHT_BAR;
+}
+
+const [theme, setThemeSignal] = createSignal<Theme>(picked() ?? system());
+apply(theme());
 
 /** The theme in effect. */
 export { theme };
 
+/** A pick in the menu: it holds until the system switches. Picking the system's own theme just follows it again. */
 export function setTheme(t: Theme): void {
-  document.documentElement.dataset.theme = t;
-  try {
-    localStorage.setItem(KEY, t);
-  } catch {
-    // Storage unavailable (private mode): the pick lasts for this page.
-  }
+  const s = system();
+  write(KEY, t === s ? null : t);
+  write(SYSTEM_KEY, t === s ? null : s);
+  apply(t);
   setThemeSignal(t);
 }
 
@@ -55,6 +86,11 @@ export function toggleTheme(from: DOMRect): void {
   });
 }
 
-media?.addEventListener('change', () => {
-  if (!saved()) setThemeSignal(system());
+// The system switched: the app follows, and a pick made before is let go.
+lightMedia?.addEventListener('change', () => {
+  write(KEY, null);
+  write(SYSTEM_KEY, null);
+  const t = system();
+  apply(t);
+  setThemeSignal(t);
 });

@@ -1,5 +1,5 @@
 import type { Doc } from './doc';
-import { LINK, MARKER, formatFlags } from './format';
+import { LINK, LINK_RE, MARKER, formatFlags } from './format';
 import { normalize, type TextIndex } from './search';
 import type { NodeId } from './types';
 
@@ -82,6 +82,51 @@ export function backlinks(doc: Doc, index: TextIndex, target: NodeId): NodeId[] 
   }
   if (first !== target) return [];
   return found.sort((a, b) => compareOrder(doc, a, b));
+}
+
+/** The title of a normalized first line: the line itself unless formatting markers may stand in it. */
+const lineTitle = (line: string) => (line.includes('*') || line.includes('_') ? titleOf(line) : line.trim());
+
+/**
+ * A bullet's title changed: `before` was its text. Links lead by title, so
+ * the bullets whose `[[links]]` led to it under the old one (text or note)
+ * are to be rewritten to `title`, the new one. Null when there is nothing
+ * to rewrite: the title is the same (to `normalize`), one of the two cannot
+ * stand in a link, no link names the old title, or such links led to an
+ * earlier bullet with that title, not to this one. `taken`: an earlier
+ * bullet already has the new title, so rewritten links would lead there.
+ * A pass over the text index for the links; only if there are any, a
+ * second one for the titles.
+ */
+export function retitledLinks(doc: Doc, index: TextIndex, id: NodeId, before: string): { ids: NodeId[]; title: string; taken: boolean } | null {
+  const from = normalize(titleOf(before));
+  const title = titleOf(doc.get(id).text);
+  const to = normalize(title);
+  if (from === to || !linkable(from) || !linkable(to)) return null;
+  const needle = `[[${from}]]`;
+  const shortest = Math.min(from.length, to.length);
+  const ids: NodeId[] = [];
+  for (const [other, t] of index.entries()) if (t.includes(needle)) ids.push(other);
+  if (!ids.length) return null;
+  // Links name the old title: did they lead here, and will they under the new one?
+  let taken = false;
+  for (const [other, t] of index.entries()) {
+    if (other === id) continue;
+    const line = firstLine(t);
+    if (line.length < shortest) continue;
+    const key = lineTitle(line);
+    if (key !== from && key !== to) continue;
+    if (compareOrder(doc, other, id) > 0) continue;
+    if (key === from) return null;
+    taken = true;
+  }
+  return { ids, title, taken };
+}
+
+/** `text` with every `[[link]]` that names `from` (normalized) naming `title` instead. */
+export function relinkText(text: string, from: string, title: string): string {
+  if (!text.includes('[[')) return text;
+  return text.replace(LINK_RE, (link, name: string) => (normalize(name.trim()) === from ? `[[${title}]]` : link));
 }
 
 /** Where in its text a bullet links to `target`'s title: the offset right after the link, or -1 (the link is in the note). */

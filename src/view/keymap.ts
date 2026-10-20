@@ -49,6 +49,8 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
 
   // Ctrl/Cmd+L (by physical key): task on, checked, unchecked; with Shift, a plain bullet again.
   if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
+  // Ctrl/Cmd+Shift+M: "Переместить в…", the bullet into a place found by name.
+  if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
 
   switch (e.key) {
     // Enter splits; Shift+Enter goes to the note. Ctrl+Enter, the old task key, does nothing.
@@ -165,6 +167,7 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
       return handle(() => o.setFocus({ id: selection.head, caret: o.contentOf(selection.head).text.length }));
   }
   if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
+  if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove(roots()));
   if (mod && e.code === 'KeyC') return handle(() => void copy());
   if (mod && e.code === 'KeyX') {
     return handle(() => {
@@ -192,6 +195,7 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTM
     const here = { id, caret: start, note: true } as const;
     return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
   }
+  if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
   if (e.key === 'Enter' && mod) return handle(() => {});
   if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
   if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);
@@ -208,14 +212,16 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTM
 
 /**
  * Keys that work wherever the caret is in the outline: Ctrl/Cmd+Z,
- * Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+F for search (the browser's
- * own find cannot see virtualized rows). Matched by physical key, so they
+ * Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+F or Ctrl/Cmd+K for the search
+ * box, which also goes to places (the browser's own find cannot see
+ * virtualized rows). Matched by physical key, so they
  * work in any keyboard layout. The browser's own undo never runs: it would
  * desync the DOM from the model.
  */
 export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (e.code === 'KeyF') {
+  // Ctrl+K as in Workflowy: the same box, to go to a place by its name.
+  if (e.code === 'KeyF' || e.code === 'KeyK') {
     e.preventDefault();
     o.requestSearch();
   } else if (e.code === 'Slash') {

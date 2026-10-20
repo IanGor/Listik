@@ -2,9 +2,9 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
-import { LINK_RE, toggleFormat } from '../model/format';
+import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
@@ -13,10 +13,11 @@ import { PendingTasks } from '../model/tasks';
 import { TagIndex, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
-import type { Focus, NodeId } from '../model/types';
+import type { Focus, NodeId, Op } from '../model/types';
 import type { Backup } from '../persist/backup';
 import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
+import { plural } from '../util/plural';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
@@ -27,6 +28,8 @@ const TRASH_OPEN = 'listik-trash-open';
 const SAVED_SEARCHES = 'listik-saved-searches';
 /** Saved searches kept at most: saving one more lets the oldest go. */
 export const SAVED_MAX = 20;
+/** Places gone to lately, kept at most (the search box shows fewer). */
+const RECENT_MAX = 20;
 
 function readSaved(): string[] {
   try {
@@ -112,7 +115,7 @@ export class Outliner {
   private setCameFrom: Setter<{ to: NodeId; from: NodeId } | null>;
   /** The zoom title or its note being edited: the editing bar (EditBar.tsx) serves them too. */
   readonly titleEdit: Accessor<TitleEdit>;
-  readonly editTitle: Setter<TitleEdit>;
+  private setTitleEdit: Setter<TitleEdit>;
   /** Bumped to open the keyboard shortcuts panel. */
   readonly helpRequests: Accessor<number>;
   private setHelpRequests: Setter<number>;
@@ -140,6 +143,19 @@ export class Outliner {
   /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
+  /** Places zoomed into lately, newest first, calendar periods aside: the search box offers them before anything is typed. */
+  readonly recentPlaces: Accessor<NodeId[]>;
+  private setRecentPlaces: Setter<NodeId[]>;
+  /** Where bullets were moved to lately ("Переместить в…"), newest first: offered first next time. */
+  readonly recentTargets: Accessor<NodeId[]>;
+  private setRecentTargets: Setter<NodeId[]>;
+  /** The document's name for the keys `recentPlaces` and `recentTargets` last under on this device (`keepRecent`); null: for this page only. */
+  private recentName: string | null = null;
+  /** "Переместить в…" is open (SearchBar.tsx): the rows to move, and what the box says of them. */
+  readonly moving: Accessor<{ keys: RowKey[]; label: string } | null>;
+  private setMoving: Setter<{ keys: RowKey[]; label: string } | null>;
+  /** Where the caret was when "Переместить в…" opened: it goes back there if nothing moves. */
+  private moveBack: FocusRequest | null = null;
   /** Rows being dragged (with their subtrees), shown dimmed. */
   readonly dragged: Accessor<ReadonlySet<RowKey>>;
   readonly setDragged: Setter<ReadonlySet<RowKey>>;
@@ -170,6 +186,12 @@ export class Outliner {
    * it that text back there. Typing more forgets it.
    */
   private erased = new Map<NodeId, string>();
+  /**
+   * The bullet whose text is being typed, with the text it had before:
+   * once editing moves on (`settleTitle`), links to its old title follow it
+   * to the new one.
+   */
+  private retitled: { id: NodeId; before: string } | null = null;
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -209,7 +231,7 @@ export class Outliner {
     [this.searchRequests, this.setSearchRequests] = createSignal(0);
     [this.zoom, this.setZoomSignal] = createSignal<NodeId | null>(null);
     [this.titleRequests, this.setTitleRequests] = createSignal(0);
-    [this.titleEdit, this.editTitle] = createSignal<TitleEdit>(null);
+    [this.titleEdit, this.setTitleEdit] = createSignal<TitleEdit>(null);
     [this.cameFrom, this.setCameFrom] = createSignal<{ to: NodeId; from: NodeId } | null>(null);
     [this.homeRequests, this.setHomeRequests] = createSignal(0);
     [this.helpRequests, this.setHelpRequests] = createSignal(0);
@@ -222,6 +244,9 @@ export class Outliner {
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
+    [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
+    [this.recentTargets, this.setRecentTargets] = createSignal<NodeId[]>([]);
+    [this.moving, this.setMoving] = createSignal<{ keys: RowKey[]; label: string } | null>(null);
     [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
@@ -244,6 +269,7 @@ export class Outliner {
 
   /** Moves the caret; editing a row ends a selection. */
   setFocus(f: FocusRequest | null): void {
+    if (this.retitled && (!f || !this.doc.has(nodeOf(f.id)) || this.contentOf(f.id).id !== this.retitled.id)) this.settleTitle();
     batch(() => {
       if (f && this.selection()) this.setSelectionSignal(null);
       this.setFocusSignal(f);
@@ -252,6 +278,7 @@ export class Outliner {
 
   /** Selects rows from `anchor` to `head` (null clears); leaves editing. */
   select(selection: Selection | null): void {
+    if (selection) this.settleTitle();
     batch(() => {
       this.setSelectionSignal(selection);
       if (selection) this.setFocusSignal(null);
@@ -369,6 +396,7 @@ export class Outliner {
    * makes its bullet, last in the structure's Inbox (one undo step).
    */
   followLink(title: string, from?: RowKey): void {
+    this.settleTitle();
     let id = resolveLink(this.doc, this.text, title);
     const inbox = id ? null : findInbox(this.doc);
     if (!id && inbox !== null && !this.readOnly) {
@@ -408,6 +436,7 @@ export class Outliner {
    * over the new place, so its results show level after level.
    */
   zoomTo(key: RowKey | null, keepSearch = false): void {
+    this.settleTitle();
     let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
     if (id && this.doc.has(id)) id = this.doc.origin(id);
@@ -422,7 +451,144 @@ export class Outliner {
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
     });
-    if (target) this.enterDay(target);
+    if (target) {
+      this.enterDay(target);
+      this.visited(target);
+    }
+  }
+
+  /** A place zoomed into goes first among the recent ones; calendar periods are reached by the logo and ‹ ›. */
+  private visited(id: NodeId): void {
+    if (periodAt(this.doc, id)) return;
+    this.remember(id, this.recentPlaces, this.setRecentPlaces, 'listik-recent');
+  }
+
+  /** `id` first in a list of recent ones, kept on this device under `prefix:<document>`. */
+  private remember(id: NodeId, list: Accessor<NodeId[]>, set: Setter<NodeId[]>, prefix: string): void {
+    const next = [id, ...list().filter((r) => r !== id)].slice(0, RECENT_MAX);
+    set(next);
+    if (this.recentName !== null) writeSetting(`${prefix}:${this.recentName}`, JSON.stringify(next));
+  }
+
+  /** The recent places and move targets last on this device for the document `name`, as the folds do. */
+  keepRecent(name: string): void {
+    this.recentName = name;
+    const read = (prefix: string, set: Setter<NodeId[]>) => {
+      try {
+        const list: unknown = JSON.parse(readSetting(`${prefix}:${name}`) ?? '[]');
+        if (Array.isArray(list)) set(list.filter((id): id is string => typeof id === 'string').slice(0, RECENT_MAX));
+      } catch {
+        // Unreadable: none yet.
+      }
+    };
+    read('listik-recent', this.setRecentPlaces);
+    read('listik-recent-targets', this.setRecentTargets);
+  }
+
+  /**
+   * Ctrl+Shift+M, "Куда…" on the editing bar: the search box turns into
+   * "Переместить в…" for these rows (SearchBar.tsx). The outline stays as
+   * it is; where the caret was is read off the page, to go back there if
+   * nothing moves (as quick capture does).
+   */
+  openMove(keys: RowKey[]): void {
+    if (this.readOnly || !keys.length) return;
+    this.settleTitle();
+    const el = document.activeElement as HTMLElement | null;
+    const f = this.focus();
+    const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
+    this.moveBack = f && offset !== undefined ? (el!.classList.contains('note') ? { id: f.id, caret: offset, note: true } : { id: f.id, caret: offset }) : f;
+    const first = titleOf(this.contentOf(keys[0]).text) || 'пустой пункт';
+    this.setMoving({ keys, label: keys.length > 1 ? `${keys.length} ${plural(keys.length, 'пункт', 'пункта', 'пунктов')}` : `«${first}»` });
+  }
+
+  /** "Переместить в…" closes with nothing moved: the caret goes back where it was. */
+  cancelMove(): void {
+    if (!this.moving()) return;
+    this.setMoving(null);
+    const back = this.moveBack;
+    this.moveBack = null;
+    if (back && this.rows.indexOf(back.id) >= 0) this.setFocus({ ...back });
+  }
+
+  /**
+   * Whether a bullet cannot take what is being moved: it is one of the
+   * moved bullets or inside one (its original, for a mirror). Places the
+   * box offers leave these out.
+   */
+  moveRefuses(id: NodeId): boolean {
+    const m = this.moving();
+    const host = this.doc.host(id)?.id;
+    return !m || host === undefined || m.keys.some((k) => this.doc.within(host, nodeOf(k)));
+  }
+
+  /**
+   * A place taken in "Переместить в…": the rows' bullets go last into it
+   * (model/commands.ts `moveManyInto`), one undo step. The caret stays here,
+   * on the row that now follows (or else precedes) where they were, so the
+   * next one can go too; the toast names the place and leads there.
+   */
+  moveInto(target: NodeId): void {
+    const m = this.moving();
+    if (!m || this.readOnly) return;
+    this.setMoving(null);
+    const back = this.moveBack;
+    this.moveBack = null;
+    const keys = m.keys.filter((k) => this.rows.indexOf(k) >= 0);
+    if (!keys.length) return;
+    // The row after the moved block (a selection is one), or the one before it.
+    const at = keys.map((k) => this.rows.indexOf(k));
+    const end = Math.max(...at.map((i) => this.rows.subtreeEnd(i)));
+    const next = this.rows.ids[end] ?? this.rows.ids[Math.min(...at) - 1] ?? null;
+    const after: Focus | undefined = next ? { id: next, caret: this.contentOf(next).text.length } : undefined;
+    const moved = keys.map(nodeOf);
+    let count = 0;
+    const ops = this.run((ctx) => {
+      count = moveManyInto(ctx, keys, target);
+      return count ? after : undefined;
+    }, back && 'caret' in back ? back : undefined);
+    if (!count) return this.notify('Сюда переместить нельзя: это внутри перемещаемого');
+    if (this.selection()) this.select(null);
+    if (!after) this.setFocus(null);
+    const place = this.doc.origin(target);
+    this.remember(place, this.recentTargets, this.setRecentTargets, 'listik-recent-targets');
+    const name = plainText(this.doc.get(place).text).trim() || 'пункт без названия';
+    this.notify(count > 1 ? `${count} ${plural(count, 'пункт перемещён', 'пункта перемещены', 'пунктов перемещены')} в` : 'Перемещено в', {
+      label: 'Отменить',
+      run: () => this.takeBack(ops, 'Перемещение отменено'),
+    }, {
+      label: name.length > 40 ? name.slice(0, 39) + '…' : name,
+      run: () => {
+        this.hideToast();
+        if (this.doc.has(moved[0]) && this.doc.inOutline(moved[0])) this.goToTask(moved[0]);
+      },
+    });
+  }
+
+  /** A toast's "Отменить": the ops undone, unless the document has changed under them; one undo step itself. */
+  private takeBack(ops: Op[], message: string): void {
+    try {
+      const back = this.doc.transact(() => [...ops].reverse().forEach((op) => this.doc.apply(invert(op))));
+      this.history.record({ ops: back, before: null, after: null });
+    } catch {
+      // Changed since: what is there now stays.
+    }
+    this.notify(message);
+  }
+
+  /**
+   * A place taken in the search box's list: the search goes and the view
+   * zooms into it. With `edit` (the keyboard) the caret goes on into its
+   * first bullet, or its title, as Alt+→ does.
+   */
+  goToPlace(id: NodeId, edit: boolean): void {
+    if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      if (edit) this.zoomIn(id);
+      else this.zoomTo(id);
+    });
   }
 
   /**
@@ -595,7 +761,10 @@ export class Outliner {
    */
   firstStructure(start: boolean): void {
     if (this.readOnly || this.bare || this.structure()) return;
-    if (!start) return this.run((ctx) => void createStructure(ctx, new Date().getFullYear()), this.keepFocus());
+    if (!start) {
+      this.run((ctx) => void createStructure(ctx, new Date().getFullYear()), this.keepFocus());
+      return;
+    }
     const [lone] = this.doc.get(this.doc.root).children;
     this.doc.transact(() => {
       createStructure(this.ctx, new Date().getFullYear());
@@ -839,13 +1008,7 @@ export class Outliner {
       label: 'Отменить',
       run: () => {
         if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
-        try {
-          const back = this.doc.transact(() => [...ops].reverse().forEach((op) => this.doc.apply(invert(op))));
-          this.history.record({ ops: back, before: null, after: null });
-        } catch {
-          // Changed since: what is there now stays.
-        }
-        this.notify('Запись убрана');
+        this.takeBack(ops, 'Запись убрана');
       },
     }, {
       // To the note just made, to go on writing it.
@@ -939,13 +1102,14 @@ export class Outliner {
    * with it. A bullet named by the command is looked for nearest to where
    * the caret was (`VisibleRows.locate`).
    */
-  run(cmd: (ctx: Ctx) => Focus | RowKey | void, keep?: Focus): void {
-    if (this.readOnly) return;
+  run(cmd: (ctx: Ctx) => Focus | RowKey | void, keep?: Focus): Op[] {
+    if (this.readOnly) return [];
+    let ops: Op[] = [];
     batch(() => {
       const current = this.focus();
       const before = keep ?? (current && 'caret' in current ? current : null);
       let result = undefined as Focus | RowKey | void;
-      const ops = this.doc.transact(() => {
+      ops = this.doc.transact(() => {
         result = cmd(this.ctx);
         this.keepErased();
       });
@@ -956,6 +1120,7 @@ export class Outliner {
       this.history.record({ ops, before, after: target ?? null });
       this.moveFocus(target ?? null);
     });
+    return ops;
   }
 
   /** Bullets erased to nothing that the command just deleted take their text along into the trash (`erased`). */
@@ -1054,11 +1219,41 @@ export class Outliner {
     return true;
   }
 
+  /** The zoom title or its note starts or stops being edited (ZoomHeader.tsx, EditBar.tsx); leaving it settles a new title. */
+  readonly editTitle = (edit: TitleEdit): void => {
+    if (!edit) this.settleTitle();
+    this.setTitleEdit(edit);
+  };
+
+  /**
+   * Editing has moved on from a bullet whose text was typed: if its title
+   * changed, links that led to it under the old one are rewritten to the new
+   * one (model/commands.ts `relink`), one undo step, and a toast tells how
+   * many. Not while typing: a title half typed may name another bullet.
+   */
+  settleTitle(): void {
+    const r = this.retitled;
+    this.retitled = null;
+    if (!r || this.readOnly || !this.doc.has(r.id) || !this.doc.inOutline(r.id)) return;
+    let result = 0 as number | 'taken';
+    const before = r.before;
+    this.run((ctx) => {
+      result = relink(ctx, this.text, r.id, before);
+    }, this.keepFocus());
+    const title = titleOf(this.doc.get(r.id).text);
+    if (result === 'taken') this.notify(`Ссылки на «${titleOf(before)}» не изменены: «${title}» уже есть выше в документе`);
+    else if (result) this.notify(`Ссылки на «${title}» обновлены в ${result} ${plural(result, 'пункте', 'пунктах', 'пунктах')}`);
+  }
+
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: RowKey, text: string): void {
     if (this.readOnly) return;
     // Erasing: the text it had before goes with the bullet, if it is then deleted (`keepErased`).
     const n = this.doc.content(nodeOf(id));
+    if (this.retitled?.id !== n.id) {
+      this.settleTitle();
+      this.retitled = { id: n.id, before: n.text };
+    }
     if (text.length < n.text.length) {
       if (!this.erased.has(n.id)) this.erased.set(n.id, n.text);
     } else if (text.length > n.text.length) this.erased.delete(n.id);

@@ -251,6 +251,23 @@ describe('block commands (a selection)', () => {
   });
 });
 
+describe('moveManyInto ("Переместить в…")', () => {
+  it('puts the bullets last under the target, in their order, with their subtrees; its folding stays', () => {
+    const { doc, ctx, run } = setup(['Inbox', '  a', '    a1', '  b', '  c', 'Projects [+]', '  p']);
+    expect(run(() => cmd.moveManyInto(ctx, ['a', 'c'], 'Projects'))).toBe(2);
+    expect(dump(doc)).toEqual(['Inbox', '  b', 'Projects [+]', '  p', '  a', '    a1', '  c']);
+  });
+
+  it('refuses a target inside what moves, and under a mirror goes to its original', () => {
+    const { doc, ctx, run } = setup(['a', '  a1', 'b', 'x']);
+    expect(run(() => cmd.moveManyInto(ctx, ['a'], 'a1'))).toBe(0);
+    expect(run(() => cmd.moveManyInto(ctx, ['a'], 'a'))).toBe(0);
+    run(() => doc.apply({ t: 'setMirror', id: 'x', from: null, to: 'b' }));
+    expect(run(() => cmd.moveManyInto(ctx, ['a'], 'x'))).toBe(1);
+    expect(dump(doc)).toEqual(['b', '  a', '    a1', 'x']);
+  });
+});
+
 describe('moveManyTo (drag and drop)', () => {
   it('moves within a parent, across parents and to the first place', () => {
     const { doc, ctx, run } = setup(['a', 'b', '  b1', 'c', 'd']);
