@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup } from 'solid-js';
 import { plainText } from '../model/format';
 import { TRASH_TTL, placeIsThere, type Deleted } from '../model/trash';
 import type { NodeId } from '../model/types';
@@ -45,9 +45,12 @@ function dayLabel(at: number, now: Date): string {
  * there (`Outliner.restoreDeleted`) with the caret in it. Buttons take no
  * focus from the row being edited; only the filter field does.
  */
-export function Trash(props: { o: Outliner }) {
+export function Trash(props: { o: Outliner; onTyping?: (typing: boolean) => void }) {
   const o = props.o;
   const [query, setQuery] = createSignal('');
+  // The filter has the keyboard (a phone hides the panel for any other typing).
+  const typing = (on: boolean) => props.onTyping?.(on);
+  onCleanup(() => typing(false));
 
   const title = (id: NodeId) => plainText(o.doc.content(id).text).trim() || '…';
   // What is inside a deleted block hardly changes in the trash, and a block may be big: counted once.
@@ -136,6 +139,8 @@ export function Trash(props: { o: Outliner }) {
           value={query()}
           onInput={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={onFilterKey}
+          onFocus={() => typing(true)}
+          onBlur={() => typing(false)}
         />
       </Show>
       <div class="trash-list">

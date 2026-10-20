@@ -70,6 +70,8 @@ export function Outline(props: { o: Outliner }) {
       setHead(0);
     });
   };
+  /** The keyboard is up for the trash's own filter: the trash stays, it is what is typed into. */
+  const [trashTyping, setTrashTyping] = createSignal(false);
   /** Height of the backlinks under a zoomed-in list (Backlinks.tsx), measured the same way. */
   const [foot, setFoot] = createSignal(0);
   const footObserver = new ResizeObserver(([entry]) => setFoot(entry.borderBoxSize[0].blockSize));
@@ -418,12 +420,15 @@ export function Outline(props: { o: Outliner }) {
             </div>
           </div>
         </div>
-        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard. */}
-        <Show when={o.trashOpen() && !(touch() && keyboard())}>
-          <Trash o={o} />
+        {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard, unless that keyboard types into its filter. */}
+        <Show when={o.trashOpen() && (!(touch() && keyboard()) || trashTyping())}>
+          <Trash o={o} onTyping={setTrashTyping} />
         </Show>
       </div>
-      <EditBar o={o} />
+      {/* Its buttons act on the row being edited; not while the keys go to the trash's filter. */}
+      <Show when={!trashTyping()}>
+        <EditBar o={o} />
+      </Show>
       <Suggest o={o} />
     </div>
   );

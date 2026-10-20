@@ -1374,6 +1374,28 @@ test.describe('touch screen', () => {
     await expect(sheet).toBeVisible();
   });
 
+  test('the trash filter takes the keyboard: the sheet stays, without the edit bar', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.locator('.menu-button').tap();
+    await page.getByRole('menuitem', { name: /Корзина/ }).tap();
+    const sheet = page.getByRole('complementary', { name: 'Корзина' });
+    const filter = sheet.getByRole('searchbox', { name: 'Найти в удалённом' });
+    await filter.tap();
+    await keyboard(page, true);
+    await expect(sheet).toBeVisible();
+    await expect(filter).toBeFocused();
+    await expect(bar(page)).toHaveCount(0);
+    await page.keyboard.type('Шер');
+    await expect(sheet.locator('.trash-item')).toHaveCount(1);
+    // Back in a row, the keyboard is the outline's again: the sheet steps aside, the bar comes.
+    await keyboard(page, false);
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await keyboard(page, true);
+    await expect(sheet).toHaveCount(0);
+    await expect(bar(page)).toBeVisible();
+  });
+
   test('a bar under the list does what Tab, Ctrl+L and Ctrl+Z do; the keyboard stays', async ({ page }) => {
     await expect(bar(page)).toHaveCount(0);
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
