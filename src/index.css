@@ -2276,3 +2276,20 @@ body.is-dragging * {
     height: 14px;
   }
 }
+
+/* The toast's own word that leads somewhere ("Inbox"): a link in the sentence. */
+.toast-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.toast-link:hover {
+  text-decoration-style: solid;
+}

@@ -304,6 +304,16 @@ export function Outline(props: { o: Outliner }) {
         {(text) => (
           <div class="toast" role="status">
             {text()}
+            <Show when={o.toastLink()}>
+              {(link) => (
+                <>
+                  {' '}
+                  <button type="button" class="toast-link" onMouseDown={(e) => e.preventDefault()} onClick={() => link().run()}>
+                    {link().label}
+                  </button>
+                </>
+              )}
+            </Show>
             <Show when={o.toastAction()}>
               {(action) => (
                 <button type="button" class="toast-action" onMouseDown={(e) => e.preventDefault()} onClick={() => action().run()}>

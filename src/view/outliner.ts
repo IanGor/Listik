@@ -123,6 +123,9 @@ export class Outliner {
   /** A button in the toast ("Отменить"), while it shows. */
   readonly toastAction: Accessor<{ label: string; run: () => void } | null>;
   private setToastAction: Setter<{ label: string; run: () => void } | null>;
+  /** A word of the toast's own that leads somewhere (the "Inbox" of "Записано в Inbox"), after its text. */
+  readonly toastLink: Accessor<{ label: string; run: () => void } | null>;
+  private setToastLink: Setter<{ label: string; run: () => void } | null>;
   /** The quick capture line (QuickCapture.tsx) is open: a thought to the Inbox from anywhere. */
   readonly captureOpen: Accessor<boolean>;
   private setCaptureOpen: Setter<boolean>;
@@ -214,6 +217,7 @@ export class Outliner {
     [this.syncStatus, this.setSyncStatus] = createSignal<SyncStatus>({ phase: 'stopped', pending: 0, head: 0 });
     [this.toast, this.setToast] = createSignal<string | null>(null);
     [this.toastAction, this.setToastAction] = createSignal<{ label: string; run: () => void } | null>(null);
+    [this.toastLink, this.setToastLink] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.captureOpen, this.setCaptureOpen] = createSignal(false);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
@@ -695,7 +699,7 @@ export class Outliner {
     this.run(({ doc }) => doc.apply({ t: 'setDone', id: task, from: false, to: true }), this.keepFocus());
   }
 
-  /** The text of the task shown under a row: to where it is, the caret at its end. */
+  /** The text of the task shown under a row (or the "Inbox" of a capture's toast): to where it is, the caret at its end. */
   goToTask(task: NodeId): void {
     if (!this.doc.has(task)) return;
     const n = this.doc.get(task);
@@ -737,16 +741,25 @@ export class Outliner {
   }
 
   /** Shows a message for a few seconds. */
-  notify(message: string, action: { label: string; run: () => void } | null = null): void {
+  notify(message: string, action: { label: string; run: () => void } | null = null, link: { label: string; run: () => void } | null = null): void {
     batch(() => {
       this.setToast(message);
       this.setToastAction(action);
+      this.setToastLink(link);
     });
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => batch(() => {
+    this.toastTimer = setTimeout(() => this.hideToast(), 4000);
+  }
+
+  /** The toast goes (its time is up, or one of its buttons was taken). */
+  hideToast(): void {
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = null;
+    batch(() => {
       this.setToast(null);
       this.setToastAction(null);
-    }), 4000);
+      this.setToastLink(null);
+    });
   }
 
   /**
@@ -794,7 +807,7 @@ export class Outliner {
     });
     this.history.record({ ops, before: null, after: null });
     const id = made!;
-    this.notify('Записано в Inbox', {
+    this.notify('Записано в', {
       label: 'Отменить',
       run: () => {
         if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
@@ -805,6 +818,13 @@ export class Outliner {
           // Changed since: what is there now stays.
         }
         this.notify('Запись убрана');
+      },
+    }, {
+      // To the note just made, to go on writing it.
+      label: 'Inbox',
+      run: () => {
+        this.hideToast();
+        if (this.doc.has(id) && this.doc.inOutline(id)) this.goToTask(id);
       },
     });
   }

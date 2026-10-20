@@ -718,6 +718,17 @@ test.describe('quick capture', () => {
     // "Отменить" takes it back.
     await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
     expect((await outline(page)).at(-1)).toMatch(/^  позвонить/);
+
+    // "Inbox" in the toast leads to the note just made, the caret at its end, to go on writing.
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('дописать потом');
+    await page.keyboard.press('Enter');
+    await page.locator('.toast').getByRole('button', { name: 'Inbox' }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Inbox');
+    await expect(page.locator('.toast')).toHaveCount(0);
+    await expect(editing(page)).toHaveText('дописать потом');
+    await page.keyboard.type(': подробности');
+    await expect(editing(page)).toHaveText('дописать потом: подробности');
   });
 
   test('an Inbox with emoji and formatting around its name is found: capture and a link to nothing both go there', async ({ page }) => {
