@@ -9,6 +9,7 @@ import { onGlobalKeys, onSelectionKeys, periodKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
+import { QuickCapture } from './QuickCapture';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
 import { SyncDialog } from './SyncDialog';
@@ -179,6 +180,11 @@ export function Outline(props: { o: Outliner }) {
     // Global keys and Esc also work when no row is being edited; the editing
     // row and the search box handle their own keys.
     const onKeyDown = (e: KeyboardEvent) => {
+      // Quick capture to the Inbox: from anywhere, while editing too (by the physical key: any layout).
+      if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        return o.openCapture();
+      }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
       if (onSelectionKeys(e, o) || periodKeys(e, o)) return;
@@ -294,7 +300,21 @@ export function Outline(props: { o: Outliner }) {
           Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
         </div>
       </Show>
-      <Show when={o.toast()}>{(text) => <div class="toast" role="status">{text()}</div>}</Show>
+      <Show when={o.toast()}>
+        {(text) => (
+          <div class="toast" role="status">
+            {text()}
+            <Show when={o.toastAction()}>
+              {(action) => (
+                <button type="button" class="toast-action" onMouseDown={(e) => e.preventDefault()} onClick={() => action().run()}>
+                  {action().label}
+                </button>
+              )}
+            </Show>
+          </div>
+        )}
+      </Show>
+      <QuickCapture o={o} />
       <div class="workspace">
         <div class="main">
           <Crumbs o={o} scrolled={scrollTop() > 0} />

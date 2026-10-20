@@ -2098,3 +2098,115 @@ body.is-dragging * {
     animation: none;
   }
 }
+
+/* --- Quick capture (view/QuickCapture.tsx) ------------------------------ */
+
+/* The tray in the header: a computer's way in; a phone uses the menu. */
+@media (max-width: 640px) {
+  .capture-button {
+    display: none;
+  }
+}
+
+/* One line under the header, over the outline: nothing dims, nothing moves. */
+.capture {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(560px, calc(100vw - 32px));
+  height: 48px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  background: var(--canvas);
+  box-shadow: 0 0 0 4px var(--ring), var(--shadow-pop);
+  transform: translateX(-50%);
+  animation: capture-in 180ms var(--ease-out);
+}
+
+@keyframes capture-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+
+.capture-icon {
+  flex: none;
+  color: var(--primary);
+}
+
+.capture-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.capture-input::placeholder {
+  color: var(--faint);
+}
+
+.capture-hint {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* A phone: a sheet over the keyboard, the width of the screen. */
+@media (max-width: 640px) {
+  .capture {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 56px;
+    border: 0;
+    border-top: 1px solid var(--hairline);
+    border-radius: 14px 14px 0 0;
+    box-shadow: var(--shadow-pop);
+    transform: none;
+    animation-name: capture-up;
+  }
+
+  .capture-hint {
+    display: none;
+  }
+}
+
+@keyframes capture-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture {
+    animation: none;
+  }
+}
+
+/* "Отменить" in the toast. */
+.toast-action {
+  margin-left: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--canvas);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}

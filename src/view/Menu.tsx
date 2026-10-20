@@ -95,6 +95,13 @@ export function DocumentMenu(props: { o: Outliner }) {
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
+          <Show when={!o.readOnly}>
+            <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
+              Записать в Inbox
+              <Show when={!touch()}><span class="hint">Ctrl+Shift+Space</span></Show>
+            </button>
+            <div class="menu-sep" role="separator" />
+          </Show>
           <button type="button" role="menuitem" onClick={() => exportAs('md')}>
             Скачать как Markdown
           </button>

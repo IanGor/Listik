@@ -3,7 +3,7 @@ import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
-import type { Doc } from '../model/doc';
+import { invert, type Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink } from '../model/links';
@@ -16,6 +16,7 @@ import type { Backup } from '../persist/backup';
 import type { Persistence } from '../persist/idb';
 import type { SyncStatus } from '../sync/engine';
 import type { Opened, SyncHandle } from '../sync/setup';
+import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
 
 /** The trash panel is open; per browser, like the theme. */
@@ -110,6 +111,16 @@ export class Outliner {
   readonly homeRequests: Accessor<number>;
   /** A short message at the bottom of the screen (import results, errors). */
   readonly toast: Accessor<string | null>;
+  /** A button in the toast ("Отменить"), while it shows. */
+  readonly toastAction: Accessor<{ label: string; run: () => void } | null>;
+  private setToastAction: Setter<{ label: string; run: () => void } | null>;
+  /** The quick capture line (QuickCapture.tsx) is open: a thought to the Inbox from anywhere. */
+  readonly captureOpen: Accessor<boolean>;
+  private setCaptureOpen: Setter<boolean>;
+  /** What was typed in the capture line and closed unsaved (Esc): it is there again next time. */
+  captureDraft = '';
+  /** Where the caret was in the outline when the capture line opened: it goes back there. */
+  private captureBack: FocusRequest | null = null;
   readonly selection: Accessor<Selection | null>;
   /** The trash panel (Trash.tsx) is open beside the outline. */
   readonly trashOpen: Accessor<boolean>;
@@ -191,6 +202,8 @@ export class Outliner {
     [this.syncRequests, this.setSyncRequests] = createSignal(0);
     [this.syncStatus, this.setSyncStatus] = createSignal<SyncStatus>({ phase: 'stopped', pending: 0, head: 0 });
     [this.toast, this.setToast] = createSignal<string | null>(null);
+    [this.toastAction, this.setToastAction] = createSignal<{ label: string; run: () => void } | null>(null);
+    [this.captureOpen, this.setCaptureOpen] = createSignal(false);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
@@ -655,10 +668,76 @@ export class Outliner {
   }
 
   /** Shows a message for a few seconds. */
-  notify(message: string): void {
-    this.setToast(message);
+  notify(message: string, action: { label: string; run: () => void } | null = null): void {
+    batch(() => {
+      this.setToast(message);
+      this.setToastAction(action);
+    });
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.setToast(null), 4000);
+    this.toastTimer = setTimeout(() => batch(() => {
+      this.setToast(null);
+      this.setToastAction(null);
+    }), 4000);
+  }
+
+  /**
+   * Ctrl+Shift+Space, the tray in the header, "Записать в Inbox" in the
+   * menu: the quick capture line opens over the outline. Where the caret was
+   * is read off the page first (the focus request is where editing began;
+   * typing has moved on since), to go back there when the line closes.
+   */
+  openCapture(): void {
+    if (this.readOnly) return;
+    if (this.captureOpen()) return;
+    const el = document.activeElement as HTMLElement | null;
+    const f = this.focus();
+    const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
+    this.captureBack = f && offset !== undefined ? (el!.classList.contains('note') ? { id: f.id, caret: offset, note: true } : { id: f.id, caret: offset }) : f;
+    this.setCaptureOpen(true);
+  }
+
+  /** The capture line closes: the caret goes back where it was in the outline. */
+  closeCapture(): void {
+    if (!this.captureOpen()) return;
+    this.setCaptureOpen(false);
+    const back = this.captureBack;
+    this.captureBack = null;
+    if (back && this.rows.indexOf(back.id) >= 0) this.setFocus({ ...back });
+  }
+
+  /**
+   * The capture line's Enter: the thought goes last into the structure's
+   * Inbox (one made at the end of the top level if there is none), one undo
+   * step; the place in the outline stays as it was. The toast can take it
+   * back.
+   */
+  capture(text: string): void {
+    const t = text.trim();
+    if (!t || this.readOnly) return;
+    let made: NodeId | null = null;
+    const ops = this.doc.transact(() => {
+      let inbox = findInbox(this.doc);
+      if (inbox === null) {
+        appendTrees(this.ctx, this.doc.root, [{ text: 'Inbox', children: [] }]);
+        inbox = findInbox(this.doc)!;
+      }
+      made = (appendTrees(this.ctx, inbox, [{ text: t, children: [] }]) as Focus).id;
+    });
+    this.history.record({ ops, before: null, after: null });
+    const id = made!;
+    this.notify('Записано в Inbox', {
+      label: 'Отменить',
+      run: () => {
+        if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
+        try {
+          const back = this.doc.transact(() => [...ops].reverse().forEach((op) => this.doc.apply(invert(op))));
+          this.history.record({ ops: back, before: null, after: null });
+        } catch {
+          // Changed since: what is there now stays.
+        }
+        this.notify('Запись убрана');
+      },
+    });
   }
 
   /** `?` or Ctrl+/: shows the keyboard shortcuts. */

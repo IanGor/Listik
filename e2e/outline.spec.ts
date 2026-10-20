@@ -688,6 +688,48 @@ test.describe('structure and calendar', () => {
   });
 });
 
+test.describe('quick capture', () => {
+  const line = (page: Page) => page.getByRole('dialog', { name: 'Запись в Inbox' });
+  const field = (page: Page) => line(page).getByRole('textbox');
+
+  test('Ctrl+Shift+Space while editing: a thought goes last into the Inbox, made if missing; the caret comes back where it was', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Control+Shift+Space');
+    await expect(field(page)).toBeFocused();
+    await page.keyboard.type('позвонить #задача в /time');
+    await expect(field(page)).toHaveValue(/^позвонить #задача в \d\d:\d\d$/);
+    await page.keyboard.press('Enter');
+    await expect(line(page)).toHaveCount(0);
+    expect((await outline(page)).slice(-2)).toEqual(['Inbox', expect.stringMatching(/^  позвонить #задача в \d\d:\d\d$/)]);
+    await expect(page.locator('.toast')).toContainText('Записано в Inbox');
+    // Back in the row, one character before its end, as it was.
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('!');
+    await expect(editing(page)).toHaveText('Часть втора!я');
+
+    // The tray in the header: the next one goes last, into the same Inbox.
+    await page.getByRole('button', { name: 'Записать в Inbox' }).click();
+    await page.keyboard.type('вторая мысль');
+    await page.keyboard.press('Enter');
+    expect((await outline(page)).slice(-2)).toEqual([expect.stringMatching(/^  позвонить/), '  вторая мысль']);
+    await expect(page.locator('.row .text', { hasText: /^Inbox$/ })).toHaveCount(1);
+    // "Отменить" takes it back.
+    await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+    expect((await outline(page)).at(-1)).toMatch(/^  позвонить/);
+  });
+
+  test('Esc closes the line and keeps what was typed for next time; nothing is written', async ({ page }) => {
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('не дописал');
+    await page.keyboard.press('Escape');
+    await expect(line(page)).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+    await page.keyboard.press('Control+Shift+Space');
+    await expect(field(page)).toHaveValue('не дописал');
+  });
+});
+
 test.describe('trash', () => {
   const panel = (page: Page) => page.getByRole('complementary', { name: 'Корзина' });
   const openTrash = async (page: Page) => {
@@ -1094,8 +1136,8 @@ test.describe('theme', () => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
     expect(await background(page)).toBe(DARK);
-    // The switch lives in the menu, as everything but search does.
-    await expect(page.locator('.topbar button')).toHaveCount(2);
+    // The switch lives in the menu, as everything but search and quick capture does: the logo, the tray, the menu.
+    await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
     await page.getByRole('menuitem', { name: 'Дневная тема' }).click();
@@ -1217,6 +1259,19 @@ test.describe('touch screen', () => {
   const action = (page: Page, name: string) => bar(page).getByRole('button', { name, exact: true });
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
+
+  test('quick capture comes first in the menu; no tray in the header; the line sits at the bottom', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    await expect(page.getByRole('menuitem').first()).toHaveText('Записать в Inbox');
+    await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
+    const line = page.getByRole('dialog', { name: 'Запись в Inbox' });
+    await expect(line.getByRole('textbox')).toBeFocused();
+    await expect.poll(async () => { const b = (await line.boundingBox())!; return Math.round(b.y + b.height); }).toBe(915);
+    await page.keyboard.type('с телефона');
+    await page.keyboard.press('Enter');
+    expect((await outline(page)).slice(-2)).toEqual(['Inbox', '  с телефона']);
+  });
 
   test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
     await page.locator('.menu-button').tap();
