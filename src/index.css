@@ -1724,7 +1724,10 @@ body.is-dragging * {
 
 .shortcuts dl {
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* One width for the keys in every section, so the descriptions stand in
+     one column; the longest key (Ctrl+Shift+Backspace) fits, several keys
+     wrap onto lines, and the descriptions keep room to read on a phone. */
+  grid-template-columns: min(50%, 12.5em) 1fr;
   gap: 8px 16px;
   align-items: baseline;
   margin: 0;
@@ -1737,6 +1740,13 @@ body.is-dragging * {
   flex-wrap: wrap;
   gap: 4px;
   white-space: nowrap;
+}
+
+/* A long key may break, after a "+" only (Shortcuts.tsx). */
+.shortcuts dt kbd {
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
 }
 
 .shortcuts dd {

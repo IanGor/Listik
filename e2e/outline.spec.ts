@@ -1761,9 +1761,17 @@ test.describe('touch screen', () => {
     const panel = page.getByRole('dialog', { name: 'Жесты и клавиши' });
     await expect(panel.locator('h3').first()).toHaveText('Касания');
     await expect(panel).toContainText('поднять пункт и перетащить');
+    // The arrows stand at the end of the row on a touch screen.
+    await expect(panel).toContainText('стрелка в конце строки');
     // The keys are still listed, for a keyboard attached to the phone.
     await expect(panel).toContainText('вложить / вынести');
     expect(await panel.evaluate((d) => d.scrollWidth <= d.clientWidth)).toBe(true);
+    // A pointer's doing is said in words, not cut into keycaps; no keycap sticks out of its column.
+    await expect(panel.locator('kbd', { hasText: /^(клик|знак)$/ })).toHaveCount(0);
+    await expect(panel.locator('dt.gesture', { hasText: 'клик по вертикальной линии' })).toHaveCount(1);
+    expect(await panel.locator('dt').evaluateAll((ds) => ds.filter((d) => d.scrollWidth > d.clientWidth + 1).length)).toBe(0);
+    // The descriptions of every section stand in one column.
+    expect(new Set(await panel.locator('dd').evaluateAll((ds) => ds.map((d) => Math.round(d.getBoundingClientRect().x)))).size).toBe(1);
   });
 
   test('fold arrows show without hover, stand in one column at the end of the rows, and fold at a tap', async ({ page }) => {
