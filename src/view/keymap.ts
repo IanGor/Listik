@@ -73,7 +73,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       // there it only removes an empty bullet, never joins two texts. (At a
       // copy's start it takes out that copy, as it does with a keyboard.)
       if (touch() && o.contentOf(id).text && !o.isCopy(id)) return;
-      return handle(() => o.run((ctx) => cmd.mergeUp(ctx, id), here));
+      return handle(() => o.mergeUp(id, here));
 
     case 'Delete': {
       if (!collapsed || start !== o.contentOf(id).text.length) return;

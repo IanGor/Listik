@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseChildren, cycleTask, deleteNode, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -140,6 +140,13 @@ export class Outliner {
   private synced = false;
   /** A year or a day's template, waiting for `synced`. */
   private afterSync: (() => void)[] = [];
+  /**
+   * Bullets whose text is being erased, with the text they had before. One
+   * erased to nothing and then deleted (Backspace from the end of the line,
+   * then on the empty bullet) goes to the trash whole: `keepErased` gives
+   * it that text back there. Typing more forgets it.
+   */
+  private erased = new Map<NodeId, string>();
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -744,6 +751,7 @@ export class Outliner {
       let result = undefined as Focus | RowKey | void;
       const ops = this.doc.transact(() => {
         result = cmd(this.ctx);
+        this.keepErased();
       });
       let target = typeof result === 'string' ? (before ? { ...before, id: result } : { id: result, caret: 0 }) : (result ?? keep);
       const near = before?.id ?? this.selection()?.head;
@@ -752,6 +760,30 @@ export class Outliner {
       this.history.record({ ops, before, after: target ?? null });
       this.moveFocus(target ?? null);
     });
+  }
+
+  /** Bullets erased to nothing that the command just deleted take their text along into the trash (`erased`). */
+  private keepErased(): void {
+    for (const [id, text] of this.erased) {
+      const n = this.doc.nodes.get(id);
+      if (n && this.doc.inOutline(id)) continue;
+      this.erased.delete(id);
+      if (n && n.text === '') setText(this.ctx, id, text);
+    }
+  }
+
+  /**
+   * Backspace at a bullet's start (model/commands.ts `mergeUp`). The first
+   * row under the zoom's title, once gone, leaves the caret at the end of
+   * the title.
+   */
+  mergeUp(key: RowKey, keep: Focus): void {
+    const first = this.zoom() !== null && this.rows.indexOf(key) === 0;
+    this.run((ctx) => mergeUp(ctx, key), keep);
+    if (first && !this.doc.inOutline(nodeOf(key))) {
+      this.setFocus(null);
+      this.setTitleRequests((n) => n + 1);
+    }
   }
 
   /**
@@ -818,6 +850,11 @@ export class Outliner {
   /** A keystroke's worth of text: grouped with neighbouring keystrokes into one undo step. */
   type(id: RowKey, text: string): void {
     if (this.readOnly) return;
+    // Erasing: the text it had before goes with the bullet, if it is then deleted (`keepErased`).
+    const n = this.doc.content(nodeOf(id));
+    if (text.length < n.text.length) {
+      if (!this.erased.has(n.id)) this.erased.set(n.id, n.text);
+    } else if (text.length > n.text.length) this.erased.delete(n.id);
     batch(() => {
       const ops = this.doc.transact(() => setText(this.ctx, id, text));
       this.history.record({ ops, before: null, after: null }, { typing: true });

@@ -71,11 +71,23 @@ describe('mergeUp (Backspace at start)', () => {
     expect(focus).toEqual({ id: 'deep', caret: 4 });
   });
 
-  it('does nothing on the first row or on a bullet with children', () => {
+  it('does nothing on a first row with text or on a bullet with children', () => {
     const { doc, ctx, run } = setup(['a', 'b', '  c']);
     expect(run(() => mergeUp(ctx, 'a'))).toBeUndefined();
     expect(run(() => mergeUp(ctx, 'b'))).toBeUndefined();
     expect(dump(doc)).toEqual(['a', 'b', '  c']);
+  });
+
+  it('takes out an empty first row, under a zoom too; the caret goes to the next; never the last bullet of all', () => {
+    const { doc, ctx, rows, run } = setup(['p', '  e', '  f', 'q']);
+    run(() => doc.apply({ t: 'setText', id: 'e', from: 'e', to: '' }));
+    rows.setTop('p');
+    expect(run(() => mergeUp(ctx, 'e'))).toEqual({ id: 'f', caret: 0 });
+    expect(dump(doc)).toEqual(['p', '  f', 'q']);
+    const only = setup(['x']);
+    only.run(() => only.doc.apply({ t: 'setText', id: 'x', from: 'x', to: '' }));
+    expect(only.run(() => mergeUp(only.ctx, 'x'))).toBeUndefined();
+    expect(only.doc.get(only.doc.root).children).toEqual(['x']);
   });
 });
 

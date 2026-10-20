@@ -352,7 +352,16 @@ export function mergeUp({ doc, rows }: Ctx, key: RowKey): Focus | void {
   const n = doc.get(id);
   const c = doc.content(id);
   const i = rows.indexOf(key);
-  if (i <= 0) return;
+  if (i < 0) return;
+  if (i === 0) {
+    // The first row (under the zoom's title, or at the very top): nothing to join it to,
+    // but an empty bullet or a copy still goes. The outline itself never empties.
+    if (!n.mirrorOf && !doc.isCopy(id) && (c.text || c.note || n.children.length)) return;
+    if (n.parent === doc.root && doc.get(doc.root).children.length === 1) return;
+    const next = rows.length > 1 ? rows.ids[1] : null;
+    remove(doc, id);
+    return next ? { id: next, caret: 0 } : undefined;
+  }
   const prevKey = rows.ids[i - 1];
   const prevId = nodeOf(prevKey);
   const prev = doc.content(prevId);

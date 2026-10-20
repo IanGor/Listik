@@ -442,6 +442,23 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '  Часть вторая (черновик)', '    первая мысль', DEMO[5]]);
   });
 
+  test('Backspace takes out an empty first bullet under the title, the caret going to the title\'s end', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowUp');
+    expect(await outline(page)).toEqual(['', DEMO[2].trim(), DEMO[3].trim()]);
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+    await expect(page.locator('.zoom-title[contenteditable]')).toBeFocused();
+    // With text, the first row stays: there is nothing to join it to.
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+  });
+
   test('going into a bullet found by a search clears the search: the bullet shows whole', async ({ page }) => {
     await page.keyboard.press('Control+f');
     await page.locator('.search').fill('Часть первая');
@@ -716,6 +733,25 @@ test.describe('trash', () => {
     await expect(panel(page)).toBeVisible();
     await panel(page).getByRole('button', { name: 'Закрыть корзину' }).click();
     await expect(panel(page)).toHaveCount(0);
+  });
+
+  test('a bullet erased letter by letter and then taken out goes to the trash with its text', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    for (let i = 0; i < 'Часть вторая'.length; i++) await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('');
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual(DEMO.filter((l) => !l.includes('Часть вторая')));
+    await openTrash(page);
+    const item = panel(page).locator('.trash-item');
+    await expect(item.locator('.trash-text')).toHaveText(['Часть вторая']);
+    await item.getByRole('button', { name: 'Вернуть' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveText('Часть вторая');
+    // Undo brings back the empty bullet it was when deleted.
+    await page.keyboard.press('Control+z');
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.row .text', { hasText: 'Часть вторая' })).toHaveCount(0);
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '  ', DEMO[5]]);
   });
 
   test('a block whose place is not on the screen: the view goes there; one whose place is gone goes last', async ({ page }) => {
