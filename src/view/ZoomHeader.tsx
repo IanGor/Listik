@@ -16,6 +16,9 @@ import { Pieces } from './Row';
  * One line that never shortens a crumb: a long path scrolls sideways and
  * stays at its end, so the bullets next to where you are show whole.
  */
+/** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
+const CURRENT_MIN = 72;
+
 export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   const o = props.o;
   let nav!: HTMLElement;
@@ -29,8 +32,20 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
     return out;
   });
 
-  /** Shows the end of the path; a faded left edge says there is more of it. */
+  /**
+   * Shows the end of the path; a faded left edge says there is more of it.
+   * A path only a little too long does not scroll a few letters of "Главная"
+   * under the fade: the place's own crumb gives way (its whole text is the
+   * title below), down to CURRENT_MIN.
+   */
   const toEnd = () => {
+    const current = nav.querySelector<HTMLElement>('.crumb.current');
+    if (current) {
+      current.style.maxWidth = '';
+      const over = nav.scrollWidth - nav.clientWidth;
+      const width = current.getBoundingClientRect().width;
+      if (over > 0 && width - over >= CURRENT_MIN) current.style.maxWidth = `${width - over}px`;
+    }
     nav.scrollLeft = nav.scrollWidth;
     clip();
   };

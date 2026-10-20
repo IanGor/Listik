@@ -388,6 +388,21 @@ test.describe('zoom', () => {
     await expect(title(page)).toHaveCount(0);
   });
 
+  test('a path only a little too wide does not scroll: the place\'s own crumb gives way', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 800 });
+    await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+    await title(page).click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' — очень длинный заголовок пункта');
+    await page.keyboard.press('Escape');
+    const nav = page.locator('.crumbs');
+    // "Главная" whole and unfaded; the current crumb ends in an ellipsis instead.
+    await expect(nav).not.toHaveClass(/clipped/);
+    expect(await nav.evaluate((el) => el.scrollLeft)).toBe(0);
+    const current = page.locator('.crumbs [aria-current="page"]');
+    expect(await current.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  });
+
   test('the title shows tags like a row: a click on one filters, a click elsewhere edits there', async ({ page }) => {
     await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
     await expect(title(page).locator('.tag')).toHaveText('#салон');
