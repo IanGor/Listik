@@ -1,6 +1,6 @@
 import { placeTrees, type Ctx } from './commands';
 import type { Doc } from './doc';
-import { compareOrder } from './links';
+import { compareOrder, titleOf } from './links';
 import type { Tree } from './outline-text';
 import { parseTags, type TagIndex } from './tags';
 import type { NodeId } from './types';
@@ -248,6 +248,14 @@ function topmost(doc: Doc, ids: Iterable<NodeId>): NodeId | null {
 /** The quarter `@qN` at the top level, the first one if the structure is there twice; null if there is none. */
 export function findQuarter(doc: Doc, tags: TagIndex, q: number): NodeId | null {
   return topmost(doc, [...tags.nodesWith(`@q${q}`)].filter((id) => quarterAt(doc, id) === q));
+}
+
+/**
+ * The structure's Inbox: the first top-level bullet whose title starts with
+ * the word "Inbox" (any case, anything after it); null if there is none.
+ */
+export function findInbox(doc: Doc): NodeId | null {
+  return doc.get(doc.root).children.find((id) => /^inbox(?![\p{L}\p{N}_])/iu.test(titleOf(doc.get(id).text))) ?? null;
 }
 
 /** Is the structure in the document: a quarter at the top level? */

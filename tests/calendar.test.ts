@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findPeriod, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
   periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
@@ -190,6 +190,14 @@ describe('addYear', () => {
     const tags = new TagIndex(doc);
     expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
     expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027']);
+  });
+});
+
+describe('findInbox', () => {
+  it('is the first top-level bullet titled Inbox, whatever follows the word', () => {
+    expect(findInbox(setup(['а', '  Inbox']).doc)).toBeNull();
+    expect(findInbox(setup(['Inboxes', '**inbox** входящие', 'Inbox']).doc)).toBe('**inbox** входящие');
+    expect(findInbox(setup([]).doc)).toBeNull();
   });
 });
 

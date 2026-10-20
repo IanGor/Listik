@@ -1598,6 +1598,29 @@ test.describe('links', () => {
     await expect(page.locator('.toast')).toContainText('Нет пункта «Нет такого»');
     await expect(crumbs(page)).toHaveText(['Главная']);
   });
+
+  test('a link to nothing, with an Inbox: its bullet is made last there once followed, and opened; undo takes it out', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Inbox');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Старое');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.type('[[Новая тема]]');
+    await page.keyboard.press('Escape');
+    // Writing the link makes nothing.
+    await expect(page.locator('.row')).toHaveCount(DEMO.length + 3);
+    await expect(page.locator('.row', { hasText: /^Новая тема$/ })).toHaveCount(0);
+    await page.locator('.row .link').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Новая тема');
+    await expect(crumbs(page)).toHaveText(['Главная', 'Inbox', 'Новая тема']);
+    await page.locator('.crumbs .crumb', { hasText: 'Inbox' }).click();
+    expect(await outline(page)).toEqual(['Старое', 'Новая тема']);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(['Старое']);
+  });
 });
 
 test.describe('backlinks', () => {

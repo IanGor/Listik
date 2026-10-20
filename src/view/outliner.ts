@@ -1,8 +1,8 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, fillDay, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
+  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
-import { collapseChildren, cycleTask, deleteNode, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseChildren, cycleTask, deleteNode, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import type { Doc } from '../model/doc';
 import { toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -334,10 +334,16 @@ export class Outliner {
    * A click on a `[[link]]`: zoom into the bullet it names, where it really
    * is in the outline (model/links.ts). A search is cleared, so all of it
    * shows. `from`, the row clicked in, is remembered: its place leads the
-   * backlinks there (Backlinks.tsx), the way back.
+   * backlinks there (Backlinks.tsx), the way back. A link to nothing yet
+   * makes its bullet, last in the structure's Inbox (one undo step).
    */
   followLink(title: string, from?: RowKey): void {
-    const id = resolveLink(this.doc, this.text, title);
+    let id = resolveLink(this.doc, this.text, title);
+    const inbox = id ? null : findInbox(this.doc);
+    if (!id && inbox !== null && !this.readOnly) {
+      this.run((ctx) => void appendTrees(ctx, inbox, [{ text: title.trim(), children: [] }]), this.keepFocus());
+      id = resolveLink(this.doc, this.text, title);
+    }
     if (!id) return this.notify(`Нет пункта «${title.trim()}»`);
     batch(() => {
       this.setQuery('', true);
