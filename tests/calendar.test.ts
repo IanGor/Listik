@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
   periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
@@ -198,6 +198,21 @@ describe('findInbox', () => {
     expect(findInbox(setup(['а', '  Inbox']).doc)).toBeNull();
     expect(findInbox(setup(['Inboxes', '**inbox** входящие', 'Inbox']).doc)).toBe('**inbox** входящие');
     expect(findInbox(setup([]).doc)).toBeNull();
+  });
+
+  it('is found whatever emoji, formatting, brackets or tag marks are around the word', () => {
+    for (const title of ['📥 Inbox', '✅ *Inbox* — разобрать', '**INBOX**📥', '[[Inbox]] ⭐', '#inbox', '📥  inbox:']) {
+      expect(findInbox(setup(['а', title]).doc), title).toBe(title);
+    }
+    expect(firstWord('📥 **Inbox** 2026')).toBe('inbox');
+    expect(findInbox(setup(['📥 Inboxes']).doc)).toBeNull();
+    expect(findInbox(setup(['мой Inbox']).doc)).toBeNull();
+  });
+
+  it('a copy of a mirror at the top level gives the bullet that holds its children', () => {
+    const { doc, run } = setup(['Проекты', '  📥 Inbox', 'копия']);
+    run(() => doc.apply({ t: 'setMirror', id: 'копия', from: null, to: '📥 Inbox' }));
+    expect(findInbox(doc)).toBe('📥 Inbox');
   });
 });
 

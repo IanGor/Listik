@@ -251,11 +251,22 @@ export function findQuarter(doc: Doc, tags: TagIndex, q: number): NodeId | null 
 }
 
 /**
- * The structure's Inbox: the first top-level bullet whose title starts with
- * the word "Inbox" (any case, anything after it); null if there is none.
+ * The first word of a title as it reads: formatting, link brackets, emoji,
+ * signs and tag marks left out, any case (`📥 **Inbox** 2026` → "inbox").
+ */
+export function firstWord(text: string): string {
+  return titleOf(text).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_]+/u)?.[0] ?? '';
+}
+
+/**
+ * The structure's Inbox, where new bullets go: the first top-level bullet
+ * whose first word is "Inbox", whatever emoji or formatting is around it;
+ * for a copy of a mirror, the bullet that holds its children. Null if there
+ * is none.
  */
 export function findInbox(doc: Doc): NodeId | null {
-  return doc.get(doc.root).children.find((id) => /^inbox(?![\p{L}\p{N}_])/iu.test(titleOf(doc.get(id).text))) ?? null;
+  const id = doc.get(doc.root).children.find((c) => firstWord(doc.content(c).text) === 'inbox');
+  return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
 /** Is the structure in the document: a quarter at the top level? */

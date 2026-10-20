@@ -720,6 +720,26 @@ test.describe('quick capture', () => {
     expect((await outline(page)).at(-1)).toMatch(/^  позвонить/);
   });
 
+  test('an Inbox with emoji and formatting around its name is found: capture and a link to nothing both go there', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('📥 **Inbox** ✅');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('мысль');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.row .text', { hasText: /Inbox/ })).toHaveCount(1);
+    expect((await outline(page)).at(-1)).toBe('  мысль');
+    // A link to nothing makes its bullet there too.
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' [[Новая тема');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.locator('.row .link').click();
+    await expect(page.locator('.crumbs .crumb').nth(1)).toContainText('Inbox');
+    await expect(page.locator('.zoom-title')).toHaveText('Новая тема');
+  });
+
   test('Esc closes the line and keeps what was typed for next time; nothing is written', async ({ page }) => {
     await page.keyboard.press('Control+Shift+Space');
     await page.keyboard.type('не дописал');
