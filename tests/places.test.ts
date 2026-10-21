@@ -22,6 +22,17 @@ describe('places', () => {
     expect(findPlaces(doc, index, 'listik', 1, skip).map((p) => p.id)).toEqual(['идея для листика']);
   });
 
+  it('offers every bullet of a title many share, each with its path, the one edited last first', () => {
+    const days = build(['@d20', '  todo', '@d21', '  **todo**', 'todo list']);
+    days.apply({ t: 'setText', id: '**todo**', from: '**todo**', to: '*todo*', at: 5 });
+    const places = findPlaces(days, new TextIndex(days), 'todo', 5);
+    expect(places.map((p) => [p.title, p.path])).toEqual([
+      ['todo', ['@d21']],
+      ['todo', ['@d20']],
+      ['todo list', []],
+    ]);
+  });
+
   it('"today" and "сегодня" from three letters on name today', () => {
     for (const q of ['today', 'Tod', ' сегодня ', 'СЕГ']) expect(meansToday(q)).toBe(true);
     for (const q of ['', 'to', 'се', 'todays', 'сегодняшний', 'day']) expect(meansToday(q)).toBe(false);

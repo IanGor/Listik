@@ -287,6 +287,32 @@ test.describe('go to a place', () => {
     await expect(line(page).getByRole('textbox')).toBeFocused();
   });
 
+  test('bullets sharing a title are each a place, told apart by their path', async ({ page }) => {
+    await page.goto('/?db=e2e-same-title&empty');
+    await page.locator('.row .text').click();
+    for (const line of ['Понедельник', '\ttodo', '\b', 'Вторник', '\ttodo']) {
+      if (line === '\b') {
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Shift+Tab');
+        continue;
+      }
+      if (line.startsWith('\t')) {
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Tab');
+        await page.keyboard.type(line.slice(1));
+      } else await page.keyboard.type(line);
+    }
+    expect(await outline(page)).toEqual(['Понедельник', '  todo', 'Вторник', '  todo']);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('todo');
+    // The one edited last first.
+    await expect(places(page).getByRole('option')).toHaveText(['todo' + 'Вторник', 'todo' + 'Понедельник']);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.crumbs')).toContainText('Понедельник');
+  });
+
   test('before anything is typed, the places gone to lately, the newest first and chosen, without the one you are in', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();

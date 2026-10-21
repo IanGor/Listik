@@ -213,8 +213,12 @@ const shifts = (text: string, i: number) => {
  * can't beat the worst of them costs an `indexOf` and a comparison or two.
  * So the query is found in the raw text, where formatting markers may stand
  * between its words.
+ *
+ * `every`: each bullet on its own, a title many share as many times (a
+ * place to go to, model/places.ts: every day's "todo"), not where a link
+ * with it would lead.
  */
-export function findTargets(doc: Doc, index: TextIndex, query: string, self: NodeId, limit: number): Target[] {
+export function findTargets(doc: Doc, index: TextIndex, query: string, self: NodeId, limit: number, every = false): Target[] {
   const q = normalize(query.trim());
   const best: Candidate[] = [];
   const updated = (c: Candidate) => (c.updated ??= doc.get(c.id).updated);
@@ -225,7 +229,7 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
     if (best.length === limit && !better(c, best[limit - 1])) return;
     c.key = titleOf(text());
     if (!linkable(c.key)) return;
-    const same = best.findIndex((b) => b.key === c.key);
+    const same = every ? -1 : best.findIndex((b) => b.key === c.key);
     if (same >= 0) {
       if (!better(c, best[same])) return;
       best.splice(same, 1);
@@ -271,6 +275,7 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
     }
   }
   if (!best.length) return [];
+  if (every) return best.map((c) => target(doc, c.id));
 
   // A link leads to the first bullet with its title: suggest that one, so
   // the hint shows where the link will really go. Looked for among texts as
@@ -291,10 +296,11 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
       }
     }
   }
-  return best.map((c) => {
-    const id = chosen.get(c.key)!;
-    const n = doc.get(id);
-    const parent = n.parent !== null && n.parent !== doc.root ? doc.get(n.parent) : null;
-    return { id, title: titleOf(n.text), where: parent ? titleOf(parent.text) : '' };
-  });
+  return best.map((c) => target(doc, chosen.get(c.key)!));
+}
+
+function target(doc: Doc, id: NodeId): Target {
+  const n = doc.get(id);
+  const parent = n.parent !== null && n.parent !== doc.root ? doc.get(n.parent) : null;
+  return { id, title: titleOf(n.text), where: parent ? titleOf(parent.text) : '' };
 }

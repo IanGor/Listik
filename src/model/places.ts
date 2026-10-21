@@ -8,8 +8,9 @@ import type { NodeId } from './types';
  * Places: bullets to go to (or move bullets into) by their title, the
  * places line's list (view/GoTo.tsx). Found as links are
  * (`findTargets`: titles that start with what is typed first, then a word
- * in them, then the rest; one per title, where a link with it would lead),
- * shown with the path to them.
+ * in them, then the rest; shorter, then edited last, first), but every
+ * bullet on its own: many share a title (each day's "todo"), and the path
+ * shown tells them apart.
  */
 export interface Place {
   id: NodeId;
@@ -35,7 +36,7 @@ export function placeOf(doc: Doc, id: NodeId): Place {
  */
 export function findPlaces(doc: Doc, index: TextIndex, query: string, limit: number, skip?: (id: NodeId) => boolean): Place[] {
   // A few more than asked: some may be skipped.
-  const found = findTargets(doc, index, query, '', skip ? limit + 8 : limit);
+  const found = findTargets(doc, index, query, '', skip ? limit + 8 : limit, true);
   return found.filter((t) => !skip?.(t.id)).slice(0, limit).map((t) => placeOf(doc, t.id));
 }
 
