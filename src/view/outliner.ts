@@ -21,8 +21,13 @@ import { plural } from '../util/plural';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
+import { narrow } from './screen';
 
-/** The trash panel is open; per browser, like the theme. */
+/**
+ * The trash panel is open; per browser, like the theme. A phone starts with
+ * it closed whatever was left: there it is a sheet over half the screen, and
+ * left open once it covered the outline at every start.
+ */
 const TRASH_OPEN = 'listik-trash-open';
 /** Saved searches (the star in the search box), newest first; per browser, like the theme. */
 const SAVED_SEARCHES = 'listik-saved-searches';
@@ -250,7 +255,7 @@ export class Outliner {
     [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
     [this.recentTargets, this.setRecentTargets] = createSignal<NodeId[]>([]);
     [this.placeLine, this.setPlaceLine] = createSignal<PlaceLine | null>(null);
-    [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1');
+    [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1' && !narrow());
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
     doc.subscribe(this.nodes);

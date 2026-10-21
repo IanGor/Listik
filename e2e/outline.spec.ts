@@ -1083,6 +1083,20 @@ test.describe('trash', () => {
     await page.getByRole('menuitem', { name: /Корзина/ }).click();
   };
 
+  test('left open, it is open after a reload on a computer; a phone starts with it closed', async ({ page }) => {
+    await openTrash(page);
+    await expect(panel(page)).toBeVisible();
+    await page.reload();
+    await expect(panel(page)).toBeVisible();
+    await page.setViewportSize({ width: 412, height: 800 });
+    await page.reload();
+    await expect(page.locator('.row').first()).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+    // Still there to open from the menu.
+    await openTrash(page);
+    await expect(panel(page)).toBeVisible();
+  });
+
   test('a panel beside the outline lists what is deleted as it goes; "Вернуть" puts it back, the caret in it; undo deletes it again', async ({ page }) => {
     await edit(page, 'Часть первая');
     await page.keyboard.press('Control+Shift+Backspace');
