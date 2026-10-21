@@ -4,7 +4,7 @@ import { openDb } from '../persist/db';
 import type { Persistence } from '../persist/idb';
 import { HttpError, httpTransport, normalizeServer, type Transport } from './client';
 import { createKeyslot, dataKey, deriveKek, newDocId, openKeyslot, rewrapKeyslot, tokenFromKek, type Keyslot } from './crypto';
-import { SyncEngine, bootstrap, writeSyncState } from './engine';
+import { SyncEngine, bootstrap, writeSyncState, type StateStore } from './engine';
 import {
   forgetSecret, readKeyslot, readSyncConfig, recallSecret, rememberSecret, writeKeyslot, writeSyncConfig, type Secret, type SyncConfig,
 } from './vault';
@@ -53,11 +53,12 @@ export interface SyncHandle {
   transport: Transport;
 }
 
-export async function startSync(doc: Doc, opened: Opened): Promise<SyncHandle | null> {
+export async function startSync(doc: Doc, opened: Opened, store: StateStore): Promise<SyncHandle | null> {
   const { db, config, secret } = opened;
   if (!config || !secret) return null;
   const transport = httpTransport(config.server, config.docId, secret.token);
   const engine = await SyncEngine.open(doc, db, transport, await dataKey(secret.dek), config.docId);
+  engine.attach(store);
   engine.start();
   return { engine, config, secret, db, transport };
 }
@@ -91,6 +92,7 @@ export async function createSync(doc: Doc, opened: Opened, persistence: Persiste
   const key = await dataKey(dek);
   await persistence.recode(encryptedCodec(key));
   const engine = await SyncEngine.open(doc, opened.db, transport, key, docId);
+  engine.attach(persistence);
   await engine.uploadSnapshot();
   engine.start();
   return { engine, config, secret, db: opened.db, transport };

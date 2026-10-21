@@ -38,7 +38,7 @@ let n = 0;
 const key = () => dataKey(new Uint8Array(32).fill(42));
 
 /** A device: its own IndexedDB, doc, history and engine, against the shared server. */
-async function device(docId: string, token: string, opts: { bootstrap?: boolean } = {}) {
+async function device(docId: string, token: string, opts: { bootstrap?: boolean; attach?: boolean } = {}) {
   const name = `sync-${docId}-${n++}`;
   const transport = httpTransport(url, docId, token);
   const k = await key();
@@ -52,6 +52,7 @@ async function device(docId: string, token: string, opts: { bootstrap?: boolean 
   const ctx = { doc, rows };
   const history = new History();
   const engine = await SyncEngine.open(doc, await openDb(name), transport, k, docId, { live: false });
+  if (opts.attach) engine.attach(persistence);
   const run = (fn: () => unknown) => {
     const ops = doc.transact(() => { fn(); });
     history.record({ ops, before: null, after: null }, { typing: ops.length === 1 && ops[0].t === 'setText' });
@@ -157,6 +158,40 @@ describe('sync', () => {
     expect(dump(reloaded.doc)).toEqual(['в снимке, с отставшего', 'после снимка']);
     await c.engine.sync();
     expect(dump(c.doc)).toEqual(dump(reloaded.doc));
+  });
+
+  it('attached to the log, the outbox agrees with it whenever the page stops: nothing typed stays unsent, nothing goes twice', async () => {
+    const { docId, token, a: other } = await createDoc();
+    const a = await device(docId, token, { bootstrap: true, attach: true });
+    await a.engine.sync();
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'набрано'));
+    a.run(() => { cmd.split(a.ctx, a.rows.ids[0], 7); });
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[1], 'и закрыто'));
+    // The batch of the log goes at the end of the task; the state's own save (300 ms) never comes: the page is gone.
+    await a.persistence.flush();
+    const db = await openDb(a.name);
+    expect((await readSyncState(db))?.outbox.flat().length).toBe(3);
+    db.close();
+    const reloaded = await Persistence.open(a.name);
+    expect(dump(reloaded.doc)).toEqual(['набрано', 'и закрыто']);
+    const engine = await SyncEngine.open(reloaded.doc, await openDb(a.name), a.transport, await key(), docId, { live: false });
+    engine.attach(reloaded.persistence);
+    expect(engine.status.pending).toBe(3);
+    await engine.sync();
+    await other.engine.sync();
+    expect(dump(other.doc)).toEqual(['набрано', 'и закрыто']);
+    // Another device's edit comes in; the page stops right after: the head went with the ops it brought.
+    other.run(() => cmd.setText(other.ctx, other.rows.ids[1], 'и закрыто, и исправлено'));
+    await other.engine.sync();
+    await engine.sync();
+    await reloaded.persistence.flush();
+    const again = await Persistence.open(a.name);
+    const engine2 = await SyncEngine.open(again.doc, await openDb(a.name), a.transport, await key(), docId, { live: false });
+    expect(engine2.status.pending).toBe(0);
+    expect(engine2.head).toBe(engine.head);
+    await engine2.sync();
+    expect(dump(again.doc)).toEqual(['набрано', 'и закрыто, и исправлено']);
+    expect(engine2.head).toBe(engine.head);
   });
 
   it('an edit made while an exchange is running is sent by that exchange, which ends', { timeout: 10_000 }, async () => {

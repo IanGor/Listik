@@ -2744,11 +2744,28 @@ test.describe('persistence', () => {
     await page.keyboard.type('ещё одна');
     await page.locator('.row', { hasText: 'Запись' }).locator('.toggle').click();
     await page.locator('.row', { hasText: 'Запись' }).locator('.toggle').click();
-    // Writes are batched for 300 ms.
     await page.waitForTimeout(500);
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(3);
     expect(await outline(page)).toEqual(['Запись', '  вложенная', '  ещё одна']);
+  });
+
+  test('the last word typed survives a reload made right after it; so does a new document\'s structure', async ({ page }) => {
+    await page.goto('/?db=e2e-quick&empty');
+    await page.locator('.row .text').click();
+    await page.keyboard.type('последнее слово');
+    // Faster than a person gets from the last key to Ctrl+R: it used to wait 300 ms to be written.
+    await page.waitForTimeout(50);
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(1);
+    expect(await outline(page)).toEqual(['последнее слово']);
+
+    await page.goto('/?db=e2e-quick-new');
+    await expect(page.locator('.zoom-title')).toHaveCount(1);
+    await page.waitForTimeout(50);
+    await page.reload();
+    // The structure was written: today again, not a lone empty bullet.
+    await expect(page.locator('.zoom-title')).toHaveText(/^@d\d\d @m\d\d/);
   });
 
   test('compaction runs in a worker and keeps every edit', async ({ page }) => {

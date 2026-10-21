@@ -63,7 +63,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.opened = opened;
   persistence.onError = (e) => outliner.notify(`Не удалось сохранить: ${e instanceof Error ? e.message : String(e)}`);
   outliner.backup = await Backup.open(name, doc);
-  outliner.syncHandle = await startSync(doc, opened);
+  outliner.syncHandle = await startSync(doc, opened, persistence);
   outliner.watchSync();
   return outliner;
 }

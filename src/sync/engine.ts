@@ -3,7 +3,8 @@ import { invert, type Doc, type DocListener } from '../model/doc';
 import { applyMerged } from '../model/merge';
 import type { Op } from '../model/types';
 import type { Codec } from '../persist/codec';
-import { getMeta, putMeta } from '../persist/db';
+import { done, request } from '../persist/db';
+import type { MetaWrite, Rider } from '../persist/idb';
 import { coalesce, deserialize, serialize } from '../persist/serialize';
 import { GoneError, type Transport } from './client';
 import { decryptWith, encryptWith, type Encrypted } from './crypto';
@@ -69,6 +70,12 @@ interface SnapshotBody {
 }
 
 const STATE_KEY = 'syncState';
+/**
+ * Local ops made since the state was last written whole, written with every
+ * batch of the log (persist/idb.ts riders): the outbox as of that batch is
+ * the state's plus these. Reading the state folds them in.
+ */
+const TAIL_KEY = 'syncTail';
 /** Upload a fresh snapshot once this many batches have gone by since the last one. */
 const SNAPSHOT_EVERY = 500;
 /** Wait after a local change before pushing, ms: a typing burst goes as one batch. */
@@ -81,8 +88,34 @@ const snapshotAad = (docId: string, seq: number) => `listik|${docId}|snapshot|${
 
 const newDeviceId = () => toBase64(crypto.getRandomValues(new Uint8Array(9)));
 
-export const readSyncState = (db: IDBDatabase) => getMeta<SyncState>(db, STATE_KEY);
-export const writeSyncState = (db: IDBDatabase, s: SyncState | undefined) => putMeta(db, STATE_KEY, s);
+/** The sync state, its outbox with the ops of the tail after it. */
+export async function readSyncState(db: IDBDatabase): Promise<SyncState | undefined> {
+  const store = db.transaction('meta').objectStore('meta');
+  const [state, tail] = await Promise.all([
+    request(store.get(STATE_KEY) as IDBRequest<SyncState | undefined>),
+    request(store.get(TAIL_KEY) as IDBRequest<Op[] | undefined>),
+  ]);
+  if (state && tail?.length) state.outbox.push(tail);
+  return state;
+}
+
+/** Writes the state whole (or deletes it): the tail is in it now. */
+export async function writeSyncState(db: IDBDatabase, s: SyncState | undefined): Promise<void> {
+  const tx = db.transaction('meta', 'readwrite');
+  for (const { key, value } of stateWrites(s)) {
+    if (value === undefined) tx.objectStore('meta').delete(key);
+    else tx.objectStore('meta').put(value, key);
+  }
+  await done(tx);
+}
+
+const stateWrites = (s: SyncState | undefined): MetaWrite[] => [{ key: STATE_KEY, value: s }, { key: TAIL_KEY, value: undefined }];
+
+/** Where the document's log is written (persist/idb.ts `Persistence`): the state goes along with it. */
+export interface StateStore {
+  flush(): Promise<void>;
+  ride(rider: Rider): () => void;
+}
 
 /** iv ‖ ciphertext, as sent to the server. */
 const pack = (e: Encrypted): Uint8Array => {
@@ -126,6 +159,7 @@ export async function bootstrap(db: IDBDatabase, codec: Codec, key: CryptoKey, d
   tx.objectStore('meta').put({
     head: snap.seq, headHash: body.hash, device: prev?.device ?? newDeviceId(), outbox: prev?.outbox ?? [], snapshotSeq: snap.seq,
   } satisfies SyncState, STATE_KEY);
+  tx.objectStore('meta').delete(TAIL_KEY); // folded into the outbox above
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -152,6 +186,15 @@ export class SyncEngine implements DocListener {
   private key: CryptoKey;
   private docId: string;
   private options: { live?: boolean; now?: () => number };
+  /** The log the state is written with (`attach`); null: written on its own. */
+  private store: { flush(): Promise<void>; unride: () => void } | null = null;
+  /** The next batch of the log takes the whole state. */
+  private whole = false;
+  /** Local ops since the state was last cut whole: the tail. */
+  private tail: Op[] = [];
+  private tailChanged = false;
+  /** The head in the state last cut whole: a moved head goes whole with the batch that moved it. */
+  private wholeHead: number;
 
   constructor(doc: Doc, db: IDBDatabase, transport: Transport, key: CryptoKey, docId: string, state: SyncState, options: { live?: boolean; now?: () => number } = {}) {
     this.doc = doc;
@@ -161,6 +204,7 @@ export class SyncEngine implements DocListener {
     this.docId = docId;
     this.options = options;
     this.state = state;
+    this.wholeHead = state.head;
     this.status = { phase: 'idle', pending: this.pendingCount(), head: state.head };
     doc.subscribe(this);
   }
@@ -184,6 +228,31 @@ export class SyncEngine implements DocListener {
     return this.state.device;
   }
 
+  /**
+   * Writes the state with the document's log from now on, in the same
+   * transactions: the ops in the log and the outbox (and the head) always
+   * agree, whenever the page stops. Without it a page closed between the two
+   * writes kept an edit here that never reached the server.
+   */
+  attach(store: StateStore): void {
+    this.store = { flush: () => store.flush(), unride: store.ride(this.ride) };
+    void this.save();
+  }
+
+  /** The state's records for the batch being cut: whole when asked or when the head moved, else the tail. */
+  private ride = (): MetaWrite[] => {
+    if (this.whole || this.state.head !== this.wholeHead) {
+      this.whole = false;
+      this.tail = [];
+      this.tailChanged = false;
+      this.wholeHead = this.state.head;
+      return stateWrites(this.copy());
+    }
+    if (!this.tailChanged) return [];
+    this.tailChanged = false;
+    return [{ key: TAIL_KEY, value: [...this.tail] }];
+  };
+
   /** Starts syncing: one exchange now, then pushes after local changes and pulls when the server announces more. */
   start(): void {
     if (this.running) return;
@@ -203,6 +272,9 @@ export class SyncEngine implements DocListener {
     if (this.pushTimer) clearTimeout(this.pushTimer);
     this.pushTimer = null;
     void this.flush();
+    // The state was cut just now: nothing more goes with the log.
+    this.store?.unride();
+    this.store = null;
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.onOnline);
       document.removeEventListener('visibilitychange', this.onVisible);
@@ -221,6 +293,10 @@ export class SyncEngine implements DocListener {
     const last = this.state.outbox[this.state.outbox.length - 1];
     if (last && !last.sealed) last.push(...shared);
     else this.state.outbox.push(shared);
+    if (this.store) {
+      this.tail.push(...shared);
+      this.tailChanged = true;
+    }
     this.set({ pending: this.pendingCount() });
     // The outbox outlives the page: saved soon, like the document itself (idb.ts).
     this.saveTimer ??= setTimeout(() => void this.flush(), SAVE_DELAY);
@@ -328,9 +404,11 @@ export class SyncEngine implements DocListener {
     const bytes = pack(await encryptWith(this.key, utf8(JSON.stringify(body)), opsAad(this.docId, seq)));
     const result = await this.transport.postOps(this.state.head, toBase64(bytes));
     if ('conflict' in result) return false;
+    // The state changes all at once: a batch of the log cut in between would take half of it.
+    const hash = await sha256(bytes);
     this.state.outbox = this.state.outbox.filter((b) => !b.sealed);
     this.state.head = result.seq;
-    this.state.headHash = await sha256(bytes);
+    this.state.headHash = hash;
     this.set({ head: result.seq, pending: this.pendingCount() });
     return true;
   }
@@ -386,9 +464,18 @@ export class SyncEngine implements DocListener {
     return this.state.outbox.reduce((n, b) => n + b.length, 0);
   }
 
+  /** Writes the state whole: with the next batch of the log when attached, else on its own. */
   private save(): Promise<void> {
+    if (this.store) {
+      this.whole = true;
+      return this.store.flush();
+    }
+    return writeSyncState(this.db, this.copy());
+  }
+
+  private copy(): SyncState {
     const { head, headHash, device, outbox, snapshotSeq } = this.state;
-    return writeSyncState(this.db, { head, headHash, device, outbox: outbox.map((b) => [...b]), snapshotSeq });
+    return { head, headHash, device, outbox: outbox.map((b) => [...b]), snapshotSeq };
   }
 
   private set(patch: Partial<SyncStatus>): void {

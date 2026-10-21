@@ -5,10 +5,27 @@ import { compactLog } from './compact';
 import { done, openDb, readAll, writeSnapshot } from './db';
 import { coalesce, deserialize, serialize } from './serialize';
 
-/** Batching window for writes, ms. */
-const FLUSH_DELAY = 300;
+/**
+ * Writes go out at the end of the task that made them, ms. A page closed or
+ * reloaded loses what is not yet in a transaction, and `pagehide` is too late
+ * to start one: a window of 300 ms here lost the last word typed.
+ */
+const FLUSH_DELAY = 0;
 /** Ops in the log before it is folded into a new snapshot. */
 const COMPACT_AFTER = 10_000;
+
+/** A `meta` record written along with a batch of the log; `undefined` deletes it. */
+export interface MetaWrite {
+  key: string;
+  value: unknown;
+}
+
+/**
+ * What a rider (sync/engine.ts) writes with each batch, decided when the
+ * batch is cut: its records then match the log exactly, whenever the page
+ * stops.
+ */
+export type Rider = () => MetaWrite[];
 
 /** Folds the log into the snapshot; resolves to the number of ops folded. */
 type Compactor = (codec: Codec, force: boolean) => Promise<number>;
@@ -42,9 +59,10 @@ const idle = (fn: () => void) =>
 
 /**
  * Stores the doc in IndexedDB as a snapshot plus a log of op batches.
- * The page only ever appends: every commit adds its ops (batched for
- * FLUSH_DELAY), so the cost of saving an edit does not depend on the size
- * of the document. Once the log grows past COMPACT_AFTER ops, a worker folds
+ * The page only ever appends: every commit adds its ops (those of one task
+ * together, FLUSH_DELAY), so the cost of saving an edit does not depend on
+ * the size of the document. Riders add `meta` records to the same
+ * transaction (the sync state, so it never disagrees with the log). Once the log grows past COMPACT_AFTER ops, a worker folds
  * it into a new snapshot (compact.ts), off the main thread. Records go
  * through the codec: plain, or encrypted with the document's key.
  */
@@ -54,6 +72,7 @@ export class Persistence implements DocListener {
   /** Called when `error` changes. */
   onError: ((e: unknown) => void) | null = null;
   private pending: Op[] = [];
+  private riders = new Set<Rider>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Appends run strictly one after another. */
   private chain: Promise<void> = Promise.resolve();
@@ -109,19 +128,30 @@ export class Persistence implements DocListener {
     this.timer ??= setTimeout(() => void this.flush(), FLUSH_DELAY);
   }
 
-  /** Writes pending ops now. Resolves when everything queued so far is on disk. */
+  /** Writes `rider`'s records with every batch from now on; returns the way to stop. */
+  ride(rider: Rider): () => void {
+    this.riders.add(rider);
+    return () => this.riders.delete(rider);
+  }
+
+  /** Writes pending ops, and what riders have, now. Resolves when everything queued so far is on disk. */
   flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    if (!this.pending.length) return this.chain;
+    const meta = [...this.riders].flatMap((r) => r());
+    if (!this.pending.length && !meta.length) return this.chain;
     const batch = coalesce(this.pending);
     this.pending = [];
     this.logSize += batch.length;
     const codec = this.codec;
     const written = this.enqueue(async () => {
-      const record = await codec.encodeBatch(batch);
-      const tx = this.db.transaction('oplog', 'readwrite');
-      tx.objectStore('oplog').add(record);
+      const record = batch.length ? await codec.encodeBatch(batch) : null;
+      const tx = this.db.transaction(['oplog', 'meta'], 'readwrite');
+      if (record !== null) tx.objectStore('oplog').add(record);
+      for (const { key, value } of meta) {
+        if (value === undefined) tx.objectStore('meta').delete(key);
+        else tx.objectStore('meta').put(value, key);
+      }
       await done(tx);
     });
     if (this.logSize > COMPACT_AFTER) this.scheduleCompact();
