@@ -1,6 +1,6 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, periodAt, periodName, quarterPeriod, type Period,
+  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, openPeriods, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
@@ -474,6 +474,22 @@ export class Outliner {
   }
 
   /** The recent places and move targets last on this device for the document `name`, as the folds do. */
+  /**
+   * Once per document on this device: the calendar's years, months and weeks
+   * made open by earlier versions get folded, as new ones are made
+   * (model/calendar.ts `openPeriods`). Folding stays on the device, so each
+   * device does it once; no undo step.
+   */
+  foldCalendar(name: string): void {
+    const key = `listik-calendar-folded:${name}`;
+    if (this.readOnly || readSetting(key)) return;
+    const open = openPeriods(this.doc);
+    if (open.length) this.scaffold((ctx) => {
+      for (const id of open) setCollapsed(ctx, id, true);
+    });
+    writeSetting(key, '1');
+  }
+
   keepRecent(name: string): void {
     this.recentName = name;
     const read = (prefix: string, set: Setter<NodeId[]>) => {

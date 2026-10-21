@@ -120,12 +120,33 @@ export function yearTree(y: number, q: number): Tree {
     const weeks: Tree[] = [];
     for (let d = 1; d <= daysIn(y, m); d++) {
       const w = periodText({ kind: 'week', y, m, w: isoWeek(y, m, d) });
-      if (weeks[weeks.length - 1]?.text !== w) weeks.push({ text: w, children: [] });
+      if (weeks[weeks.length - 1]?.text !== w) weeks.push({ text: w, collapsed: true, children: [] });
       weeks[weeks.length - 1].children.push({ text: periodText({ kind: 'day', y, m, d }), collapsed: true, children: [] });
     }
-    months.push({ text: periodText({ kind: 'month', y, m }), children: weeks });
+    months.push({ text: periodText({ kind: 'month', y, m }), collapsed: true, children: weeks });
   }
-  return { text: periodText({ kind: 'quarter', y, q }), children: months };
+  return { text: periodText({ kind: 'quarter', y, q }), collapsed: true, children: months };
+}
+
+/**
+ * Years, months and weeks of the calendar left open. They are made folded,
+ * so that opening a quarter (or "Главная" opening the top level) is an
+ * overview, not the ~470 rows of a whole year; those made open before
+ * (`Outliner.foldCalendar`) are found here.
+ */
+export function openPeriods(doc: Doc): NodeId[] {
+  const out: NodeId[] = [];
+  const walk = (id: NodeId, rank: number) => {
+    for (const c of doc.get(id).children) {
+      const label = labelOf(doc.get(c).text);
+      if (!label || RANK[label.kind] !== rank) continue;
+      const n = doc.get(c);
+      if (!n.collapsed && n.children.length) out.push(c);
+      if (rank < RANK.week) walk(c, rank + 1);
+    }
+  };
+  for (const q of doc.get(doc.root).children) if (labelOf(doc.get(q).text)?.kind === 'quarter') walk(q, RANK.year);
+  return out;
 }
 
 /** The whole structure, with this year in its quarters, folded. */

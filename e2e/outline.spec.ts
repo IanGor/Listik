@@ -901,6 +901,27 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.period-steps')).toHaveCount(0);
   });
 
+  test('"Главная" opening the top level is an overview: each quarter shows its years folded; years left open before get folded once', async ({ page }) => {
+    await page.goto('/?db=e2e-calendar-fold');
+    await expect(title(page)).toHaveText(today);
+    const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
+    await home.click();
+    await home.click();
+    const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : [t]));
+    expect(await outline(page)).toEqual(QUARTERS);
+    // A year opened as earlier versions left them, on a device that has not folded them yet.
+    await page.locator('.row', { hasText: year }).first().locator('.toggle').click();
+    expect((await outline(page)).length).toBeGreaterThan(QUARTERS.length);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => localStorage.removeItem('listik-calendar-folded:e2e-calendar-fold'));
+    await page.reload();
+    // The home page has no address: the reload opens today.
+    await expect(title(page)).toHaveText(today);
+    await home.click();
+    await expect(title(page)).toHaveCount(0);
+    expect(await outline(page)).toEqual(QUARTERS);
+  });
+
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
     await page.setViewportSize({ width: 460, height: 700 });
     await page.goto('/?db=e2e-crumbs-mouse');

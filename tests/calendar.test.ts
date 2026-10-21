@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
-  periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
+  openPeriods, periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
@@ -28,7 +28,7 @@ describe('weeks', () => {
 });
 
 describe('structure', () => {
-  it('a year in a quarter: its months, weeks and days, named by tags, the days folded', () => {
+  it('a year in a quarter: its months, weeks and days, named by tags, all folded', () => {
     const t = yearTree(2026, 4);
     expect(t.text).toBe('@y2026');
     expect(t.children.map((m) => m.text)).toEqual(['@m10', '@m11', '@m12']);
@@ -39,6 +39,8 @@ describe('structure', () => {
     ]);
     expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @понедельник', collapsed: true, children: [] });
     expect(count(t)).toBe(1 + 3 + 5 + 6 + 5 + 92);
+    // Opening a quarter shows its years, a year its months, and so on: not the ~470 rows of a year.
+    expect([t.collapsed, oct.collapsed, oct.children[0].collapsed]).toEqual([true, true, true]);
     expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @вторник');
   });
 
@@ -189,7 +191,13 @@ describe('addYear', () => {
     const { doc, ctx, run } = setup(['@q1', '  @y2026']);
     const tags = new TagIndex(doc);
     expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
-    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027']);
+    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027 [+]']);
+  });
+
+  it('finds the years, months and weeks earlier versions left open, nothing else', () => {
+    const { doc } = setup(['@q4', '  @y2026', '    @m10 [+]', '      @w43', '        @d19 @m10 @понедельник', '          #notes', 'Projects', '  @y2026 note', '    x']);
+    // A week open inside a folded month too: opening the month later would show its days.
+    expect(openPeriods(doc).map((id) => doc.get(id).text)).toEqual(['@y2026', '@w43']);
   });
 });
 
