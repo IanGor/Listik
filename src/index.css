@@ -81,6 +81,11 @@ body,
   margin: 0;
 }
 
+/* The root carries the canvas too: what WebKit paints past the page's edges. */
+html {
+  background: var(--canvas);
+}
+
 body {
   background: var(--canvas);
   color: var(--text);
@@ -128,13 +133,22 @@ button {
 
 /* --- Header ------------------------------------------------------------- */
 
+/* Sticky and opaque, though nothing scrolls it: iPadOS 26 blurs the top
+   ~40pt of a Home Screen app (the Liquid Glass scroll edge effect), and
+   WebKit leaves the edge clear, in its colour, only under a fixed or sticky
+   opaque box spanning it. Tried on the iPad against a fixed frame and a band
+   above the header (October 2026). */
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
   display: flex;
   flex: none;
   gap: 20px;
   align-items: center;
   height: 64px;
   padding: 0 20px;
+  background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -2743,37 +2757,4 @@ body.is-dragging * {
     padding: 0;
     margin-left: -13px;
   }
-}
-
-/* --- Trial: the top edge of the iPad's Home Screen app (view/edge.ts) ----- */
-
-/* WebKit is said to leave the top edge unblurred, in their colour, under a
-   fixed or sticky opaque box spanning it. The root carries the colour too. */
-:root[data-edge] {
-  background: var(--canvas);
-}
-
-/* 1, 3: the header itself, sticky and opaque. */
-:root[data-edge='1'] .topbar,
-:root[data-edge='3'] .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 15;
-  background: var(--canvas);
-}
-
-/* 2: the whole app in a fixed opaque frame. */
-:root[data-edge='2'] .outline {
-  position: fixed;
-  inset: 0;
-  background: var(--canvas);
-}
-
-:root[data-edge='2'] .topbar {
-  background: var(--canvas);
-}
-
-/* 3: and a band of canvas above the header, below the blur's reach. */
-:root[data-edge='3'] .topbar {
-  padding-top: 28px;
 }

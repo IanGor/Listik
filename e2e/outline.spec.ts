@@ -1461,32 +1461,18 @@ test.describe('theme', () => {
   });
 });
 
-test.describe('top edge trial (iPadOS Home Screen app)', () => {
-  test('the menu steps through the variants, each from the first paint after a reload; the fourth press goes back', async ({ page }) => {
-    const edge = () => page.locator('html').getAttribute('data-edge');
+test.describe('top edge (iPadOS Home Screen app)', () => {
+  // iPadOS 26 blurs the top of a Home Screen app unless a sticky or fixed opaque box spans it.
+  test('the header is sticky, opaque and full width, in both themes', async ({ page }) => {
     const topbar = page.locator('.topbar');
-    const step = async (label: RegExp) => {
-      await page.getByRole('button', { name: 'Меню документа' }).click();
-      const item = page.getByRole('menuitem', { name: /Верх экрана/ });
-      await expect(item).toHaveText(label);
-      await Promise.all([page.waitForEvent('load'), item.click()]);
-      await expect(page.locator('.row').first()).toBeVisible();
-    };
-    expect(await edge()).toBeNull();
-    await expect(topbar).toHaveCSS('position', 'static');
-    await step(/: 0.*как было/);
-    expect(await edge()).toBe('1');
     await expect(topbar).toHaveCSS('position', 'sticky');
+    await expect(topbar).toHaveCSS('top', '0px');
     await expect(topbar).toHaveCSS('background-color', 'rgb(250, 249, 245)');
-    await step(/: 1/);
-    expect(await edge()).toBe('2');
-    await expect(page.locator('.outline')).toHaveCSS('position', 'fixed');
-    await step(/: 2/);
-    expect(await edge()).toBe('3');
-    await expect(topbar).toHaveCSS('padding-top', '28px');
-    await step(/: 3/);
-    expect(await edge()).toBeNull();
-    await expect(topbar).toHaveCSS('position', 'static');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
+    expect((await topbar.boundingBox())!.width).toBe(page.viewportSize()!.width);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(38, 38, 36)');
   });
 });
 
