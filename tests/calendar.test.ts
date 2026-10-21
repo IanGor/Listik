@@ -152,6 +152,24 @@ describe('days', () => {
 });
 
 describe('addYear', () => {
+  it('a calendar with years as @y26 is found, its days too, and no second year comes in', () => {
+    const { doc, ctx, run } = setup([
+      '@q4', '  @y26', '    @m10', '      @w43', '        @d21 @m10 @y26 @среда',
+      '@q1', '  @y2026', '    @m01',
+      'Inbox', '  созвон @d21 @m10 @y26 @среда',
+    ]);
+    const tags = new TagIndex(doc);
+    expect(periodAt(doc, '@y26')).toEqual({ kind: 'quarter', y: 2026, q: 4 });
+    expect(findPeriod(doc, tags, { kind: 'quarter', y: 2026, q: 4 })).toBe('@y26');
+    expect(findPeriod(doc, tags, { kind: 'quarter', y: 2026, q: 1 })).toBe('@y2026');
+    // Today's day: the entry with the same tags in the Inbox is not it.
+    expect(findPeriod(doc, tags, day(2026, 10, 21))).toBe('@d21 @m10 @y26 @среда');
+    // Each quarter there has 2026 already, whichever way it is written.
+    const before = dump(doc);
+    expect(run(() => addYear(ctx, tags, 2026))).toBe(false);
+    expect(dump(doc)).toEqual(before);
+  });
+
   it('puts the year into each quarter in order, once; undone whole', () => {
     const { doc, ctx, run } = setup([]);
     const tags = new TagIndex(doc);

@@ -932,6 +932,11 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(100);
     await page.reload();
     await expect(title(page)).toHaveText(year);
+    // The logo goes on into today, in that year: no second one is made.
+    await page.locator('.brand').click();
+    await expect(title(page)).toHaveText(today);
+    await page.locator('.crumbs .crumb', { hasText: `@q${quarter}` }).click();
+    expect(await outline(page)).toEqual([year]);
   });
 
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
