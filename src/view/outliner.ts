@@ -23,6 +23,14 @@ import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
 import { narrow } from './screen';
 
+/** While a bullet is being edited at midnight, the new day waits this long and is tried again, ms. */
+const MIDNIGHT_RETRY = 60_000;
+
+/** Till a moment past the next midnight on the device's clock, ms. */
+function untilMidnight(now = new Date()): number {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1).getTime() - now.getTime();
+}
+
 /**
  * The trash panel is open; per browser, like the theme. A phone starts with
  * it closed whatever was left: there it is a sheet over half the screen, and
@@ -764,6 +772,25 @@ export class Outliner {
   resumed(): void {
     const t = this.today;
     if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
+  }
+
+  /**
+   * Midnight with the app left open in view (a computer's window all
+   * night): no coming back to it for `resumed` to catch, so a timer goes on
+   * to the new day. Not under the caret: a bullet being edited keeps its
+   * day, and the step is tried again a minute later. Returns the way to stop.
+   */
+  watchMidnight(): () => void {
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = (ms: number) => {
+      timer = setTimeout(() => {
+        if (this.focus()) return arm(MIDNIGHT_RETRY);
+        this.resumed();
+        arm(untilMidnight());
+      }, ms);
+    };
+    arm(untilMidnight());
+    return () => clearTimeout(timer);
   }
 
   /**

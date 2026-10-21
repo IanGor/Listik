@@ -265,6 +265,7 @@ export function Outline(props: { o: Outliner }) {
   const onVisible = () => document.visibilityState === 'visible' && o.resumed();
   document.addEventListener('visibilitychange', onVisible);
   onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
+  onCleanup(o.watchMidnight());
 
   createEffect(on(o.homeRequests, () => {
     scroller.scrollTop = 0;

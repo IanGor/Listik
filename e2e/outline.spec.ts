@@ -922,6 +922,22 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(QUARTERS);
   });
 
+  test('left open in view past midnight, it goes on to the new day by itself; not while a bullet is being edited', async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 9, 21, 23, 59, 0) });
+    await page.goto('/?db=e2e-midnight');
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 21)));
+    await page.clock.runFor(2 * 60_000);
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 22)));
+    // The next midnight, with the caret in a bullet: the day stays until editing ends.
+    await page.locator('.row .text').nth(1).click();
+    await page.clock.fastForward(24 * 60 * 60_000);
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 22)));
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.clock.runFor(2 * 60_000);
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 23)));
+  });
+
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
     await page.setViewportSize({ width: 460, height: 700 });
     await page.goto('/?db=e2e-crumbs-mouse');
