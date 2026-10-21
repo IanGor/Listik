@@ -23,6 +23,9 @@
         // And the text size (src/view/textsize.ts), so the outline does not jump.
         const scale = localStorage.getItem('listik-text-scale');
         if (scale) document.documentElement.style.setProperty('--font-scale', scale);
+        // The trial of the top edge on iPadOS (src/view/edge.ts).
+        const edge = localStorage.getItem('listik-edge');
+        if (edge === '1' || edge === '2' || edge === '3') document.documentElement.dataset.edge = edge;
       } catch {}
       }
     </script>

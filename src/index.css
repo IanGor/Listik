@@ -2744,3 +2744,36 @@ body.is-dragging * {
     margin-left: -13px;
   }
 }
+
+/* --- Trial: the top edge of the iPad's Home Screen app (view/edge.ts) ----- */
+
+/* WebKit is said to leave the top edge unblurred, in their colour, under a
+   fixed or sticky opaque box spanning it. The root carries the colour too. */
+:root[data-edge] {
+  background: var(--canvas);
+}
+
+/* 1, 3: the header itself, sticky and opaque. */
+:root[data-edge='1'] .topbar,
+:root[data-edge='3'] .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--canvas);
+}
+
+/* 2: the whole app in a fixed opaque frame. */
+:root[data-edge='2'] .outline {
+  position: fixed;
+  inset: 0;
+  background: var(--canvas);
+}
+
+:root[data-edge='2'] .topbar {
+  background: var(--canvas);
+}
+
+/* 3: and a band of canvas above the header, below the blur's reach. */
+:root[data-edge='3'] .topbar {
+  padding-top: 28px;
+}

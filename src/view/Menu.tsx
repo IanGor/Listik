@@ -6,6 +6,7 @@ import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
+import { EDGE_NAMES, edge, nextEdge } from './edge';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
@@ -156,6 +157,10 @@ export function DocumentMenu(props: { o: Outliner }) {
               </svg>
             </button>
           </div>
+          {/* A trial for the iPad's Home Screen app (edge.ts): the next variant, after a reload. */}
+          <button type="button" role="menuitem" onClick={nextEdge}>
+            Верх экрана (проба): {edge} <span class="hint">{EDGE_NAMES[edge]}</span>
+          </button>
           <div class="menu-sep" role="separator" />
           <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
             {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}

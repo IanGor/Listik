@@ -1461,6 +1461,35 @@ test.describe('theme', () => {
   });
 });
 
+test.describe('top edge trial (iPadOS Home Screen app)', () => {
+  test('the menu steps through the variants, each from the first paint after a reload; the fourth press goes back', async ({ page }) => {
+    const edge = () => page.locator('html').getAttribute('data-edge');
+    const topbar = page.locator('.topbar');
+    const step = async (label: RegExp) => {
+      await page.getByRole('button', { name: 'Меню документа' }).click();
+      const item = page.getByRole('menuitem', { name: /Верх экрана/ });
+      await expect(item).toHaveText(label);
+      await Promise.all([page.waitForEvent('load'), item.click()]);
+      await expect(page.locator('.row').first()).toBeVisible();
+    };
+    expect(await edge()).toBeNull();
+    await expect(topbar).toHaveCSS('position', 'static');
+    await step(/: 0.*как было/);
+    expect(await edge()).toBe('1');
+    await expect(topbar).toHaveCSS('position', 'sticky');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(250, 249, 245)');
+    await step(/: 1/);
+    expect(await edge()).toBe('2');
+    await expect(page.locator('.outline')).toHaveCSS('position', 'fixed');
+    await step(/: 2/);
+    expect(await edge()).toBe('3');
+    await expect(topbar).toHaveCSS('padding-top', '28px');
+    await step(/: 3/);
+    expect(await edge()).toBeNull();
+    await expect(topbar).toHaveCSS('position', 'static');
+  });
+});
+
 test.describe('text size', () => {
   const fontSize = (page: Page) => page.locator('.row .text').first().evaluate((el) => getComputedStyle(el).fontSize);
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
