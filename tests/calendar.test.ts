@@ -6,7 +6,7 @@ import {
 import { invert } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
 import type { Tree } from '../src/model/outline-text';
-import { TagIndex } from '../src/model/tags';
+import { TagIndex, parseTags } from '../src/model/tags';
 import { dump, dumpRows, setup } from './helpers';
 
 const count = (t: Tree): number => 1 + t.children.reduce((n, c) => n + count(c), 0);
@@ -35,13 +35,13 @@ describe('structure', () => {
     const oct = t.children[0];
     expect(oct.children.map((w) => w.text)).toEqual(['@w40', '@w41', '@w42', '@w43', '@w44']);
     expect(oct.children[0].children.map((d) => d.text)).toEqual([
-      '@d01 @m10 @четверг', '@d02 @m10 @пятница', '@d03 @m10 @суббота', '@d04 @m10 @воскресенье',
+      '@d01 @m10 @четверг 2026', '@d02 @m10 @пятница 2026', '@d03 @m10 @суббота 2026', '@d04 @m10 @воскресенье 2026',
     ]);
-    expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @понедельник', collapsed: true, children: [] });
+    expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @понедельник 2026', collapsed: true, children: [] });
     expect(count(t)).toBe(1 + 3 + 5 + 6 + 5 + 92);
     // Opening a quarter shows its years, a year its months, and so on: not the ~470 rows of a year.
     expect([t.collapsed, oct.collapsed, oct.children[0].collapsed]).toEqual([true, true, true]);
-    expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @вторник');
+    expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @вторник 2028');
   });
 
   it('nine bullets with notes; the quarters folded, with the year', () => {
@@ -161,7 +161,11 @@ describe('neighbour', () => {
 
   it('takes the date of a Date, and names periods', () => {
     expect(dayOf(new Date(2026, 9, 19, 23, 59))).toEqual(day(2026, 10, 19));
-    expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
+    expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @понедельник 2026');
+    // 21 October is a Wednesday in 2026 and again in 2037: one title each, the same tags.
+    const [a, b] = [periodText(day(2026, 10, 21)), periodText(day(2037, 10, 21))];
+    expect(a).not.toBe(b);
+    expect(parseTags(a)).toEqual(parseTags(b));
     expect(periodName(day(2026, 10, 19))).toBe('19.10.2026');
     expect(periodName({ kind: 'quarter', y: 2026, q: 4 })).toBe('4 квартал 2026');
   });

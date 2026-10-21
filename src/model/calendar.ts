@@ -81,7 +81,13 @@ export function weeksOf(y: number, m: number): number[] {
   return weeks;
 }
 
-/** How the period's bullet is written. */
+/**
+ * How the period's bullet is written. A day ends with its year, as plain
+ * text, not a tag: its title is then its own (a link or "Перейти к…" by it
+ * finds this day, not the same date and weekday some years before), while
+ * the tags `@d19 @m10` still find the day in every year. Days written
+ * before, without it, are found all the same (`labelOf` reads tags only).
+ */
 export function periodText(p: Period): string {
   switch (p.kind) {
     case 'quarter':
@@ -91,7 +97,7 @@ export function periodText(p: Period): string {
     case 'week':
       return `@w${two(p.w)}`;
     case 'day':
-      return `@d${two(p.d)} @m${two(p.m)} ${WEEKDAYS[utc(p.y, p.m, p.d).getUTCDay()]}`;
+      return `@d${two(p.d)} @m${two(p.m)} ${WEEKDAYS[utc(p.y, p.m, p.d).getUTCDay()]} ${p.y}`;
   }
 }
 

@@ -819,7 +819,7 @@ test.describe('structure and calendar', () => {
   };
   const two = (n: number) => String(n).padStart(2, '0');
   const WEEKDAYS = ['@воскресенье', '@понедельник', '@вторник', '@среда', '@четверг', '@пятница', '@суббота'];
-  const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)} ${WEEKDAYS[d.getDay()]}`;
+  const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)} ${WEEKDAYS[d.getDay()]} ${d.getFullYear()}`;
   const now = new Date();
   const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
   const today = dayText(now);
@@ -940,8 +940,8 @@ test.describe('structure and calendar', () => {
     await page.mouse.down();
     for (let i = 1; i <= 5; i++) await page.mouse.move(box.x + box.width / 2 - i * 20, box.y + box.height / 2);
     await page.mouse.up();
-    // 100 px of mouse, more than the path has to go: at its end again.
-    expect(await left()).toBeGreaterThan(max - 2);
+    // 100 px of mouse: the path moves as far, or to its end.
+    expect(await left()).toBeGreaterThan(Math.min(100, max) - 3);
     await expect(title(page)).toHaveText(today);
     // A press without moving is a press.
     await crumbs.locator('.crumb', { hasText: '@w' }).click();
