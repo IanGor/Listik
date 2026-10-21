@@ -753,6 +753,15 @@ export class Outliner {
     this.today = { day, date: now.toDateString() };
   }
 
+  /** After a reload in today's day: the next morning still leads on to the new day (`resumed`), as after the logo. */
+  stayedToday(): void {
+    const z = this.zoom();
+    const p = z && this.doc.has(z) ? periodAt(this.doc, z) : null;
+    const now = new Date();
+    const t = dayOf(now);
+    if (p?.kind === 'day' && t.kind === 'day' && p.y === t.y && p.m === t.m && p.d === t.d) this.today = { day: z!, date: now.toDateString() };
+  }
+
   /** The app comes back into view: still in yesterday's day, it goes on to today's. */
   resumed(): void {
     const t = this.today;

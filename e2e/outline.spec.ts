@@ -182,8 +182,10 @@ test.describe('saved searches', () => {
     await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     await expect(star(page)).toHaveAttribute('aria-pressed', 'true');
 
-    // Kept in this browser.
+    // Kept in this browser. A reload keeps the search too (reload.ts).
     await page.reload();
+    await expect(search).toHaveValue('#салон');
+    await search.fill('');
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
     await search.click();
     await expect(list(page).getByRole('listitem')).toHaveCount(2);
@@ -884,11 +886,10 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(300);
     await page.evaluate(() => localStorage.removeItem('listik-calendar-folded:e2e-calendar-fold'));
     await page.reload();
-    // The home page has no address: the reload opens today.
-    await expect(title(page)).toHaveText(today);
-    await home.click();
+    // A reload stays on the home page, the years folded at the start.
+    await expect(page.locator('.row').first()).toBeVisible();
     await expect(title(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(QUARTERS);
+    await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
   test('left open in view past midnight, it goes on to the new day by itself; not while a bullet is being edited', async ({ page }) => {
@@ -1023,6 +1024,37 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(300);
     await page.reload();
     await expect(title(page)).toHaveText('@q1');
+  });
+
+  test('a reload is the same view, not today: home stays home, the search and the scroll come back; a new start opens today', async ({ page }) => {
+    await page.goto('/?db=e2e-reload');
+    await expect(title(page)).toHaveText(today);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(title(page)).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator('.row').first()).toBeVisible();
+    await expect(title(page)).toHaveCount(0);
+
+    // Every day of the year: a long list, scrolled down.
+    await page.locator('.search').fill('@d1');
+    await expect(page.locator('.searchbar .count')).toHaveText(/^\d+ пункт/);
+    const scroller = page.locator('.scroller');
+    await scroller.evaluate((el) => (el.scrollTop = 2000));
+    /** The row at the top of the list's view. */
+    const atTop = () => scroller.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      const row = document.elementFromPoint(box.left + box.width / 2, box.top + 40)?.closest('.row');
+      return row?.querySelector('.text')?.textContent ?? null;
+    });
+    await expect.poll(atTop).toMatch(/^@d1\d/);
+    const seen = await atTop();
+    await page.reload();
+    await expect(page.locator('.search')).toHaveValue('@d1');
+    await expect.poll(atTop).toBe(seen);
+    await expect(title(page)).toHaveCount(0);
+
+    await page.goto('/?db=e2e-reload');
+    await expect(title(page)).toHaveText(today);
   });
 });
 

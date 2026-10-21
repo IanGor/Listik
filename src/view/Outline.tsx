@@ -7,6 +7,7 @@ import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
 import { GoTo } from './GoTo';
+import { keepSpot, reloaded, takeSpot } from './reload';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
@@ -260,8 +261,33 @@ export function Outline(props: { o: Outliner }) {
   }, { defer: true }));
 
   syncZoomWithHash(o);
-  // Opened without a place in the address (the installed app always is): today's day, if there is the structure.
-  if (!location.hash) o.goToday(true);
+  // A reload is the same view again: the zoom from the address, the search
+  // and the scroll as they were (reload.ts). A new start without a place in
+  // the address (the installed app always is): today's day, if there is the structure.
+  const again = reloaded();
+  const spot = again ? takeSpot() : null;
+  const same = spot !== null && spot.zoom === o.zoom();
+  if (again) {
+    if (same && spot.query) o.setQuery(spot.query, true);
+    o.stayedToday();
+  } else if (!location.hash) o.goToday(true);
+  onMount(() => {
+    const row = same ? spot.row : null;
+    if (row) requestAnimationFrame(() => {
+      const i = o.rows.indexOf(row);
+      if (i < 0) return;
+      scroller.scrollTop = top() + v.offsetOf(i) + spot!.offset;
+      setScrollTop(scroller.scrollTop);
+    });
+  });
+  const onLeave = () => {
+    const y = scroller.scrollTop - top();
+    const i = v.indexAt(Math.max(0, y));
+    const row = o.rows.ids[i] ?? null;
+    keepSpot({ zoom: o.zoom(), query: o.query(), row, offset: row ? y - v.offsetOf(i) : 0 });
+  };
+  addEventListener('pagehide', onLeave);
+  onCleanup(() => removeEventListener('pagehide', onLeave));
   const onVisible = () => document.visibilityState === 'visible' && o.resumed();
   document.addEventListener('visibilitychange', onVisible);
   onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
