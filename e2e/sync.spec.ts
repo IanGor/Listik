@@ -120,12 +120,15 @@ test('a local copy that does not open with the key is restored from the server',
 
   // Wait until everything is on the server, then add a batch sealed with a
   // key this device does not have, as an older version could leave behind.
+  // The outbox is stored sealed with the document's key: read through the vault's.
   const storedState = () => a.evaluate(async () => {
     const load = (path: string) => import(/* @vite-ignore */ path);
-    const { openDb, getMeta } = (await load('/src/persist/db.ts')) as typeof import('../src/persist/db.ts');
-    const db = await openDb('e2e-sync-damaged');
-    const state = await getMeta<{ head: number; outbox: unknown[] }>(db, 'syncState');
-    db.close();
+    const { openVault } = (await load('/src/sync/setup.ts')) as typeof import('../src/sync/setup.ts');
+    const { dataKey } = (await load('/src/sync/crypto.ts')) as typeof import('../src/sync/crypto.ts');
+    const { readSyncState } = (await load('/src/sync/engine.ts')) as typeof import('../src/sync/engine.ts');
+    const opened = await openVault('e2e-sync-damaged');
+    const state = opened.secret ? await readSyncState(opened.db, await dataKey(opened.secret.dek)) : undefined;
+    opened.db.close();
     return state ? { head: state.head, outbox: state.outbox.length } : null;
   });
   await expect.poll(async () => (await storedState())?.outbox, { timeout: 15_000 }).toBe(0);

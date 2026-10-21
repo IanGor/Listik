@@ -14,7 +14,11 @@ const FLUSH_DELAY = 0;
 /** Ops in the log before it is folded into a new snapshot. */
 const COMPACT_AFTER = 10_000;
 
-/** A `meta` record written along with a batch of the log; `undefined` deletes it. */
+/**
+ * A `meta` record written along with a batch of the log; `undefined`
+ * deletes it. A promise (a record being sealed) is waited for before the
+ * transaction opens: what it holds was decided when the batch was cut.
+ */
 export interface MetaWrite {
   key: string;
   value: unknown;
@@ -146,9 +150,10 @@ export class Persistence implements DocListener {
     const codec = this.codec;
     const written = this.enqueue(async () => {
       const record = batch.length ? await codec.encodeBatch(batch) : null;
+      const records = await Promise.all(meta.map(async ({ key, value }) => ({ key, value: await value })));
       const tx = this.db.transaction(['oplog', 'meta'], 'readwrite');
       if (record !== null) tx.objectStore('oplog').add(record);
-      for (const { key, value } of meta) {
+      for (const { key, value } of records) {
         if (value === undefined) tx.objectStore('meta').delete(key);
         else tx.objectStore('meta').put(value, key);
       }

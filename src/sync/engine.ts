@@ -2,12 +2,12 @@ import { clock } from '../model/clock';
 import { invert, type Doc, type DocListener } from '../model/doc';
 import { applyMerged } from '../model/merge';
 import type { Op } from '../model/types';
-import type { Codec } from '../persist/codec';
+import { LockedError, type Codec } from '../persist/codec';
 import { done, request } from '../persist/db';
 import type { MetaWrite, Rider } from '../persist/idb';
 import { coalesce, deserialize, serialize } from '../persist/serialize';
 import { GoneError, type Transport } from './client';
-import { decryptWith, encryptWith, type Encrypted } from './crypto';
+import { decryptWith, encryptWith, isEncrypted, type Encrypted } from './crypto';
 import { fromBase64, fromUtf8, gunzip, gzip, sha256, toBase64, utf8 } from './encoding';
 
 /**
@@ -88,28 +88,57 @@ const snapshotAad = (docId: string, seq: number) => `listik|${docId}|snapshot|${
 
 const newDeviceId = () => toBase64(crypto.getRandomValues(new Uint8Array(9)));
 
-/** The sync state, its outbox with the ops of the tail after it. */
-export async function readSyncState(db: IDBDatabase): Promise<SyncState | undefined> {
+/**
+ * The ops waiting to be sent are the document's text: stored sealed with
+ * its key, as the log is (persist/codec.ts). Head, hash, device id and the
+ * snapshot's sequence stay plain. An outbox stored plain by an earlier
+ * version is read as it is and sealed by the next write.
+ */
+const OUTBOX_AAD = 'listik|local|outbox';
+const TAIL_AAD = 'listik|local|tail';
+
+/** The state as stored: the outbox sealed. */
+type StoredState = Omit<SyncState, 'outbox'> & { outbox: Op[][] | Encrypted };
+
+const seal = (key: CryptoKey, value: unknown, aad: string) => encryptWith(key, utf8(JSON.stringify(value)), aad);
+
+async function unseal<T>(key: CryptoKey | undefined, value: T | Encrypted, aad: string): Promise<T> {
+  if (!isEncrypted(value)) return value as T;
+  if (!key) throw new LockedError();
+  return JSON.parse(fromUtf8(await decryptWith(key, value as Encrypted, aad))) as T;
+}
+
+/** The sync state, its outbox with the ops of the tail after it; `key` opens them. */
+export async function readSyncState(db: IDBDatabase, key?: CryptoKey): Promise<SyncState | undefined> {
   const store = db.transaction('meta').objectStore('meta');
-  const [state, tail] = await Promise.all([
-    request(store.get(STATE_KEY) as IDBRequest<SyncState | undefined>),
-    request(store.get(TAIL_KEY) as IDBRequest<Op[] | undefined>),
+  const [stored, sealedTail] = await Promise.all([
+    request(store.get(STATE_KEY) as IDBRequest<StoredState | undefined>),
+    request(store.get(TAIL_KEY) as IDBRequest<Op[] | Encrypted | undefined>),
   ]);
-  if (state && tail?.length) state.outbox.push(tail);
+  if (!stored) return undefined;
+  const state: SyncState = { ...stored, outbox: await unseal<Op[][]>(key, stored.outbox, OUTBOX_AAD) };
+  const tail = sealedTail && (await unseal<Op[]>(key, sealedTail, TAIL_AAD));
+  if (tail?.length) state.outbox.push(tail);
   return state;
 }
 
-/** Writes the state whole (or deletes it): the tail is in it now. */
-export async function writeSyncState(db: IDBDatabase, s: SyncState | undefined): Promise<void> {
+/** Writes the state whole, its outbox sealed with `key` (or deletes it): the tail is in it now. */
+export async function writeSyncState(db: IDBDatabase, s: SyncState | undefined, key?: CryptoKey): Promise<void> {
+  if (s && !key) throw new Error('the sync state is written sealed: a key is needed');
+  const writes = await Promise.all(stateWrites(s, key!).map(async ({ key: k, value }) => ({ key: k, value: await value })));
   const tx = db.transaction('meta', 'readwrite');
-  for (const { key, value } of stateWrites(s)) {
-    if (value === undefined) tx.objectStore('meta').delete(key);
-    else tx.objectStore('meta').put(value, key);
+  for (const { key: k, value } of writes) {
+    if (value === undefined) tx.objectStore('meta').delete(k);
+    else tx.objectStore('meta').put(value, k);
   }
   await done(tx);
 }
 
-const stateWrites = (s: SyncState | undefined): MetaWrite[] => [{ key: STATE_KEY, value: s }, { key: TAIL_KEY, value: undefined }];
+/** The records of the state written whole; the outbox is being sealed (persist/idb.ts waits for it). */
+const stateWrites = (s: SyncState | undefined, key: CryptoKey): MetaWrite[] => [
+  { key: STATE_KEY, value: s && seal(key, s.outbox, OUTBOX_AAD).then((outbox): StoredState => ({ ...s, outbox })) },
+  { key: TAIL_KEY, value: undefined },
+];
 
 /** Where the document's log is written (persist/idb.ts `Persistence`): the state goes along with it. */
 export interface StateStore {
@@ -147,18 +176,19 @@ export async function openSnapshot(key: CryptoKey, docId: string, seq: number, b
  * so two devices never invent two different first bullets.
  */
 export async function bootstrap(db: IDBDatabase, codec: Codec, key: CryptoKey, docId: string, transport: Transport): Promise<void> {
-  const prev = await readSyncState(db);
+  const prev = await readSyncState(db, key);
   const snap = await transport.getSnapshot();
   if (!snap) throw new Error('На сервере ещё нет снимка этого документа');
   const body = await openSnapshot(key, docId, snap.seq, snap.bytes);
   deserialize(body.snapshot); // must parse: a corrupt snapshot fails here, not on the next load
   const record = await codec.encodeSnapshot(body.snapshot);
+  const outbox = await seal(key, prev?.outbox ?? [], OUTBOX_AAD);
   const tx = db.transaction(['meta', 'oplog'], 'readwrite');
   tx.objectStore('meta').put(record, 'snapshot');
   tx.objectStore('oplog').clear();
   tx.objectStore('meta').put({
-    head: snap.seq, headHash: body.hash, device: prev?.device ?? newDeviceId(), outbox: prev?.outbox ?? [], snapshotSeq: snap.seq,
-  } satisfies SyncState, STATE_KEY);
+    head: snap.seq, headHash: body.hash, device: prev?.device ?? newDeviceId(), outbox, snapshotSeq: snap.seq,
+  } satisfies StoredState, STATE_KEY);
   tx.objectStore('meta').delete(TAIL_KEY); // folded into the outbox above
   await new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
@@ -210,8 +240,9 @@ export class SyncEngine implements DocListener {
   }
 
   static async open(doc: Doc, db: IDBDatabase, transport: Transport, key: CryptoKey, docId: string, options?: { live?: boolean }): Promise<SyncEngine> {
-    const state = (await readSyncState(db)) ?? { head: 0, headHash: '', device: newDeviceId(), outbox: [], snapshotSeq: -1 };
-    if (!(await readSyncState(db))) await writeSyncState(db, state);
+    const stored = await readSyncState(db, key);
+    const state = stored ?? { head: 0, headHash: '', device: newDeviceId(), outbox: [], snapshotSeq: -1 };
+    if (!stored) await writeSyncState(db, state, key);
     return new SyncEngine(doc, db, transport, key, docId, state, options);
   }
 
@@ -246,11 +277,11 @@ export class SyncEngine implements DocListener {
       this.tail = [];
       this.tailChanged = false;
       this.wholeHead = this.state.head;
-      return stateWrites(this.copy());
+      return stateWrites(this.copy(), this.key);
     }
     if (!this.tailChanged) return [];
     this.tailChanged = false;
-    return [{ key: TAIL_KEY, value: [...this.tail] }];
+    return [{ key: TAIL_KEY, value: seal(this.key, this.tail, TAIL_AAD) }];
   };
 
   /** Starts syncing: one exchange now, then pushes after local changes and pulls when the server announces more. */
@@ -470,7 +501,7 @@ export class SyncEngine implements DocListener {
       this.whole = true;
       return this.store.flush();
     }
-    return writeSyncState(this.db, this.copy());
+    return writeSyncState(this.db, this.copy(), this.key);
   }
 
   private copy(): SyncState {

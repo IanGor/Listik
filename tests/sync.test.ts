@@ -137,7 +137,7 @@ describe('sync', () => {
     a.run(() => cmd.setText(a.ctx, a.rows.ids[1], 'после снимка'));
     await a.engine.sync();
     const c = await device(docId, token, { bootstrap: true });
-    expect((await readSyncState(await openDb(c.name)))?.head).toBeGreaterThan(0);
+    expect((await readSyncState(await openDb(c.name), await key()))?.head).toBeGreaterThan(0);
     await c.engine.sync();
     expect(dump(c.doc)).toEqual(['в снимке', 'после снимка']);
     checkInvariants(c.doc);
@@ -170,7 +170,15 @@ describe('sync', () => {
     // The batch of the log goes at the end of the task; the state's own save (300 ms) never comes: the page is gone.
     await a.persistence.flush();
     const db = await openDb(a.name);
-    expect((await readSyncState(db))?.outbox.flat().length).toBe(3);
+    expect((await readSyncState(db, await key()))?.outbox.flat().length).toBe(3);
+    // Sealed with the document's key, as the log is: neither the state nor its tail shows the text.
+    const raw = await new Promise<unknown[]>((resolve) => {
+      const r = db.transaction('meta').objectStore('meta').getAll();
+      r.onsuccess = () => resolve(r.result);
+    });
+    expect(JSON.stringify(raw)).not.toContain('набрано');
+    expect(JSON.stringify(raw)).not.toContain('setText');
+    await expect(readSyncState(db)).rejects.toThrow(/key/);
     db.close();
     const reloaded = await Persistence.open(a.name);
     expect(dump(reloaded.doc)).toEqual(['набрано', 'и закрыто']);
@@ -192,6 +200,32 @@ describe('sync', () => {
     await engine2.sync();
     expect(dump(again.doc)).toEqual(['набрано', 'и закрыто, и исправлено']);
     expect(engine2.head).toBe(engine.head);
+  });
+
+  it('an outbox an earlier version stored plain is read as it is and sealed from then on', async () => {
+    const { docId, token } = await createDoc();
+    const name = `sync-legacy-${n++}`;
+    const db = await openDb(name);
+    await bootstrap(db, plainCodec, await key(), docId, httpTransport(url, docId, token));
+    const op = { t: 'setText', id: 'x', from: '', to: 'неотправленное' };
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction('meta', 'readwrite');
+      const store = tx.objectStore('meta');
+      const r = store.get('syncState');
+      r.onsuccess = () => store.put({ ...r.result, outbox: [[op]] }, 'syncState');
+      tx.oncomplete = () => resolve();
+    });
+    expect((await readSyncState(db, await key()))?.outbox).toEqual([[op]]);
+    const { doc } = await Persistence.open(name);
+    const engine = await SyncEngine.open(doc, db, httpTransport(url, docId, token), await key(), docId, { live: false });
+    expect(engine.status.pending).toBe(1);
+    await engine.flush();
+    const raw = await new Promise<unknown>((resolve) => {
+      const r = db.transaction('meta').objectStore('meta').get('syncState');
+      r.onsuccess = () => resolve(r.result);
+    });
+    expect(JSON.stringify(raw)).not.toContain('неотправленное');
+    expect((await readSyncState(db, await key()))?.outbox).toEqual([[op]]);
   });
 
   it('an edit made while an exchange is running is sent by that exchange, which ends', { timeout: 10_000 }, async () => {
