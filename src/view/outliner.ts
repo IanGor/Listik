@@ -630,17 +630,31 @@ export class Outliner {
 
   /**
    * A day of the calendar entered for the first time, by any way: its
-   * template goes in (model/calendar.ts `fillDay`, one undo step), the caret
-   * stays out. With sync, only once the server has been heard from, and
+   * template goes in (model/calendar.ts `fillDay`, no undo step: `scaffold`),
+   * the caret stays out. With sync, only once the server has been heard from, and
    * only if the day is still where the user is.
    */
   private enterDay(id: NodeId): void {
     if (this.readOnly || this.doc.get(id).children.length || periodAt(this.doc, id)?.kind !== 'day') return;
     const fill = () => {
-      if (this.zoom() === id && this.doc.has(id)) this.run((ctx) => void fillDay(ctx, id), this.keepFocus());
+      if (this.zoom() === id && this.doc.has(id)) this.scaffold((ctx) => void fillDay(ctx, id));
     };
     if (this.syncing() && !this.synced) this.afterSync.push(fill);
     else fill();
+  }
+
+  /**
+   * The calendar the app builds by itself as you go (a year stepped into, a
+   * day's template, the structure a first sync finds missing): applied and
+   * saved, but no undo step. As one, Ctrl+Z after "Сегодня" or ‹ › took the
+   * new year away, and the view with it, instead of the last edit. Unwanted,
+   * it goes like any bullets. The caret stays where it is.
+   */
+  private scaffold(cmd: (ctx: Ctx) => void): void {
+    if (this.readOnly) return;
+    batch(() => {
+      this.doc.transact(() => cmd(this.ctx));
+    });
   }
 
   /** The caret where it is, for a command that should not move it. */
@@ -651,14 +665,14 @@ export class Outliner {
 
   /**
    * Makes sure the calendar has the period's year (model/calendar.ts
-   * `addYear`, one undo step), and finds the period. With sync, a missing
+   * `addYear`, no undo step: `scaffold`), and finds the period. With sync, a missing
    * year waits for the server: null then.
    */
   private periodBullet(p: Period): NodeId | null {
     const found = findPeriod(this.doc, this.tags, p);
     if (found !== null || this.readOnly || findPeriod(this.doc, this.tags, quarterPeriod(p)) !== null) return found;
     if (this.syncing() && !this.synced) return null;
-    this.run((ctx) => void addYear(ctx, this.tags, p.y), this.keepFocus());
+    this.scaffold((ctx) => void addYear(ctx, this.tags, p.y));
     return findPeriod(this.doc, this.tags, p);
   }
 
@@ -792,16 +806,13 @@ export class Outliner {
 
   /**
    * A new document's first start, or the first sync of one without the
-   * structure (`bare` aside): the structure goes in. At the start it takes
-   * the place of the lone empty bullet, and is no undo step: there was
-   * nothing before it.
+   * structure (`bare` aside): the structure goes in, no undo step either way
+   * (nobody asked for it: `scaffold`). At the start it takes the place of the
+   * lone empty bullet.
    */
   firstStructure(start: boolean): void {
     if (this.readOnly || this.bare || this.structure()) return;
-    if (!start) {
-      this.run((ctx) => void createStructure(ctx, new Date().getFullYear()), this.keepFocus());
-      return;
-    }
+    if (!start) return this.scaffold((ctx) => void createStructure(ctx, new Date().getFullYear()));
     const [lone] = this.doc.get(this.doc.root).children;
     this.doc.transact(() => {
       createStructure(this.ctx, new Date().getFullYear());

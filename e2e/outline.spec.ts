@@ -849,8 +849,8 @@ test.describe('structure and calendar', () => {
     await page.locator('.menu-button').click();
     await expect(page.getByRole('menuitem', { name: /Создать структуру/ })).toHaveCount(1);
     await page.keyboard.press('Escape');
-    // The day's template, then the structure.
-    for (let i = 0; i < 2; i++) await page.keyboard.press('Control+z');
+    // The structure, and the day's template inside it: the template was no step of its own.
+    await page.keyboard.press('Control+z');
     expect(await outline(page)).toEqual(DEMO);
   });
 
@@ -899,6 +899,22 @@ test.describe('structure and calendar', () => {
     await page.locator('.crumbs .crumb', { hasText: `@q${before}` }).click();
     await expect(title(page)).toHaveText(`@q${before}`);
     await expect(page.locator('.period-steps')).toHaveCount(0);
+  });
+
+  test('a year or a day\'s template the app makes on the way is no undo step: Ctrl+Z takes back the last edit and the view stays', async ({ page }) => {
+    await create(page);
+    await page.locator('.row .text').nth(1).click();
+    await page.keyboard.type('запись');
+    await page.keyboard.press('Escape');
+    await page.locator('.crumbs .crumb', { hasText: year }).click();
+    await page.keyboard.press('Control+Alt+ArrowRight');
+    await expect(title(page)).toHaveText(`@y${now.getFullYear() + 1}`);
+    await page.keyboard.press('Control+z');
+    // Still in the new year, which is still there.
+    await expect(title(page)).toHaveText(`@y${now.getFullYear() + 1}`);
+    await page.locator('.logo, .brand').first().click();
+    await expect(title(page)).toHaveText(today);
+    expect(await outline(page)).toEqual(DAY);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
