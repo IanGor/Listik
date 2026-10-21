@@ -935,13 +935,14 @@ mark,
 
 /* One line: a long path scrolls sideways (by a finger too), its end in
    view, so the bullets nearest to where you are show whole. With more of
-   the path to the left, that edge fades out. */
+   the path to the left, that edge fades out. The scroller clips: its
+   padding leaves a crumb's focus ring (4px out) room on every side. */
 .crumbs {
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 2px 6px;
-  margin: -2px -6px;
+  padding: 4px 10px;
+  margin: -4px -10px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   font-size: 14px;
@@ -2738,8 +2739,8 @@ body.is-dragging * {
 
   /* The crumbs: taller to hit, the path no closer to the rows. */
   .crumbs {
-    padding-block: 8px;
-    margin-block: -8px;
+    padding-block: 10px;
+    margin-block: -10px;
   }
 
   .crumb {
