@@ -41,6 +41,10 @@ export const STRUCTURE: readonly { text: string; note: string }[] = [
 ];
 
 /** `@имя` of each weekday, from Sunday (Date.getDay). */
+/** A day's year, two digits: `@y26`. */
+const yearTag = (y: number) => `@y${two(y % 100)}`;
+const SHORT_YEAR = /^@y\d\d$/;
+
 export const WEEKDAYS = ['@воскресенье', '@понедельник', '@вторник', '@среда', '@четверг', '@пятница', '@суббота'];
 
 /** The time slots of a day: 09:00 to 18:00 every half hour. */
@@ -82,11 +86,13 @@ export function weeksOf(y: number, m: number): number[] {
 }
 
 /**
- * How the period's bullet is written. A day ends with its year, as plain
- * text, not a tag: its title is then its own (a link or "Перейти к…" by it
- * finds this day, not the same date and weekday some years before), while
- * the tags `@d19 @m10` still find the day in every year. Days written
- * before, without it, are found all the same (`labelOf` reads tags only).
+ * How the period's bullet is written. A day has its year too, a short tag
+ * (`@y26`): its title is then its own (a link or "Перейти к…" by it finds
+ * this day, not the same date and weekday some years before), and the year
+ * filters like every other tag, while `@d19 @m10` alone still finds the day
+ * in every year. `@y2026` is the year's own bullet; the day's two digits
+ * never read as one (`labelOf`), and days without them are found all the
+ * same (`findPeriod`) and get them once (`dayYearTags`).
  */
 export function periodText(p: Period): string {
   switch (p.kind) {
@@ -97,7 +103,7 @@ export function periodText(p: Period): string {
     case 'week':
       return `@w${two(p.w)}`;
     case 'day':
-      return `@d${two(p.d)} @m${two(p.m)} ${WEEKDAYS[utc(p.y, p.m, p.d).getUTCDay()]} ${p.y}`;
+      return `@d${two(p.d)} @m${two(p.m)} ${yearTag(p.y)} ${WEEKDAYS[utc(p.y, p.m, p.d).getUTCDay()]}`;
   }
 }
 
@@ -302,7 +308,7 @@ export const hasStructure = (doc: Doc, tags: TagIndex) => [1, 2, 3, 4].some((q) 
 /** The bullet of a period: the highest one whose own tags and surroundings make it that period. */
 export function findPeriod(doc: Doc, tags: TagIndex, p: Period): NodeId | null {
   const sets = parseTags(periodText(p))
-    .filter((t) => !WEEKDAYS.includes(t))
+    .filter((t) => !WEEKDAYS.includes(t) && !SHORT_YEAR.test(t))
     .map((t) => tags.nodesWith(t))
     .sort((a, b) => a.size - b.size);
   const found: NodeId[] = [];
@@ -390,4 +396,30 @@ export function fillDay(ctx: Ctx, day: NodeId): boolean {
   if (ctx.doc.get(day).children.length) return false;
   placeTrees(ctx, day, 0, dayTemplate());
   return true;
+}
+
+/**
+ * Days of the calendar written without their year tag (by earlier
+ * versions: `@d19 @m10 @понедельник`, or with the year as plain text after
+ * it) and the text each should have: the tag goes in after the month, a
+ * plain year at the end goes. What else the day says stays.
+ */
+export function dayYearTags(doc: Doc): { id: NodeId; text: string }[] {
+  const out: { id: NodeId; text: string }[] = [];
+  const walk = (id: NodeId, depth: number) => {
+    for (const c of doc.get(id).children) {
+      const text = doc.get(c).text;
+      if (depth < 4) {
+        if (labelOf(text)) walk(c, depth + 1);
+        continue;
+      }
+      const p = labelOf(text)?.kind === 'day' ? periodAt(doc, c) : null;
+      if (!p || parseTags(text).some((t) => SHORT_YEAR.test(t))) continue;
+      const next = text.replace(new RegExp(` ${p.y}$`), '').replace(/(^|\s)(@m\d\d)(?=\s|$)/, `$1$2 ${yearTag(p.y)}`);
+      if (next !== text) out.push({ id: c, text: next });
+    }
+  };
+  // Quarter → year → month → week → day.
+  for (const q of doc.get(doc.root).children) if (labelOf(doc.get(q).text)?.kind === 'quarter') walk(q, 1);
+  return out;
 }

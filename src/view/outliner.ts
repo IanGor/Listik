@@ -1,6 +1,6 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, neighbour, openPeriods, periodAt, periodName, quarterPeriod, type Period,
+  addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, hasStructure, neighbour, openPeriods, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
@@ -501,6 +501,25 @@ export class Outliner {
       for (const id of open) setCollapsed(ctx, id, true);
     });
     writeSetting(key, '1');
+  }
+
+  /**
+   * Days written without their year tag by earlier versions get it
+   * (model/calendar.ts `dayYearTags`): `@y26` filters them like every day
+   * made since. With sync, once the server has been heard from, so a day
+   * another device already tagged is not tagged twice; the same tag added
+   * on two devices at once merges into one. No undo step.
+   */
+  tagDayYears(): void {
+    const run = () => {
+      const fixes = dayYearTags(this.doc);
+      if (fixes.length) this.scaffold((ctx) => {
+        for (const { id, text } of fixes) setText(ctx, id, text);
+      });
+    };
+    if (this.readOnly) return;
+    if (this.syncing() && !this.synced) this.afterSync.push(run);
+    else run();
   }
 
   keepRecent(name: string): void {

@@ -819,7 +819,7 @@ test.describe('structure and calendar', () => {
   };
   const two = (n: number) => String(n).padStart(2, '0');
   const WEEKDAYS = ['@воскресенье', '@понедельник', '@вторник', '@среда', '@четверг', '@пятница', '@суббота'];
-  const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)} ${WEEKDAYS[d.getDay()]} ${d.getFullYear()}`;
+  const dayText = (d: Date) => `@d${two(d.getDate())} @m${two(d.getMonth() + 1)} @y${two(d.getFullYear() % 100)} ${WEEKDAYS[d.getDay()]}`;
   const now = new Date();
   const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
   const today = dayText(now);
@@ -936,6 +936,22 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Escape');
     await page.clock.runFor(2 * 60_000);
     await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 23)));
+  });
+
+  test('a day written without its year tag gets it at the next start; @y26 then finds it', async ({ page }) => {
+    await page.goto('/?db=e2e-day-year');
+    await expect(title(page)).toHaveText(today);
+    const old = today.replace(/ @y\d\d/, '');
+    await title(page).click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type(old);
+    await page.keyboard.press('Escape');
+    await expect(title(page)).toHaveText(old);
+    await page.waitForTimeout(100);
+    await page.reload();
+    await expect(title(page)).toHaveText(today);
+    await page.locator('.search').fill(`${today.split(' ').slice(0, 3).join(' ')}`);
+    await expect(page.locator('.searchbar .count')).toHaveText(/^\d+ пункт/);
   });
 
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {

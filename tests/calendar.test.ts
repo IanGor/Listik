@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
@@ -35,13 +35,13 @@ describe('structure', () => {
     const oct = t.children[0];
     expect(oct.children.map((w) => w.text)).toEqual(['@w40', '@w41', '@w42', '@w43', '@w44']);
     expect(oct.children[0].children.map((d) => d.text)).toEqual([
-      '@d01 @m10 @четверг 2026', '@d02 @m10 @пятница 2026', '@d03 @m10 @суббота 2026', '@d04 @m10 @воскресенье 2026',
+      '@d01 @m10 @y26 @четверг', '@d02 @m10 @y26 @пятница', '@d03 @m10 @y26 @суббота', '@d04 @m10 @y26 @воскресенье',
     ]);
-    expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @понедельник 2026', collapsed: true, children: [] });
+    expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @y26 @понедельник', collapsed: true, children: [] });
     expect(count(t)).toBe(1 + 3 + 5 + 6 + 5 + 92);
     // Opening a quarter shows its years, a year its months, and so on: not the ~470 rows of a year.
     expect([t.collapsed, oct.collapsed, oct.children[0].collapsed]).toEqual([true, true, true]);
-    expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @вторник 2028');
+    expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @y28 @вторник');
   });
 
   it('nine bullets with notes; the quarters folded, with the year', () => {
@@ -161,11 +161,11 @@ describe('neighbour', () => {
 
   it('takes the date of a Date, and names periods', () => {
     expect(dayOf(new Date(2026, 9, 19, 23, 59))).toEqual(day(2026, 10, 19));
-    expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @понедельник 2026');
-    // 21 October is a Wednesday in 2026 and again in 2037: one title each, the same tags.
+    expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @y26 @понедельник');
+    // 21 October is a Wednesday in 2026 and again in 2037: one title each, told apart by the year's tag.
     const [a, b] = [periodText(day(2026, 10, 21)), periodText(day(2037, 10, 21))];
     expect(a).not.toBe(b);
-    expect(parseTags(a)).toEqual(parseTags(b));
+    expect(parseTags(a).filter((t) => !parseTags(b).includes(t))).toEqual(['@y26']);
     expect(periodName(day(2026, 10, 19))).toBe('19.10.2026');
     expect(periodName({ kind: 'quarter', y: 2026, q: 4 })).toBe('4 квартал 2026');
   });
@@ -196,6 +196,24 @@ describe('addYear', () => {
     const tags = new TagIndex(doc);
     expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
     expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027 [+]']);
+  });
+
+  it('days with their year tag are periods and are found; so are days written without it, which get it', () => {
+    const { doc } = setup([
+      '@q4', '  @y2026', '    @m10', '      @w43',
+      '        @d19 @m10 @понедельник', '        @d20 @m10 @вторник 2026', '        @d21 @m10 @среда день рождения', '        @d22 @m10 @y26 @четверг',
+      'Inbox', '  @d23 @m10 @пятница',
+    ]);
+    const tags = new TagIndex(doc);
+    expect(findPeriod(doc, tags, day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
+    expect(findPeriod(doc, tags, day(2026, 10, 22))).toBe('@d22 @m10 @y26 @четверг');
+    expect(periodAt(doc, '@d22 @m10 @y26 @четверг')).toEqual(day(2026, 10, 22));
+    // Only calendar days lacking it; a plain year left by the version before goes.
+    expect(dayYearTags(doc)).toEqual([
+      { id: '@d19 @m10 @понедельник', text: '@d19 @m10 @y26 @понедельник' },
+      { id: '@d20 @m10 @вторник 2026', text: '@d20 @m10 @y26 @вторник' },
+      { id: '@d21 @m10 @среда день рождения', text: '@d21 @m10 @y26 @среда день рождения' },
+    ]);
   });
 
   it('finds the years, months and weeks earlier versions left open, nothing else', () => {
