@@ -12,9 +12,9 @@ import type { NodeId } from './types';
  * Archive, each with a note on what goes there.
  *
  * Each quarter holds a bullet per year, and the year its three months:
- * `@q4` → `@y2026` → `@m10` → week `@w43` (ISO, from Monday; a week that
+ * `@q4` → `@y26` → `@m10` → week `@w43` (ISO, from Monday; a week that
  * spans two months is in both, with its own days) → day
- * `@d19 @m10 @понедельник`. A year comes whole, its days empty; a day gets
+ * `@d19 @m10 @y26 @понедельник`. A year comes whole, its days empty; a day gets
  * its template (#notes, todo, 09:00…18:00) when it is first entered.
  *
  * Bullets are named by tags. Numbers have two digits, as a tag in the
@@ -41,7 +41,7 @@ export const STRUCTURE: readonly { text: string; note: string }[] = [
 ];
 
 /** `@имя` of each weekday, from Sunday (Date.getDay). */
-/** A day's year, two digits: `@y26`. */
+/** A year, two digits, wherever the app writes it: `@y26`. */
 const yearTag = (y: number) => `@y${two(y % 100)}`;
 const SHORT_YEAR = /^@y\d\d$/;
 
@@ -90,14 +90,15 @@ export function weeksOf(y: number, m: number): number[] {
  * (`@y26`): its title is then its own (a link or "Перейти к…" by it finds
  * this day, not the same date and weekday some years before), and the year
  * filters like every other tag, while `@d19 @m10` alone still finds the day
- * in every year. `@y2026` is the year's own bullet; the day's two digits
- * never read as one (`labelOf`), and days without them are found all the
- * same (`findPeriod`) and get them once (`dayYearTags`).
+ * in every year. The year's own bullet is the same tag alone: a day has
+ * `@d` and is read as a day first (`labelOf`). Days without the year are
+ * found all the same (`findPeriod`) and get it once, and years written
+ * `@y2026` by earlier versions become `@y26` (`yearTags`).
  */
 export function periodText(p: Period): string {
   switch (p.kind) {
     case 'quarter':
-      return `@y${p.y}`;
+      return yearTag(p.y);
     case 'month':
       return `@m${two(p.m)}`;
     case 'week':
@@ -190,7 +191,8 @@ const RANK = { quarter: 0, year: 1, month: 2, week: 3, day: 4 };
 
 /**
  * The label in a bullet's text: a day has `@dNN` and `@mNN`, a week
- * `@wNN`, a month only `@mNN`, a year `@yNNNN`, a quarter `@qN`. Null for
+ * `@wNN`, a month only `@mNN`, a year `@yNN` (`@yNNNN` from earlier
+ * versions, until `yearTags`), a quarter `@qN`. Null for
  * anything else (and for dates no year has).
  */
 function labelOf(text: string): Label | null {
@@ -209,8 +211,8 @@ function labelOf(text: string): Label | null {
   if (d !== null) return m !== null && m >= 1 && m <= 12 && d >= 1 && d <= daysIn(2000, m) ? { kind: 'day', m, d } : null;
   if (w !== null) return w >= 1 && w <= 53 ? { kind: 'week', w } : null;
   if (m !== null) return m >= 1 && m <= 12 ? { kind: 'month', m } : null;
-  const y = num(/^@y(\d{4})$/);
-  if (y !== null) return { kind: 'year', y };
+  const y = num(/^@y(\d\d|\d{4})$/);
+  if (y !== null) return { kind: 'year', y: y < 100 ? 2000 + y : y };
   const q = num(/^@q(\d)$/);
   return q !== null && q >= 1 && q <= 4 ? { kind: 'quarter', q } : null;
 }
@@ -307,10 +309,14 @@ export const hasStructure = (doc: Doc, tags: TagIndex) => [1, 2, 3, 4].some((q) 
 
 /** The bullet of a period: the highest one whose own tags and surroundings make it that period. */
 export function findPeriod(doc: Doc, tags: TagIndex, p: Period): NodeId | null {
-  const sets = parseTags(periodText(p))
-    .filter((t) => !WEEKDAYS.includes(t) && !SHORT_YEAR.test(t))
-    .map((t) => tags.nodesWith(t))
-    .sort((a, b) => a.size - b.size);
+  const sets =
+    p.kind === 'quarter'
+      ? // A year written `@y2026` is still a year until it is renamed (`yearTags`).
+        [new Set([...tags.nodesWith(yearTag(p.y)), ...tags.nodesWith(`@y${p.y}`)])]
+      : parseTags(periodText(p))
+          .filter((t) => !WEEKDAYS.includes(t) && !SHORT_YEAR.test(t))
+          .map((t) => tags.nodesWith(t))
+          .sort((a, b) => a.size - b.size);
   const found: NodeId[] = [];
   for (const id of sets[0]) {
     if (!sets.every((s) => s.has(id))) continue;
@@ -367,21 +373,27 @@ export function fillDay(ctx: Ctx, day: NodeId): boolean {
 }
 
 /**
- * Days of the calendar written without their year tag (by earlier
- * versions: `@d19 @m10 @понедельник`, or with the year as plain text after
- * it) and the text each should have: the tag goes in after the month, a
- * plain year at the end goes. What else the day says stays.
+ * Year tags as the app writes them now, for calendars made by earlier
+ * versions: the text each bullet should have. A year written `@y2026`
+ * becomes `@y26`; a day without its year tag (`@d19 @m10 @понедельник`,
+ * or with the year as plain text after it) gets it after the month, and a
+ * plain year at the end goes. What else the bullet says stays.
  */
-export function dayYearTags(doc: Doc): { id: NodeId; text: string }[] {
+export function yearTags(doc: Doc): { id: NodeId; text: string }[] {
   const out: { id: NodeId; text: string }[] = [];
   const walk = (id: NodeId, depth: number) => {
     for (const c of doc.get(id).children) {
       const text = doc.get(c).text;
+      const label = labelOf(text);
+      if (depth === 1 && label?.kind === 'year' && periodAt(doc, c)) {
+        const next = text.replace(/(^|\s)@y(\d{4})(?=\s|$)/, (_, before: string, y: string) => before + yearTag(Number(y)));
+        if (next !== text) out.push({ id: c, text: next });
+      }
       if (depth < 4) {
-        if (labelOf(text)) walk(c, depth + 1);
+        if (label) walk(c, depth + 1);
         continue;
       }
-      const p = labelOf(text)?.kind === 'day' ? periodAt(doc, c) : null;
+      const p = label?.kind === 'day' ? periodAt(doc, c) : null;
       if (!p || parseTags(text).some((t) => SHORT_YEAR.test(t))) continue;
       const next = text.replace(new RegExp(` ${p.y}$`), '').replace(/(^|\s)(@m\d\d)(?=\s|$)/, `$1$2 ${yearTag(p.y)}`);
       if (next !== text) out.push({ id: c, text: next });

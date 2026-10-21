@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
-  openPeriods, periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
+  openPeriods, periodName, periodText, structureTrees, weeksOf, yearTags, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
@@ -30,7 +30,7 @@ describe('weeks', () => {
 describe('structure', () => {
   it('a year in a quarter: its months, weeks and days, named by tags, all folded', () => {
     const t = yearTree(2026, 4);
-    expect(t.text).toBe('@y2026');
+    expect(t.text).toBe('@y26');
     expect(t.children.map((m) => m.text)).toEqual(['@m10', '@m11', '@m12']);
     const oct = t.children[0];
     expect(oct.children.map((w) => w.text)).toEqual(['@w40', '@w41', '@w42', '@w43', '@w44']);
@@ -50,7 +50,7 @@ describe('structure', () => {
     expect(trees.map((t) => t.note)).toEqual(STRUCTURE.map((s) => s.note));
     expect(trees.every((t) => t.note)).toBe(true);
     expect(trees[4].collapsed).toBe(true);
-    expect(trees[4].children.map((y) => y.text)).toEqual(['@y2026']);
+    expect(trees[4].children.map((y) => y.text)).toEqual(['@y26']);
     expect(trees[0].children).toEqual([]);
   });
 
@@ -82,7 +82,7 @@ describe('finding periods', () => {
     '  созвон @d19 @m10',
     '  @q4 вложенный',
     '@q4',
-    '  @y2025',
+    '  @y25',
     '    @m10 прошлый',
     '      @w42',
     '        @d19 @m10 @воскресенье',
@@ -104,7 +104,9 @@ describe('finding periods', () => {
     expect(findPeriod(doc, tags, { kind: 'month', y: 2026, m: 10 })).toBe('@m10');
     expect(findPeriod(doc, tags, { kind: 'month', y: 2025, m: 10 })).toBe('@m10 прошлый');
     expect(findPeriod(doc, tags, { kind: 'week', y: 2026, m: 10, w: 43 })).toBe('@w43');
+    // A year as earlier versions wrote it is a year too.
     expect(findPeriod(doc, tags, { kind: 'quarter', y: 2026, q: 4 })).toBe('@y2026');
+    expect(findPeriod(doc, tags, { kind: 'quarter', y: 2025, q: 4 })).toBe('@y25');
     expect(findPeriod(doc, tags, { kind: 'quarter', y: 2027, q: 4 })).toBeNull();
   });
 
@@ -160,7 +162,7 @@ describe('addYear', () => {
       expect(addYear(ctx, tags, 2025)).toBe(true);
     });
     for (let q = 1; q <= 4; q++) {
-      expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y2025', '@y2026', '@y2027']);
+      expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y25', '@y26', '@y27']);
     }
     expect(findPeriod(doc, tags, day(2027, 1, 1))).not.toBeNull();
     expect(run(() => addYear(ctx, tags, 2027))).toBe(false);
@@ -173,21 +175,22 @@ describe('addYear', () => {
     const { doc, ctx, run } = setup(['@q1', '  @y2026']);
     const tags = new TagIndex(doc);
     expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
-    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y2027 [+]']);
+    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y27 [+]']);
   });
 
-  it('days with their year tag are periods and are found; so are days written without it, which get it', () => {
+  it('days with their year tag are periods and are found; so are days written without it, which get it; a year `@y2026` becomes `@y26`', () => {
     const { doc } = setup([
       '@q4', '  @y2026', '    @m10', '      @w43',
       '        @d19 @m10 @понедельник', '        @d20 @m10 @вторник 2026', '        @d21 @m10 @среда день рождения', '        @d22 @m10 @y26 @четверг',
-      'Inbox', '  @d23 @m10 @пятница',
+      'Inbox', '  @d23 @m10 @пятница', '  @y2027 план',
     ]);
     const tags = new TagIndex(doc);
     expect(findPeriod(doc, tags, day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
     expect(findPeriod(doc, tags, day(2026, 10, 22))).toBe('@d22 @m10 @y26 @четверг');
     expect(periodAt(doc, '@d22 @m10 @y26 @четверг')).toEqual(day(2026, 10, 22));
-    // Only calendar days lacking it; a plain year left by the version before goes.
-    expect(dayYearTags(doc)).toEqual([
+    // Only the calendar's years and days lacking it; a plain year left by the version before goes.
+    expect(yearTags(doc)).toEqual([
+      { id: '@y2026', text: '@y26' },
       { id: '@d19 @m10 @понедельник', text: '@d19 @m10 @y26 @понедельник' },
       { id: '@d20 @m10 @вторник 2026', text: '@d20 @m10 @y26 @вторник' },
       { id: '@d21 @m10 @среда день рождения', text: '@d21 @m10 @y26 @среда день рождения' },

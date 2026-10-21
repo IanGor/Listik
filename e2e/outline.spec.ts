@@ -823,7 +823,7 @@ test.describe('structure and calendar', () => {
   const now = new Date();
   const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
   const today = dayText(now);
-  const year = `@y${now.getFullYear()}`;
+  const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const STRUCTURE = ['Inbox', '@q1', '@q2', '@q3', '@q4', 'Projects', 'Hubs', 'Reference', 'Archive'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
@@ -839,7 +839,7 @@ test.describe('structure and calendar', () => {
     // The bullet under "todo" is plain, as under the notes: no checkbox.
     await expect(page.locator('.row').nth(3).locator('.bullet')).not.toHaveClass(/todo/);
     await expect(caret(page)).toHaveCount(0);
-    for (const crumb of [`@q${quarter}`, year, new RegExp(`^@m${two(now.getMonth() + 1)}$`), /^@w\d\d$/]) {
+    for (const crumb of [`@q${quarter}`, new RegExp(`^${year}$`), new RegExp(`^@m${two(now.getMonth() + 1)}$`), /^@w\d\d$/]) {
       await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);
     }
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
@@ -907,7 +907,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 23)));
   });
 
-  test('a day written without its year tag gets it at the next start; @y26 then finds it', async ({ page }) => {
+  test('a day written without its year tag gets it at the next start, a year written @y2026 becomes @y26; @y26 then finds them', async ({ page }) => {
     await page.goto('/?db=e2e-day-year');
     await expect(title(page)).toHaveText(today);
     const old = today.replace(/ @y\d\d/, '');
@@ -921,6 +921,17 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
     await page.locator('.search').fill(`${today.split(' ').slice(0, 3).join(' ')}`);
     await expect(page.locator('.searchbar .count')).toHaveText(/^\d+ пункт/);
+    await page.locator('.search').fill('');
+    // The year's bullet as earlier versions wrote it.
+    await page.locator('.crumbs .crumb', { hasText: new RegExp(`^${year}$`) }).click();
+    await title(page).click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type(`@y${now.getFullYear()}`);
+    await page.keyboard.press('Escape');
+    await expect(title(page)).toHaveText(`@y${now.getFullYear()}`);
+    await page.waitForTimeout(100);
+    await page.reload();
+    await expect(title(page)).toHaveText(year);
   });
 
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {

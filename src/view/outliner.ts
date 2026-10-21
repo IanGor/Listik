@@ -1,6 +1,6 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, type Period,
+  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
@@ -504,15 +504,16 @@ export class Outliner {
   }
 
   /**
-   * Days written without their year tag by earlier versions get it
-   * (model/calendar.ts `dayYearTags`): `@y26` filters them like every day
-   * made since. With sync, once the server has been heard from, so a day
-   * another device already tagged is not tagged twice; the same tag added
+   * Year tags written by earlier versions become what the app writes now
+   * (model/calendar.ts `yearTags`): a year `@y2026` is renamed `@y26`, a day
+   * without its year gets it, so `@y26` filters them like every period made
+   * since. With sync, once the server has been heard from, so a bullet
+   * another device already fixed is not fixed twice; the same change made
    * on two devices at once merges into one. No undo step.
    */
-  tagDayYears(): void {
+  tagYears(): void {
     const run = () => {
-      const fixes = dayYearTags(this.doc);
+      const fixes = yearTags(this.doc);
       if (fixes.length) this.scaffold((ctx) => {
         for (const { id, text } of fixes) setText(ctx, id, text);
       });
