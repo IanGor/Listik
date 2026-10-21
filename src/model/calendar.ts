@@ -227,13 +227,16 @@ function quarterAt(doc: Doc, id: NodeId): number | null {
 /**
  * The period the bullet `id` stands for: its own label, with the year (and
  * for a week, the month) of the periods around it, inside a top-level
- * quarter. Null for any other bullet, and for one inside a period as fine
- * or finer (an entry `созвон @d24 @m10` written in another day is not 24
- * October).
+ * quarter. Null for any other bullet, for one inside a period as fine or
+ * finer (an entry `созвон @d24 @m10` written in another day is not 24
+ * October), and for a day not right in a week (the same entry written in
+ * a month).
  */
 export function periodAt(doc: Doc, id: NodeId): Period | null {
   const own = labelOf(doc.get(id).text);
   if (!own || own.kind === 'quarter') return null;
+  // A day lies right in a week: `созвон @today` written in a month is an entry.
+  if (own.kind === 'day' && labelOf(doc.get(doc.get(id).parent ?? doc.root).text)?.kind !== 'week') return null;
   let y: number | null = null;
   let m: number | null = null;
   let q: number | null = null;
@@ -323,8 +326,14 @@ export function findPeriod(doc: Doc, tags: TagIndex, p: Period): NodeId | null {
     const at = periodAt(doc, id);
     if (at && samePeriod(at, p)) found.push(id);
   }
-  return topmost(doc, found);
+  // An entry with the day's tags in its week (`созвон @today`) is not the
+  // day: one that is tags alone comes first.
+  const bare = found.filter((id) => onlyTags(doc.get(id).text));
+  return topmost(doc, bare.length ? bare : found);
 }
+
+/** Text that is tags and nothing else, as the app names a period. */
+const onlyTags = (text: string) => text.split(/\s+/).every((w) => !w || /^@[\p{L}\p{N}_-]+$/u.test(w));
 
 /** The quarter of the year a period lies in. */
 export function quarterPeriod(p: Period): Period {

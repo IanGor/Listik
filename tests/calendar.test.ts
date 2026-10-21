@@ -93,6 +93,7 @@ describe('finding periods', () => {
     '          запись @d24 @m10',
     '          @m11 внутри дня',
     '        @d20 @m10 @вторник',
+    '      @w44',
   ];
 
   it('by tags and the periods around them, year by year', () => {
@@ -108,6 +109,15 @@ describe('finding periods', () => {
     expect(findPeriod(doc, tags, { kind: 'quarter', y: 2026, q: 4 })).toBe('@y2026');
     expect(findPeriod(doc, tags, { kind: 'quarter', y: 2025, q: 4 })).toBe('@y25');
     expect(findPeriod(doc, tags, { kind: 'quarter', y: 2027, q: 4 })).toBeNull();
+  });
+
+  it('a day is not an entry with its tags: written in the year, the month, or the week before the day (@today)', () => {
+    const entry = 'созвон @d19 @m10 @y26 @понедельник';
+    for (const [after, depth] of [['  @y2026', 4], ['    @m10', 6], ['      @w43', 8]] as const) {
+      const at = lines.indexOf(after);
+      const { doc } = setup([...lines.slice(0, at + 1), ' '.repeat(depth) + entry, ...lines.slice(at + 1)]);
+      expect(findPeriod(doc, new TagIndex(doc), day(2026, 10, 19))).toBe('@d19 @m10 @понедельник');
+    }
   });
 
   it('never takes an entry for a period, nor a quarter below the top level', () => {
@@ -131,8 +141,13 @@ describe('finding periods', () => {
     run(() => doc.apply({ t: 'setText', id, from: id, to: '@d20 @m10 @вторник день рождения' }));
     expect(findPeriod(doc, tags, day(2026, 10, 20))).toBe(id);
     const n = doc.get(id);
-    run(() => doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: '@m10', order: doc.orderAt('@m10', 1) } }));
+    run(() => doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: '@w44', order: doc.orderAt('@w44', 0) } }));
     expect(findPeriod(doc, tags, day(2026, 10, 20))).toBe(id);
+    // Right in the month, out of every week, it is an entry.
+    const order = doc.get(id).order;
+    run(() => doc.apply({ t: 'move', id, from: { parent: '@w44', order }, to: { parent: '@m10', order: doc.orderAt('@m10', 1) } }));
+    expect(findPeriod(doc, tags, day(2026, 10, 20))).toBeNull();
+    run(() => doc.apply({ t: 'move', id, from: { parent: '@m10', order: doc.get(id).order }, to: { parent: '@w44', order } }));
     run(() => doc.apply({ t: 'setText', id, from: '@d20 @m10 @вторник день рождения', to: 'день рождения' }));
     expect(findPeriod(doc, tags, day(2026, 10, 20))).toBeNull();
   });
