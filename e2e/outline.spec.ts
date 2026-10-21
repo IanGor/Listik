@@ -870,37 +870,6 @@ test.describe('structure and calendar', () => {
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
-  test('‹ › and Ctrl+Alt+←/→ step to the day, week, month or quarter before and after', async ({ page }) => {
-    await expect(page.locator('.period-steps')).toHaveCount(0);
-    await create(page);
-    await page.keyboard.press('Control+Alt+ArrowRight');
-    await expect(title(page)).toHaveText(dayText(shifted(1)));
-    // Entered for the first time: filled.
-    expect(await outline(page)).toEqual(DAY);
-    await page.getByRole('button', { name: 'Следующий день' }).click();
-    await expect(title(page)).toHaveText(dayText(shifted(2)));
-    await page.keyboard.press('Control+Alt+ArrowLeft');
-    await page.getByRole('button', { name: 'Предыдущий день' }).click();
-    await expect(title(page)).toHaveText(today);
-    await page.locator('.crumbs .crumb', { hasText: /^@w\d\d$/ }).click();
-    const week = await title(page).textContent();
-    await page.getByRole('button', { name: 'Следующая неделя' }).click();
-    await expect(title(page)).toHaveText(/^@w\d\d$/);
-    await page.getByRole('button', { name: 'Предыдущая неделя' }).click();
-    await expect(title(page)).toHaveText(week!);
-    await page.locator('.crumbs .crumb', { hasText: /^@m/ }).click();
-    await page.getByRole('button', { name: 'Следующий месяц' }).click();
-    await expect(title(page)).toHaveText(`@m${two(((now.getMonth() + 1) % 12) + 1)}`);
-    await page.locator('.crumbs .crumb', { hasText: /^@y/ }).click();
-    await page.getByRole('button', { name: 'Предыдущий квартал' }).click();
-    // Before the first quarter, the year before comes in.
-    await expect(title(page)).toHaveText(quarter === 1 ? `@y${now.getFullYear() - 1}` : year);
-    const before = ((quarter + 2) % 4) + 1;
-    await page.locator('.crumbs .crumb', { hasText: `@q${before}` }).click();
-    await expect(title(page)).toHaveText(`@q${before}`);
-    await expect(page.locator('.period-steps')).toHaveCount(0);
-  });
-
   test('"Главная" opening the top level is an overview: each quarter shows its years folded; years left open before get folded once', async ({ page }) => {
     await page.goto('/?db=e2e-calendar-fold');
     await expect(title(page)).toHaveText(today);
@@ -955,7 +924,8 @@ test.describe('structure and calendar', () => {
   });
 
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
-    await page.setViewportSize({ width: 460, height: 700 });
+    // Narrow enough for the path not to fit.
+    await page.setViewportSize({ width: 340, height: 700 });
     await page.goto('/?db=e2e-crumbs-mouse');
     await expect(title(page)).toHaveText(today);
     const crumbs = page.locator('.crumbs');
@@ -980,17 +950,22 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(/^@w\d\d$/);
   });
 
-  test('a year or a day\'s template the app makes on the way is no undo step: Ctrl+Z takes back the last edit and the view stays', async ({ page }) => {
+  test('a day\'s template the app makes on the way is no undo step: Ctrl+Z takes back the last edit and the view stays', async ({ page }) => {
     await create(page);
     await page.locator('.row .text').nth(1).click();
     await page.keyboard.type('запись');
     await page.keyboard.press('Escape');
-    await page.locator('.crumbs .crumb', { hasText: year }).click();
-    await page.keyboard.press('Control+Alt+ArrowRight');
-    await expect(title(page)).toHaveText(`@y${now.getFullYear() + 1}`);
+    // Another day of this year, entered for the first time: filled.
+    const other = dayText(shifted(now.getMonth() === 11 && now.getDate() === 31 ? -1 : 1));
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type(other);
+    await page.keyboard.press('Enter');
+    await expect(title(page)).toHaveText(other);
+    expect(await outline(page)).toEqual(DAY);
     await page.keyboard.press('Control+z');
-    // Still in the new year, which is still there.
-    await expect(title(page)).toHaveText(`@y${now.getFullYear() + 1}`);
+    // Still there, with its template.
+    await expect(title(page)).toHaveText(other);
+    expect(await outline(page)).toEqual(DAY);
     await page.locator('.logo, .brand').first().click();
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(DAY);
@@ -2169,11 +2144,8 @@ test.describe('touch screen', () => {
   });
 
   test('a tapped button does not stay lit: no hover on a touch screen', async ({ page }) => {
-    // A stored document opens on today, with ‹ › beside the path.
+    // A stored document opens on today, its path above the list.
     await page.goto('/?db=hover');
-    const next = page.locator('.period-step').last();
-    await next.tap();
-    await expect(next).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     const crumb = page.locator('.crumb').first();
     await crumb.tap();
     await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

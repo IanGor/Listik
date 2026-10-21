@@ -878,7 +878,6 @@ mark,
 }
 
 /* With the list scrolled, a hairline where the rows go under the path. */
-/* The path, and ‹ › after it in a period of the forever calendar. */
 .crumbbar {
   display: flex;
   gap: 8px;
@@ -888,45 +887,6 @@ mark,
 .crumbbar .crumbs {
   flex: 1;
   min-width: 0;
-}
-
-.period-steps {
-  display: flex;
-  flex: none;
-  gap: 2px;
-  margin: -4px -6px -4px 0;
-}
-
-.period-step {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 26px;
-  padding: 0;
-  color: var(--muted);
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
-}
-
-@media (hover: hover) {
-  .period-step:hover {
-    color: var(--text);
-    background: var(--surface);
-  }
-}
-
-.period-step:active {
-  background: var(--surface-2);
-}
-
-@media (pointer: coarse) {
-  .period-step {
-    width: 40px;
-    height: 32px;
-  }
 }
 
 .crumbbar.scrolled {

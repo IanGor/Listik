@@ -326,38 +326,6 @@ export function quarterPeriod(p: Period): Period {
 }
 
 /**
- * The period before (`step` -1) or after (+1), across years: a quarter of
- * the year, a month, a week of the month (the days of a week in two months
- * are two weeks here, as in the outline), a day.
- */
-export function neighbour(p: Period, step: -1 | 1): Period {
-  switch (p.kind) {
-    case 'quarter': {
-      const i = p.y * 4 + p.q - 1 + step;
-      return { kind: 'quarter', y: Math.floor(i / 4), q: (i % 4) + 1 };
-    }
-    case 'month': {
-      const i = p.y * 12 + p.m - 1 + step;
-      return { kind: 'month', y: Math.floor(i / 12), m: (i % 12) + 1 };
-    }
-    case 'week': {
-      const weeks = weeksOf(p.y, p.m);
-      const next = weeks.indexOf(p.w) + step;
-      if (weeks.includes(p.w) && next >= 0 && next < weeks.length) return { ...p, w: weeks[next] };
-      const i = p.y * 12 + p.m - 1 + step;
-      const y = Math.floor(i / 12);
-      const m = (i % 12) + 1;
-      const other = weeksOf(y, m);
-      return { kind: 'week', y, m, w: step > 0 ? other[0] : other[other.length - 1] };
-    }
-    case 'day': {
-      const date = utc(p.y, p.m, p.d + step);
-      return { kind: 'day', y: date.getUTCFullYear(), m: date.getUTCMonth() + 1, d: date.getUTCDate() };
-    }
-  }
-}
-
-/**
  * "Создать структуру": the structure goes in as the last top-level bullets,
  * this year in its quarters, folded, whatever is there already. Returns
  * its first bullet.

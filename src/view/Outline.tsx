@@ -7,7 +7,7 @@ import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
 import { GoTo } from './GoTo';
-import { onGlobalKeys, onSelectionKeys, periodKeys } from './keymap';
+import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
@@ -196,7 +196,7 @@ export function Outline(props: { o: Outliner }) {
       }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
-      if (onSelectionKeys(e, o) || periodKeys(e, o)) return;
+      if (onSelectionKeys(e, o)) return;
       if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         return o.showHelp();

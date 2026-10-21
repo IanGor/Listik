@@ -4,7 +4,7 @@ import { plainText } from '../model/format';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
-import { formatKeys, onGlobalKeys, periodKeys } from './keymap';
+import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces } from './Row';
 
@@ -137,38 +137,6 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           )}
         </For>
       </nav>
-      <Show when={o.zoomPeriod()}>{(p) => <PeriodSteps o={o} kind={p().kind} />}</Show>
-    </div>
-  );
-}
-
-const PERIOD_NAMES = {
-  day: ['Предыдущий день', 'Следующий день'],
-  week: ['Предыдущая неделя', 'Следующая неделя'],
-  month: ['Предыдущий месяц', 'Следующий месяц'],
-  quarter: ['Предыдущий квартал', 'Следующий квартал'],
-};
-
-/** ‹ › at the end of the path in a period of the calendar: the one before, the one after. */
-function PeriodSteps(props: { o: Outliner; kind: keyof typeof PERIOD_NAMES }) {
-  const names = () => PERIOD_NAMES[props.kind];
-  return (
-    <div class="period-steps">
-      <For each={[-1, 1] as const}>
-        {(step) => (
-          <button
-            type="button"
-            class="period-step"
-            title={`${names()[step < 0 ? 0 : 1]} (Ctrl+Alt+${step < 0 ? '←' : '→'})`}
-            aria-label={names()[step < 0 ? 0 : 1]}
-            onClick={() => props.o.stepPeriod(step)}
-          >
-            <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d={step < 0 ? 'M6 1.5 1.5 6 6 10.5' : 'M2 1.5 6.5 6 2 10.5'} />
-            </svg>
-          </button>
-        )}
-      </For>
     </div>
   );
 }
@@ -322,7 +290,7 @@ function TitleEditable(props: TitleEditorProps & { text: () => string }) {
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing || formatKeys(e, o, id, el, false) || periodKeys(e, o)) return;
+    if (e.isComposing || formatKeys(e, o, id, el, false)) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) return;
@@ -405,7 +373,7 @@ function TitleNoteEditable(props: TitleEditorProps & { note: () => string; textL
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing || formatKeys(e, o, id, el, true) || periodKeys(e, o)) return;
+    if (e.isComposing || formatKeys(e, o, id, el, true)) return;
     const mod = e.ctrlKey || e.metaKey;
     const [start, end] = selectionIn(el) ?? [0, 0];
     const handle = (fn: () => void) => {

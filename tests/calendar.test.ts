@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, neighbour, periodAt,
+  SLOTS, STRUCTURE, addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
@@ -136,29 +136,7 @@ describe('finding periods', () => {
   });
 });
 
-describe('neighbour', () => {
-  it('steps days over months and years, 29 February only in a leap year', () => {
-    expect(neighbour(day(2026, 10, 31), 1)).toEqual(day(2026, 11, 1));
-    expect(neighbour(day(2026, 12, 31), 1)).toEqual(day(2027, 1, 1));
-    expect(neighbour(day(2027, 1, 1), -1)).toEqual(day(2026, 12, 31));
-    expect(neighbour(day(2027, 2, 28), 1)).toEqual(day(2027, 3, 1));
-    expect(neighbour(day(2028, 2, 28), 1)).toEqual(day(2028, 2, 29));
-  });
-
-  it('steps months and quarters over years', () => {
-    expect(neighbour({ kind: 'month', y: 2026, m: 12 }, 1)).toEqual({ kind: 'month', y: 2027, m: 1 });
-    expect(neighbour({ kind: 'month', y: 2026, m: 1 }, -1)).toEqual({ kind: 'month', y: 2025, m: 12 });
-    expect(neighbour({ kind: 'quarter', y: 2026, q: 4 }, 1)).toEqual({ kind: 'quarter', y: 2027, q: 1 });
-    expect(neighbour({ kind: 'quarter', y: 2026, q: 1 }, -1)).toEqual({ kind: 'quarter', y: 2025, q: 4 });
-  });
-
-  it('steps weeks as the outline has them: a week in two months twice', () => {
-    expect(neighbour({ kind: 'week', y: 2026, m: 10, w: 43 }, 1)).toEqual({ kind: 'week', y: 2026, m: 10, w: 44 });
-    expect(neighbour({ kind: 'week', y: 2026, m: 10, w: 44 }, 1)).toEqual({ kind: 'week', y: 2026, m: 11, w: 44 });
-    expect(neighbour({ kind: 'week', y: 2026, m: 11, w: 44 }, -1)).toEqual({ kind: 'week', y: 2026, m: 10, w: 44 });
-    expect(neighbour({ kind: 'week', y: 2026, m: 12, w: 53 }, 1)).toEqual({ kind: 'week', y: 2027, m: 1, w: 53 });
-  });
-
+describe('days', () => {
   it('takes the date of a Date, and names periods', () => {
     expect(dayOf(new Date(2026, 9, 19, 23, 59))).toEqual(day(2026, 10, 19));
     expect(periodText(day(2026, 10, 19))).toBe('@d19 @m10 @y26 @понедельник');

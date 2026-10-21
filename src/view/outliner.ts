@@ -1,6 +1,6 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, hasStructure, neighbour, openPeriods, periodAt, periodName, quarterPeriod, type Period,
+  addYear, createStructure, dayOf, dayYearTags, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
@@ -750,41 +750,6 @@ export class Outliner {
       this.zoomTo(day);
     });
     this.today = { day, date: now.toDateString() };
-  }
-
-  /** The calendar period (quarter of a year, month, week, day) the zoom is in; null outside the calendar. Reactive. */
-  zoomPeriod(): Period | null {
-    this.rowsVersion();
-    const z = this.zoom();
-    return z && this.doc.has(z) ? periodAt(this.doc, z) : null;
-  }
-
-  /**
-   * ‹ › over the list, Ctrl+Alt+←/→: into the period before or after the one
-   * zoomed into, across years (model/calendar.ts `neighbour`). A year not
-   * yet in the calendar comes in; periods missing from it otherwise are
-   * passed over. Returns whether the zoom is in a period at all.
-   */
-  stepPeriod(step: -1 | 1): boolean {
-    let p = this.zoomPeriod();
-    if (!p) return false;
-    for (let i = 0; i < 400; i++) {
-      p = neighbour(p, step);
-      const id = this.periodBullet(p);
-      if (id === null) {
-        if (this.syncing() && !this.synced) {
-          this.notify('Ждём ответа сервера синхронизации');
-          return true;
-        }
-        continue;
-      }
-      batch(() => {
-        this.setFocus(null);
-        this.zoomTo(id);
-      });
-      return true;
-    }
-    return true;
   }
 
   /** The app comes back into view: still in yesterday's day, it goes on to today's. */
