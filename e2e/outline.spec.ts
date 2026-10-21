@@ -179,7 +179,7 @@ test.describe('saved searches', () => {
     await list(page).getByRole('button', { name: '#салон', exact: true }).click();
     await expect(search).toHaveValue('#салон');
     await expect(search).toBeFocused();
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     await expect(star(page)).toHaveAttribute('aria-pressed', 'true');
 
     // Kept in this browser.
@@ -397,15 +397,15 @@ test.describe('tag filter', () => {
     await search.pressSequentially('#');
     await expect(page.locator('.searchbar .count')).toHaveText(/^2 /);
     await search.pressSequentially('с');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
     await expect(page.locator('.tag.active')).toHaveText('#салон');
     await search.press('Backspace');
     await search.pressSequentially('ш');
     await expect.poll(() => outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
     await search.pressSequentially('х');
-    await expect(page.locator('.searchbar .count')).toHaveText(/^0 /);
-    // Nothing found says so, instead of a blank page.
+    // Nothing found says so, instead of a blank page; the counter says nothing then, not "0".
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     await expect(page.locator('.no-results')).toHaveText('Ничего не найдено');
     await search.press('Escape');
     await expect(page.locator('.no-results')).toHaveCount(0);
@@ -416,7 +416,7 @@ test.describe('tag filter', () => {
     await page.locator('.tag', { hasText: '#салон' }).click();
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
     await expect(page.locator('.search')).toHaveValue('#салон');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     // "Часть первая" shows only the path: its other child is hidden, so its bullet is folded.
     await expect(page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet')).toHaveClass(/collapsed/);
     await page.keyboard.press('Escape');
@@ -450,7 +450,7 @@ test.describe('search', () => {
     await page.keyboard.press('Control+f');
     await expect(page.locator('.search')).toBeFocused();
     await page.keyboard.type('ШЕРЕР анна');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
     await expect(page.locator('.row mark')).toHaveText(['Анна', 'Шерер']);
     await expect(page.locator('.row .tag.hit')).toHaveText(['шерер']);
@@ -469,12 +469,12 @@ test.describe('search', () => {
 
   test('exclusions and OR: "-word", "-#tag", "a OR b"', async ({ page }) => {
     await page.locator('.search').fill('часть -первая');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[0], DEMO[4]]);
     await page.locator('.search').fill('#салон OR #шерер');
-    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
     await page.locator('.search').fill('-#салон -#шерер том');
-    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
     // Excluded words are not highlighted.
     await page.locator('.search').fill('том -первый');
     await expect(page.locator('.row mark')).toHaveText(['Том']);
@@ -485,9 +485,9 @@ test.describe('search', () => {
     await expect(page.locator('.search')).toHaveValue('#салон');
     await page.locator('.search').press('End');
     await page.locator('.search').pressSequentially(' prince');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     await page.locator('.search').pressSequentially(' нет-такого');
-    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     await expect(page.locator('.row')).toHaveCount(0);
     await page.locator('.search').press('Escape');
     await expect(page.locator('.search')).not.toBeFocused();
@@ -654,7 +654,7 @@ test.describe('zoom', () => {
   test('going into a bullet found by a search clears the search: the bullet shows whole', async ({ page }) => {
     await page.keyboard.press('Control+f');
     await page.locator('.search').fill('Часть первая');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     // Found folded, as matches are; its bullet leads inside.
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1]]);
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
@@ -667,14 +667,14 @@ test.describe('zoom', () => {
   test('going up by the path keeps the search: its results show at every level', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('шерер');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[3].trim()]);
     // The box's list of places lies over the path: out of the box first.
     await page.locator('.search').blur();
     await crumbs(page).filter({ hasText: 'Том первый' }).click();
     await expect(title(page)).toHaveText('Том первый');
     await expect(page.locator('.search')).toHaveValue('шерер');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[1].trim(), `  ${DEMO[3].trim()}`]);
     await crumbs(page).filter({ hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
@@ -682,18 +682,18 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3]]);
     // Wider up, more is found: what the search covers is the place.
     await page.locator('.search').fill('Часть');
-    await expect(page.locator('.searchbar .count')).toHaveText('2 bullet’а');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
   });
 
   test('gone up by the path to the very bullet searched for: everything inside it shows', async ({ page }) => {
     await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
     await page.locator('.search').fill('Часть первая');
-    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     await page.locator('.search').blur();
     await crumbs(page).filter({ hasText: 'Часть первая' }).click();
     await expect(title(page)).toHaveText('Часть первая');
     await expect(page.locator('.search')).toHaveValue('Часть первая');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
     // One level up the search shows its path again.
     await crumbs(page).filter({ hasText: 'Том первый' }).click();
@@ -703,9 +703,9 @@ test.describe('zoom', () => {
   test('inside a zoom, search covers only the zoomed-in bullet and Shift+Tab cannot leave it', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('Том');
-    await expect(page.locator('.searchbar .count')).toHaveText('0 bullet’ов');
+    await expect(page.locator('.searchbar .count')).toHaveCount(0);
     await page.locator('.search').fill('шерер');
-    await expect(page.locator('.searchbar .count')).toHaveText('1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
     await page.locator('.search').press('Escape');
 
     await edit(page, 'Анна Павловна');
@@ -2173,7 +2173,7 @@ test.describe('touch screen', () => {
     await page.locator('.search').tap();
     await page.keyboard.type('#шерер');
     await expect(page.locator('.searchbar .count')).toHaveText('1');
-    await expect(page.locator('.searchbar .count')).toHaveAttribute('title', '1 bullet');
+    await expect(page.locator('.searchbar .count')).toHaveAttribute('title', '1 пункт');
   });
 
   test('on a 320px phone the menu stays inside the window; long items wrap', async ({ page }) => {

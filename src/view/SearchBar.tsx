@@ -93,9 +93,10 @@ export function SearchBar(props: { o: Outliner }) {
         }}
         onBlur={() => setFocused(false)}
       />
-      <Show when={o.filter()}>
+      {/* Nothing found has its own words over the list ("Ничего не найдено"): no "0" here too. */}
+      <Show when={o.filter()?.count ? o.filter() : null}>
         {(f) => {
-          const label = () => `${f().count} ${plural(f().count, 'bullet', 'bullet’а', 'bullet’ов')}`;
+          const label = () => `${f().count} ${plural(f().count, 'пункт', 'пункта', 'пунктов')}`;
           // A phone keeps the field for the query: the number alone, the words in the tooltip.
           return <span class="count" title={label()}>{narrow() ? f().count : label()}</span>;
         }}
