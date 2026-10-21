@@ -875,6 +875,25 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.period-steps')).toHaveCount(0);
   });
 
+  test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(title(page)).toHaveCount(0);
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('today');
+    const first = page.getByRole('listbox', { name: 'Места' }).getByRole('option').first();
+    await expect(first).toHaveText(/^Сегодня\d\d\.\d\d\.\d{4}$/);
+    await expect(first).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Enter');
+    await expect(title(page)).toHaveText(today);
+    await expect(page.getByRole('dialog', { name: 'Перейти к пункту' })).toHaveCount(0);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('сег');
+    await page.getByRole('option', { name: /^Сегодня/ }).click();
+    await expect(title(page)).toHaveText(today);
+  });
+
   test('a new document starts with it, on today; a reload stays where it was', async ({ page }) => {
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);

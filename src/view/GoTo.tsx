@@ -1,11 +1,18 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from 'solid-js';
-import { findPlaces, placeOf, type Place } from '../model/places';
+import { dayOf, periodName } from '../model/calendar';
+import { findPlaces, meansToday, placeOf, type Place } from '../model/places';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 
 /** Places listed for what is typed, and recent ones before anything is. */
 const PLACES = 8;
 const RECENT = 5;
+
+/** A place in the list, or today's day ("today", "сегодня" typed), which may not be in the calendar yet. */
+type Item = Place & { today?: true };
+
+/** Today's day, the date where a place's path is. */
+const todayItem = (): Item => ({ id: '', title: 'Сегодня', path: [periodName(dayOf(new Date()))], today: true });
 
 /** The path to a place, its nearest two steps: the rest is in the tooltip. */
 const shortPath = (p: Place) => (p.path.length > 2 ? ['…', ...p.path.slice(-2)] : p.path).join(' › ');
@@ -15,7 +22,8 @@ const shortPath = (p: Place) => (p.path.length > 2 ? ['…', ...p.path.slice(-2)
  * "Куда…" on the editing bar). One line in the middle of the screen over
  * the dimmed outline, places under it: bullets whose title holds what is
  * typed (model/places.ts), or, before anything is typed, the places gone to
- * lately (moving: where bullets went lately first). What is typed is only a
+ * lately (moving: where bullets went lately first). "today" or "сегодня"
+ * (its start) puts today's day first, the logo's way there. What is typed is only a
  * name: the search and the outline stay as they are.
  *
  * The first place is chosen: Enter takes it (going, the keyboard on into its
@@ -39,7 +47,7 @@ function Line(props: { o: Outliner }) {
   let input!: HTMLInputElement;
   const moving = () => o.moving();
   const [text, setText] = createSignal('');
-  const [places, setPlaces] = createSignal<Place[]>([]);
+  const [places, setPlaces] = createSignal<Item[]>([]);
   /** What the places listed were looked up for: "nothing found" waits for the lookup. */
   const [looked, setLooked] = createSignal('');
   /** The chosen place, the one Enter takes. */
@@ -51,9 +59,10 @@ function Line(props: { o: Outliner }) {
     const m = moving();
     const skip = m ? (id: string) => o.moveRefuses(id) : undefined;
     const recent = m ? [...new Set([...o.recentTargets(), ...o.recentPlaces()])] : o.recentPlaces().filter((id) => id !== o.zoom());
+    const today = !m && o.structure() && meansToday(q) ? [todayItem()] : [];
     setPlaces(
       q.trim()
-        ? findPlaces(o.doc, o.text, q, PLACES, skip)
+        ? [...today, ...findPlaces(o.doc, o.text, q, PLACES, skip)]
         : recent
             .filter((id) => o.doc.has(id) && o.doc.inOutline(id) && !skip?.(id))
             .slice(0, RECENT)
@@ -93,8 +102,9 @@ function Line(props: { o: Outliner }) {
   onMount(() => input.focus());
 
   /** Goes to a place, or moves the rows into it; either way the line closes. */
-  const take = (place: Place, edit: boolean) => {
-    if (moving()) o.moveInto(place.id);
+  const take = (place: Item, edit: boolean) => {
+    if (place.today) o.goToTodayPlace();
+    else if (moving()) o.moveInto(place.id);
     else o.goToPlace(place.id, edit);
   };
 
@@ -199,7 +209,7 @@ function Line(props: { o: Outliner }) {
                     class="place"
                     aria-selected={i() === active()}
                     data-active={i() === active() ? '' : undefined}
-                    title={[...p.path, p.title].join(' › ')}
+                    title={p.today ? `${p.title}, ${p.path[0]}` : [...p.path, p.title].join(' › ')}
                     onPointerMove={() => i() !== active() && setActive(i())}
                     onClick={() => take(p, false)}
                   >

@@ -621,6 +621,13 @@ export class Outliner {
     });
   }
 
+  /** "Сегодня" taken in "Перейти к…": the line closes, and the view goes into today's day as the logo leads. */
+  goToTodayPlace(): void {
+    this.setPlaceLine(null);
+    this.placeBack = null;
+    this.goToday();
+  }
+
   /**
    * A day of the calendar entered for the first time, by any way: its
    * template goes in (model/calendar.ts `fillDay`, one undo step), the caret

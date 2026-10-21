@@ -38,3 +38,15 @@ export function findPlaces(doc: Doc, index: TextIndex, query: string, limit: num
   const found = findTargets(doc, index, query, '', skip ? limit + 8 : limit);
   return found.filter((t) => !skip?.(t.id)).slice(0, limit).map((t) => placeOf(doc, t.id));
 }
+
+/** Words for today's day in "Перейти к…": the logo's way there. */
+const TODAY = ['today', 'сегодня'];
+
+/**
+ * Whether what is typed names today: the start of "today" or "сегодня",
+ * three letters on (fewer would put it before places of every "т…").
+ */
+export function meansToday(query: string): boolean {
+  const q = query.trim().toLowerCase();
+  return q.length >= 3 && TODAY.some((w) => w.startsWith(q));
+}

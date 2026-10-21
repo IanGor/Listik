@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findPlaces, pathOf } from '../src/model/places';
+import { findPlaces, meansToday, pathOf } from '../src/model/places';
 import { TextIndex } from '../src/model/search';
 import { build } from './helpers';
 
@@ -20,5 +20,10 @@ describe('places', () => {
   it('leaves out what `skip` rules out, still giving as many as asked', () => {
     const skip = (id: string) => id === '**Listik**' || id === 'Listik promo';
     expect(findPlaces(doc, index, 'listik', 1, skip).map((p) => p.id)).toEqual(['идея для листика']);
+  });
+
+  it('"today" and "сегодня" from three letters on name today', () => {
+    for (const q of ['today', 'Tod', ' сегодня ', 'СЕГ']) expect(meansToday(q)).toBe(true);
+    for (const q of ['', 'to', 'се', 'todays', 'сегодняшний', 'day']) expect(meansToday(q)).toBe(false);
   });
 });
