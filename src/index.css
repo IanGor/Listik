@@ -1737,7 +1737,7 @@ body.is-dragging * {
 /* --- Keyboard shortcuts panel ------------------------------------------------ */
 
 .shortcuts {
-  width: min(760px, calc(100vw - 32px));
+  width: min(1000px, calc(100vw - 32px));
   max-height: calc(100vh - 64px);
   padding: 0;
   color: var(--text);
@@ -1770,14 +1770,29 @@ body.is-dragging * {
   letter-spacing: -0.01em;
 }
 
+/* Sections flow in columns, each whole: a long one beside several short
+   ones, not beside one short one and a gap. Two columns of ~450px on a
+   computer, so the descriptions read in lines, not in words; one on a
+   phone. */
 .shortcuts-groups {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
-  gap: 8px 32px;
+  padding-top: 8px;
+  columns: 2 400px;
+  column-gap: 40px;
+}
+
+/* The space above a section is a margin: one that meets a column's top is
+   dropped, so both columns start level. */
+.shortcuts-groups section {
+  margin-top: 20px;
+  break-inside: avoid;
+}
+
+.shortcuts-groups section:first-child {
+  margin-top: 0;
 }
 
 .shortcuts h3 {
-  margin: 16px 0 8px;
+  margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);

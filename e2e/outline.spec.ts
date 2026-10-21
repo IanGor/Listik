@@ -1492,6 +1492,14 @@ test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({
   const panel = page.getByRole('dialog', { name: 'Горячие клавиши' });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('сделать задачей (чекбокс)');
+  // On a computer: two columns starting level, the descriptions wide enough to read in lines.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const heads = await panel.locator('h3').evaluateAll((hs) => hs.map((h) => h.getBoundingClientRect()).map((r) => [Math.round(r.left), Math.round(r.top)]));
+  const lefts = [...new Set(heads.map(([left]) => left))];
+  expect(lefts).toHaveLength(2);
+  const tops = lefts.map((left) => Math.min(...heads.filter(([l]) => l === left).map(([, top]) => top)));
+  expect(tops[0]).toBe(tops[1]);
+  expect(await panel.locator('dd').first().evaluate((dd) => dd.getBoundingClientRect().width)).toBeGreaterThan(240);
   await page.keyboard.press('Escape');
   await expect(panel).toBeHidden();
   await edit(page, 'Том второй');
