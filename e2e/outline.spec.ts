@@ -2276,6 +2276,52 @@ test.describe('time', () => {
   });
 });
 
+test.describe('days by name', () => {
+  const options = (page: Page) => page.getByRole('option');
+
+  test('@ offers today, tomorrow, yesterday before the @tags; Enter puts in the day\'s tags', async ({ page }) => {
+    // Wednesday, 21 October 2026.
+    await page.clock.setFixedTime(new Date(2026, 9, 21, 9, 5));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' @салон');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('созвон @');
+    await expect(options(page)).toHaveText(['@todayср 21.10', '@tomorrowчт 22.10', '@yesterdayвт 20.10', '@салон1']);
+    await page.keyboard.type('nextm');
+    await expect(options(page)).toHaveText(['@nextmondayпн 26.10']);
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('созвон @d26 @m10 @y26 @понедельник ');
+    await page.keyboard.type('в 10');
+    await expect(editing(page)).toHaveText('созвон @d26 @m10 @y26 @понедельник в 10');
+  });
+
+  test('a day\'s word and a space become its tags, in a bullet, a note and the Inbox line; undo brings the word back', async ({ page }) => {
+    await page.clock.setFixedTime(new Date(2026, 9, 21, 9, 5));
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' a@today и @lastmonday дальше');
+    await expect(editing(page)).toHaveText('Том второй a@today и @d12 @m10 @y26 @понедельник дальше');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' @friday');
+    await expect(editing(page)).toHaveText('Том второй a@today и @d12 @m10 @y26 @понедельник дальше @friday');
+    await page.keyboard.press('Escape');
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' ');
+    await expect(editing(page)).toHaveText('Том второй a@today и @d12 @m10 @y26 @понедельник дальше @d23 @m10 @y26 @пятница ');
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('Том второй a@today и @d12 @m10 @y26 @понедельник дальше @friday ');
+
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('@yesterday ');
+    await expect(page.locator('.note[contenteditable]')).toHaveText('@d20 @m10 @y26 @вторник ');
+
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('купить @tomorrow ');
+    await expect(page.getByRole('dialog', { name: 'Запись в Inbox' }).getByRole('textbox')).toHaveValue('купить @d22 @m10 @y26 @четверг ');
+  });
+});
+
 test.describe('open tasks under a bullet', () => {
   test('a folded bullet shows its first open task above its note; ticking it brings the next; unfolded, it goes', async ({ page }) => {
     for (const t of ['Eh bien', 'Анна Павловна']) {
@@ -2409,7 +2455,7 @@ test.describe('suggestions', () => {
     await edit(page, 'Том второй');
     await page.keyboard.type(' @салон для встречи');
     await page.keyboard.press('Enter');
-    await page.keyboard.type('встреча @');
+    await page.keyboard.type('встреча @с');
     await expect(list(page, 'Теги')).toBeVisible();
     expect(await options(page)).toEqual(['@салон1']);
     await page.keyboard.press('Enter');

@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { matchCommands, matchTags, suggestLimit, tokenBefore, type Token } from '../model/complete';
 import { findInbox } from '../model/calendar';
+import { dateHint, dateText, matchDates } from '../model/dates';
 import { findTargets } from '../model/links';
 import { asksTemplate, findTemplates, matchTemplates } from '../model/templates';
 import { tagKey, type Sigil } from '../model/tags';
@@ -122,9 +123,18 @@ export function Suggest(props: { o: Outliner }) {
     return items;
   };
 
-  /** Tags of the token's own set (`#` or `@`), by name. */
+  /**
+   * Tags of the token's own set (`#` or `@`), by name; after `@`, days by
+   * name first (model/dates.ts), worked out when taken, not when shown.
+   */
   const tags = (id: RowKey, t: Token, text: string, limit: number): Item[] => {
     const sigil = t.kind as Sigil;
+    const days: Item[] =
+      sigil === '@'
+        ? matchDates(t.query)
+            .slice(0, limit)
+            .map((word) => ({ label: `@${word}`, hint: dateHint(word), tag: true, text: () => dateText(word) ?? `@${word}` }))
+        : [];
     // The word being typed is already indexed as a tag, from this very
     // bullet: it counts only for the other bullets that carry it.
     const typed = tagKey(sigil, text.slice(t.start + 1, t.end));
@@ -134,12 +144,15 @@ export function Suggest(props: { o: Outliner }) {
       if (key.startsWith('@') !== (sigil === '@')) continue;
       counts.set(sigil === '@' ? key.slice(1) : key, key === self ? n - 1 : n);
     }
-    return matchTags(counts, t.query, limit).map((name) => ({
-      label: sigil + name,
-      hint: String(counts.get(name)),
-      tag: true,
-      text: () => sigil + name,
-    }));
+    return [
+      ...days,
+      ...matchTags(counts, t.query, limit - days.length).map((name) => ({
+        label: sigil + name,
+        hint: String(counts.get(name)),
+        tag: true,
+        text: () => sigil + name,
+      })),
+    ];
   };
 
   /**

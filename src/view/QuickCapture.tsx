@@ -1,4 +1,5 @@
 import { Show, onMount } from 'solid-js';
+import { dateWordBefore } from '../model/dates';
 import { timeCommandBefore, timeOfDay, TIME_COMMAND } from '../model/time';
 import type { Outliner } from './outliner';
 
@@ -54,13 +55,17 @@ function Line(props: { o: Outliner }) {
     }
   };
 
+  /** `/time` becomes the time, and a day's word with a space after it (`@today `) the day's tags, as in a bullet (Row.tsx). */
   const onInput = () => {
-    const caret = input.selectionStart ?? input.value.length;
-    if (!timeCommandBefore(input.value, caret)) return;
-    const start = caret - TIME_COMMAND.length;
-    const time = timeOfDay();
-    input.value = input.value.slice(0, start) + time + input.value.slice(caret);
-    input.setSelectionRange(start + time.length, start + time.length);
+    const value = input.value;
+    const caret = input.selectionStart ?? value.length;
+    const time = timeCommandBefore(value, caret);
+    const day = time ? null : dateWordBefore(value, caret);
+    if (!time && !day) return;
+    const start = day ? day.start : caret - TIME_COMMAND.length;
+    const text = day ? day.text + value[caret - 1] : timeOfDay();
+    input.value = value.slice(0, start) + text + value.slice(caret);
+    input.setSelectionRange(start + text.length, start + text.length);
   };
 
   return (

@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
+import { dateWordBefore } from '../model/dates';
 import { plainText } from '../model/format';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
@@ -266,14 +267,20 @@ export function Row(props: RowProps) {
 }
 
 /**
- * `/time` typed before the caret becomes the current time. While a word is
- * being composed (Android keyboards compose every word) the text must not be
- * touched, so there the check waits for the composition to end.
+ * `/time` typed before the caret becomes the current time, and a day's
+ * word with a space after it (`@today `, model/dates.ts) the day's tags.
+ * While a word is being composed (Android keyboards compose every word)
+ * the text must not be touched, so there the check waits for the
+ * composition to end.
  */
 const timeCommand = (o: Outliner, id: RowKey, el: HTMLElement, text: string, note: boolean) => {
   const caret = selectionIn(el)?.[0];
-  if (caret === undefined || !timeCommandBefore(text, caret)) return;
-  o.insert(note ? { id, caret, note: true } : { id, caret }, timeOfDay(), TIME_COMMAND.length);
+  if (caret === undefined) return;
+  const at = note ? { id, caret, note: true as const } : { id, caret };
+  if (timeCommandBefore(text, caret)) return o.insert(at, timeOfDay(), TIME_COMMAND.length);
+  const day = dateWordBefore(text, caret);
+  // The space typed stays after the tags.
+  if (day) o.insert(at, day.text + text[caret - 1], caret - day.start);
 };
 
 /**
