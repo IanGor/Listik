@@ -16,6 +16,56 @@ import { Pieces } from './Row';
  * One line that never shortens a crumb: a long path scrolls sideways and
  * stays at its end, so the bullets next to where you are show whole.
  */
+/** A mouse moved this far with its button down drags the path instead of pressing a crumb, px. */
+const DRAG_SLOP = 4;
+
+/**
+ * A long path scrolls with a mouse too, not only a touchpad or a finger:
+ * the wheel turns it sideways, and it drags with the button held. The wheel
+ * at an end of the path is the page's again; a drag presses no crumb.
+ */
+function mouseScroll(nav: HTMLElement): void {
+  nav.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // sideways already scrolls; Ctrl zooms
+    const max = nav.scrollWidth - nav.clientWidth;
+    if (max <= 0 || (e.deltaY < 0 && nav.scrollLeft <= 0) || (e.deltaY > 0 && nav.scrollLeft >= max - 1)) return;
+    e.preventDefault();
+    nav.scrollLeft += e.deltaY * (e.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? nav.clientWidth : 1);
+  }, { passive: false });
+
+  let drag: { x: number; left: number; moved: boolean } | null = null;
+  let dragged = false;
+  nav.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || nav.scrollWidth <= nav.clientWidth) return;
+    drag = { x: e.clientX, left: nav.scrollLeft, moved: false };
+  });
+  nav.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x;
+    if (!drag.moved) {
+      if (Math.abs(dx) < DRAG_SLOP) return;
+      drag.moved = true;
+      nav.setPointerCapture(e.pointerId);
+      nav.classList.add('dragging');
+    }
+    nav.scrollLeft = drag.left - dx;
+  });
+  const end = () => {
+    dragged = !!drag?.moved;
+    drag = null;
+    nav.classList.remove('dragging');
+    // The click that ends a drag comes right after; a later one is a press again.
+    if (dragged) setTimeout(() => (dragged = false));
+  };
+  nav.addEventListener('pointerup', end);
+  nav.addEventListener('pointercancel', end);
+  nav.addEventListener('click', (e) => {
+    if (!dragged) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
+}
+
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
@@ -59,6 +109,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
     const observer = new ResizeObserver(toEnd);
     observer.observe(nav);
     onCleanup(() => observer.disconnect());
+    mouseScroll(nav);
   });
 
   return (

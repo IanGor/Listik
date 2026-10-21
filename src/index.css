@@ -958,6 +958,13 @@ mark,
   mask-image: linear-gradient(to right, transparent, #000 32px);
 }
 
+/* Dragged sideways by the mouse (ZoomHeader.tsx `mouseScroll`). */
+.crumbs.dragging,
+.crumbs.dragging .crumb {
+  cursor: grabbing;
+  user-select: none;
+}
+
 .zoomhead {
   position: absolute;
   top: 0;

@@ -901,6 +901,32 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.period-steps')).toHaveCount(0);
   });
 
+  test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
+    await page.setViewportSize({ width: 460, height: 700 });
+    await page.goto('/?db=e2e-crumbs-mouse');
+    await expect(title(page)).toHaveText(today);
+    const crumbs = page.locator('.crumbs');
+    const left = () => crumbs.evaluate((el) => el.scrollLeft);
+    const max = await crumbs.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(max).toBeGreaterThan(40);
+    await expect.poll(left).toBeGreaterThan(max - 2);
+    const box = (await crumbs.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -1000);
+    await expect.poll(left).toBe(0);
+    await expect(crumbs.locator('.crumb', { hasText: 'Главная' })).toBeInViewport();
+    // Dragged back to the left: the path follows the mouse, and the crumb under it is not pressed.
+    await page.mouse.down();
+    for (let i = 1; i <= 5; i++) await page.mouse.move(box.x + box.width / 2 - i * 20, box.y + box.height / 2);
+    await page.mouse.up();
+    // 100 px of mouse, more than the path has to go: at its end again.
+    expect(await left()).toBeGreaterThan(max - 2);
+    await expect(title(page)).toHaveText(today);
+    // A press without moving is a press.
+    await crumbs.locator('.crumb', { hasText: '@w' }).click();
+    await expect(title(page)).toHaveText(/^@w\d\d$/);
+  });
+
   test('a year or a day\'s template the app makes on the way is no undo step: Ctrl+Z takes back the last edit and the view stays', async ({ page }) => {
     await create(page);
     await page.locator('.row .text').nth(1).click();
