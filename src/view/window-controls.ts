@@ -10,8 +10,12 @@
 /** Room the controls take from the window's left edge, px (the pill ends ~61 px in). */
 export const CONTROLS_INSET = 76;
 
-/** A window narrower or shorter than the screen by more than this is a window, px. */
-const WINDOWED_MIN = 24;
+/**
+ * A window narrower or shorter than the screen by more than this is a window, px.
+ * Full screen is already ~24-60 px shorter than `screen` (the status bar), so
+ * the line is well above that; the user's window was ~217 pt shorter.
+ */
+const WINDOWED_MIN = 100;
 
 const standalone = () =>
   matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
@@ -42,8 +46,12 @@ export function watchWindowControls(): () => void {
   };
   update();
   addEventListener('resize', update);
+  addEventListener('orientationchange', update);
+  visualViewport?.addEventListener('resize', update);
   return () => {
     removeEventListener('resize', update);
+    removeEventListener('orientationchange', update);
+    visualViewport?.removeEventListener('resize', update);
     root.style.removeProperty('--controls-left');
   };
 }
