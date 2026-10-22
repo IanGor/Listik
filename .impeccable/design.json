@@ -8,6 +8,7 @@
       "link": { "role": "primary", "displayName": "Терракотовые чернила", "canonical": "#a9583e" },
       "bold": { "role": "secondary", "displayName": "Синие чернила", "canonical": "#2f6497" },
       "italic": { "role": "secondary", "displayName": "Оливковые чернила", "canonical": "#55702f" },
+      "tag": { "role": "secondary", "displayName": "Бирюзовые чернила", "canonical": "#28706a" },
       "canvas": { "role": "neutral", "displayName": "Кремовая бумага", "canonical": "#faf9f5" },
       "canvas-dark": { "role": "neutral", "displayName": "Графит", "canonical": "#262624" },
       "surface": { "role": "neutral", "displayName": "Подложка", "canonical": "#f2ede4" },
@@ -62,7 +63,7 @@
       "refersTo": "tag",
       "description": "#тег или @тег в тексте пункта; клик фильтрует.",
       "html": "<span class=\"ds-tag\">#салон</span>",
-      "css": ".ds-tag { color: #a9583e; background: rgb(217 119 87 / 0.1); border-radius: 3px; box-shadow: 0 0 0 2px rgb(217 119 87 / 0.1); font-family: ui-monospace, monospace; cursor: pointer; transition: background 140ms, box-shadow 140ms; } .ds-tag:hover { background: rgb(217 119 87 / 0.2); box-shadow: 0 0 0 2px rgb(217 119 87 / 0.2); }"
+      "css": ".ds-tag { color: #28706a; background: rgb(40 112 106 / 0.1); border-radius: 3px; box-shadow: 0 0 0 2px rgb(40 112 106 / 0.1); font-family: ui-monospace, monospace; cursor: pointer; transition: background 140ms, box-shadow 140ms; } .ds-tag:hover { background: rgb(40 112 106 / 0.2); box-shadow: 0 0 0 2px rgb(40 112 106 / 0.2); }"
     },
     {
       "name": "Строка пункта",

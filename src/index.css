@@ -30,6 +30,12 @@
   --primary: light-dark(#c96442, #d97757);
   --link: light-dark(#a9583e, #e3997e);
   --chip: light-dark(rgb(217 119 87 / 0.1), rgb(217 119 87 / 0.16));
+  /* #Tags and @tags: teal, coral's complement, so they part from [[links]]
+     and web addresses (coral) and from bold (blue) and italic (olive). A step
+     darker on cream: 5:1 on its chip there, 7:1 on graphite. */
+  --tag: light-dark(#28706a, #7cc2b8);
+  --tag-chip: light-dark(rgb(40 112 106 / 0.1), rgb(124 194 184 / 0.14));
+  --tag-chip-strong: light-dark(rgb(40 112 106 / 0.2), rgb(124 194 184 / 0.26));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
      darker on cream, for contrast. */
@@ -794,21 +800,21 @@ kbd {
 
 /* Tags and hits are chips, also drawn outside the text box: no reflow. */
 .tag {
-  color: var(--link);
-  background: var(--chip);
+  color: var(--tag);
+  background: var(--tag-chip);
   border-radius: 3px;
-  box-shadow: 0 0 0 2px var(--chip);
+  box-shadow: 0 0 0 2px var(--tag-chip);
   cursor: pointer;
   transition: background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
 
 .tag.active {
-  --chip: light-dark(rgb(217 119 87 / 0.2), rgb(217 119 87 / 0.28));
+  --tag-chip: var(--tag-chip-strong);
 }
 
 @media (hover: hover) {
   .tag:hover {
-    --chip: light-dark(rgb(217 119 87 / 0.2), rgb(217 119 87 / 0.28));
+    --tag-chip: var(--tag-chip-strong);
   }
 }
 
@@ -821,7 +827,7 @@ mark,
 }
 
 .tag.hit {
-  color: var(--link);
+  color: var(--tag);
 }
 
 /* [[Links]] to other bullets (model/links.ts): the title, underlined. */
@@ -1622,7 +1628,10 @@ mark,
   text-overflow: ellipsis;
 }
 
-.suggest-tag .suggest-label,
+.suggest-tag .suggest-label {
+  color: var(--tag);
+}
+
 .suggest-link .suggest-label {
   color: var(--link);
 }
