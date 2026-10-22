@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
-import { plainText } from '../model/format';
+import { caretOutside, plainText } from '../model/format';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
@@ -209,8 +209,9 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
     if (link !== undefined) return o.followLink(link, id);
     if (o.readOnly) return;
+    const value = isNote ? note() : text();
     const at = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
-    setEdit({ note: isNote, caret: at ?? (isNote ? note() : text()).length });
+    setEdit({ note: isNote, caret: at === null ? value.length : caretOutside(value, at) });
   };
 
   return (

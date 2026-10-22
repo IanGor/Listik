@@ -2895,6 +2895,36 @@ test.describe('bold and italic', () => {
     await expect(editing(page)).toHaveText('Том второй **жирное** и *курсив*');
   });
 
+  // Markers are hidden until the row is edited: a click by the formatted end
+  // of the text, then Enter, must not cut the markers off.
+  for (const end of ['**жирное**', '*курсив*', '_курсив_', '***оба***', '**жирное *курсив***', '[[Том первый]]', '**https://example.com**']) {
+    test(`a click after ${end} and Enter leave it whole`, async ({ page }) => {
+      await edit(page, 'Том второй');
+      await page.keyboard.type(` ${end}`);
+      await page.keyboard.press('Escape');
+      const text = page.locator('.row .text').last();
+      const box = (await text.boundingBox())!;
+      // Past the end of the text, in the row's empty space.
+      await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+      await expect(editing(page)).toBeFocused();
+      await page.keyboard.press('Enter');
+      expect((await outline(page)).slice(-2)).toEqual([`Том второй ${end}`, '']);
+    });
+  }
+
+  test('a click before a formatted start puts the caret before its markers', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('**Том** второй');
+    await page.keyboard.press('Escape');
+    const bold = page.locator('.row .md-bold').last();
+    const box = (await bold.boundingBox())!;
+    await page.mouse.click(box.x + 1, box.y + box.height / 2);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('x');
+    await expect(editing(page)).toHaveText('x**Том** второй');
+  });
+
   test('Ctrl+B and Ctrl+I wrap the selection, and unwrap it again', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Shift+Control+ArrowLeft');

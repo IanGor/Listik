@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
 import { dateWordBefore } from '../model/dates';
-import { plainText } from '../model/format';
+import { caretOutside, plainText } from '../model/format';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
@@ -157,10 +157,11 @@ export function Row(props: RowProps) {
       return o.select({ anchor, head: id });
     }
     if (o.readOnly) return;
-    const caret = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
-    const length = (note ? content()?.note : content()?.text)?.length ?? 0;
-    o.setFocus(note ? { id, caret: caret ?? length, note: true } : { id, caret: caret ?? length });
-    followDrag(note, caret ?? length);
+    const text = (note ? content()?.note : content()?.text) ?? '';
+    const at = offsetFromPoint(e.currentTarget as HTMLElement, e.clientX, e.clientY);
+    const caret = at === null ? text.length : caretOutside(text, at);
+    o.setFocus(note ? { id, caret, note: true } : { id, caret });
+    followDrag(note, caret);
   };
 
   /**

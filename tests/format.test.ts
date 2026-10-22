@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOLD, ITALIC, MARKER, URL, formatFlags, plainText, toggleFormat, webLinks } from '../src/model/format';
+import { BOLD, ITALIC, MARKER, URL, caretOutside, formatFlags, plainText, toggleFormat, webLinks } from '../src/model/format';
 import { decorate } from '../src/model/search';
 
 /** Flags as a string: b bold, i italic, B bold+italic, m marker, . plain. */
@@ -36,6 +36,42 @@ describe('plainText', () => {
   it('drops the markers', () => {
     expect(plainText('**Глава** _первая_')).toBe('Глава первая');
     expect(plainText('2*3*4')).toBe('2*3*4');
+  });
+});
+
+describe('caretOutside', () => {
+  it('a click on the edge of a run puts the caret outside its markers', () => {
+    // [text, where the browser put the caret, where it goes]
+    const cases: [string, number, number][] = [
+      ['a **b**', 5, 7],
+      ['a **b**', 4, 2],
+      ['**b** c', 3, 5],
+      ['**b** c', 2, 0],
+      ['a *i* c', 4, 5],
+      ['a *i* c', 3, 2],
+      ['a _i_ c', 4, 5],
+      ['a _i_ c', 3, 2],
+      ['***b***', 4, 7],
+      ['***b***', 3, 0],
+      ['see [[Page]]', 10, 12],
+      ['see [[Page]]', 6, 4],
+      ['**https://x.ru**', 14, 16],
+    ];
+    for (const [text, at, to] of cases) expect([text, at, caretOutside(text, at)]).toEqual([text, at, to]);
+  });
+
+  it('italic inside bold: out of the italic, still in the bold', () => {
+    expect(caretOutside('**a *b***', 6)).toBe(9);
+    expect(caretOutside('**a *b***', 5)).toBe(4);
+  });
+
+  it('elsewhere the caret stays', () => {
+    expect(caretOutside('plain', 2)).toBe(2);
+    expect(caretOutside('a **bc** d', 5)).toBe(5);
+    expect(caretOutside('a **b** c', 1)).toBe(1);
+    // Between two runs either side is inside one of them.
+    expect(caretOutside('**a**_b_', 3)).toBe(3);
+    expect(caretOutside('**a**_b_', 6)).toBe(6);
   });
 });
 

@@ -102,6 +102,32 @@ export function formatFlags(text: string): Uint8Array | null {
   return flags;
 }
 
+/** How many of bold, italic and link a character is inside. */
+function depth(flags: Uint8Array, i: number): number {
+  if (i < 0 || i >= flags.length) return 0;
+  return (flags[i] & BOLD ? 1 : 0) + (flags[i] & ITALIC ? 1 : 0) + (flags[i] & LINK ? 1 : 0);
+}
+
+/**
+ * Where a click in the static view puts the caret. Markers are hidden there,
+ * so the two sides of a run of them look the same, and the browser picks the
+ * edge of the visible text: inside the formatting (`**bold|**`). The caret
+ * goes to the side outside it (`**bold**|`, `|**bold**`): Enter then leaves
+ * the run whole. Between two runs (`**a***b*`) it stays where it was.
+ */
+export function caretOutside(text: string, offset: number): number {
+  const flags = formatFlags(text);
+  if (!flags) return offset;
+  let start = offset;
+  while (start > 0 && flags[start - 1] & MARKER) start--;
+  let end = offset;
+  while (end < text.length && flags[end] & MARKER) end++;
+  if (start === end) return offset;
+  const left = depth(flags, start - 1);
+  const right = depth(flags, end);
+  return left < right ? start : right < left ? end : offset;
+}
+
 /** The text as it reads, markers dropped: for places that show it plain (breadcrumbs). */
 export function plainText(text: string): string {
   const flags = formatFlags(text);
