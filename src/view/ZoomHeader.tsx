@@ -6,7 +6,7 @@ import type { NodeId } from '../model/types';
 import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCaret } from './caret';
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
-import { Pieces } from './Row';
+import { Pieces, pasteLink } from './Row';
 
 /**
  * The path from the root to where you are, the place itself included:
@@ -327,6 +327,7 @@ function TitleEditable(props: TitleEditorProps & { text: () => string }) {
       onFocus={() => o.setFocus(null)}
       onBlur={() => props.leave()}
       onInput={onInput}
+      onPaste={(e) => pasteLink(e, el)}
       onKeyDown={onKeyDown}
       onBeforeInput={(e) => historyInput(e, o)}
     />
@@ -401,6 +402,7 @@ function TitleNoteEditable(props: TitleEditorProps & { note: () => string; textL
       onFocus={() => o.setFocus(null)}
       onBlur={() => props.leave()}
       onInput={onInput}
+      onPaste={(e) => pasteLink(e, el)}
       onKeyDown={onKeyDown}
       onBeforeInput={(e) => historyInput(e, o)}
     />

@@ -2794,6 +2794,55 @@ test.describe('web addresses', () => {
     await page.locator('.row .text', { hasText: 'Том второй' }).click({ position: { x: 5, y: 5 } });
     await expect(editing(page)).toBeFocused();
   });
+
+  /** Pastes `text` into an editor, as Ctrl+V would. */
+  const pasteInto = (el: ReturnType<Page['locator']>, text: string) =>
+    el.evaluate((node, t) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', t);
+      node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, text);
+
+  test('an address pasted over selected words makes them a Markdown link, shown as the words', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Control+ArrowLeft');
+    await pasteInto(editing(page), 'https://example.com/x');
+    await expect(editing(page)).toHaveText('Том [второй](https://example.com/x)');
+    // One undo step.
+    await page.keyboard.press('Control+z');
+    await expect(editing(page)).toHaveText('Том второй');
+    await page.keyboard.press('Control+Shift+z');
+    await expect(editing(page)).toHaveText('Том [второй](https://example.com/x)');
+    await page.keyboard.press('Escape');
+    // Its text holds the hidden markers: found by place, not by "Том второй".
+    const row = page.locator('.row').last();
+    await expect(row.locator('a.url')).toHaveText('второй');
+    await expect(row.locator('a.url')).toHaveAttribute('href', 'https://example.com/x');
+    expect(await row.locator('.text').innerText()).toBe('Том второй');
+    // A click past the link and Enter leave it whole.
+    const box = (await row.locator('.text').boundingBox())!;
+    await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+    await page.keyboard.press('Enter');
+    expect((await outline(page)).slice(-2)).toEqual(['Том [второй](https://example.com/x)', '']);
+  });
+
+  test('in a note too; anything but an address, or no selection, pastes as it is', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Enter');
+    const note = page.locator('.note[contenteditable]');
+    await page.keyboard.type('читать тут');
+    await page.keyboard.press('Shift+Control+ArrowLeft');
+    await pasteInto(note, 'https://ya.ru');
+    await expect(note).toHaveText('читать [тут](https://ya.ru)');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.row', { hasText: 'Том второй' }).locator('.note a.url')).toHaveText('тут');
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Shift+Control+ArrowLeft');
+    await pasteInto(editing(page), 'не адрес');
+    await expect(editing(page)).toHaveText('Том не адрес');
+    await pasteInto(editing(page), ' https://ya.ru');
+    await expect(editing(page)).toHaveText('Том не адрес https://ya.ru');
+  });
 });
 
 test.describe('mirrors', () => {

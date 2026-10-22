@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import * as cmd from '../model/commands';
 import { dateWordBefore } from '../model/dates';
-import { caretOutside, plainText } from '../model/format';
+import { caretOutside, linkOver, plainText } from '../model/format';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
@@ -345,6 +345,21 @@ function beforeInput(
 }
 
 
+/**
+ * A web address pasted over selected words in a note or a zoom title: they
+ * become its link, `[words](address)`, typed as if by hand (the editor's own
+ * input path keeps it). Anything else pastes as the browser does.
+ */
+export function pasteLink(e: ClipboardEvent, el: HTMLElement): void {
+  const pasted = e.clipboardData?.getData('text/plain');
+  const sel = selectionIn(el);
+  if (pasted == null || !sel || sel[0] === sel[1]) return;
+  const link = linkOver(el.textContent ?? '', sel[0], sel[1], pasted);
+  if (!link) return;
+  e.preventDefault();
+  document.execCommand('insertText', false, link);
+}
+
 /** Places the caret for a focus request: at an offset, or at a horizontal position on the first/last line. */
 function placeCaret(el: HTMLElement, f: FocusRequest): void {
   el.focus({ preventScroll: true });
@@ -408,8 +423,11 @@ function Editable(props: { o: Outliner; id: RowKey }) {
     if (pasted == null) return;
     e.preventDefault();
     const [start, end] = selectionIn(el) ?? [0, 0];
+    // A web address over selected words: they become its link, [words](address).
+    const link = start < end ? linkOver(el.textContent ?? '', start, end, pasted) : null;
+    if (link) o.run((ctx) => cmd.insertText(ctx, id, start, end, [link]));
     // Several lines: an indented list (Markdown, Workflowy, plain) becomes a tree.
-    if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));
+    else if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));
     else o.run((ctx) => cmd.insertText(ctx, id, start, end, [pasted]));
   };
 
@@ -481,6 +499,7 @@ function NoteEditable(props: { o: Outliner; id: RowKey }) {
       contentEditable="plaintext-only"
       onKeyDown={(e) => suggestKey(e) || onNoteKeyDown(e, o, id, el)}
       onInput={onInput}
+      onPaste={(e) => pasteLink(e, el)}
       onCompositionEnd={() => timeCommand(o, id, el, read(), true)}
       onBeforeInput={(e) => beforeInput(e, o, id, el, read, write, (t) => o.typeNote(id, t))}
     />

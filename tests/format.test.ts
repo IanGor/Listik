@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOLD, ITALIC, MARKER, URL, caretOutside, formatFlags, plainText, toggleFormat, webLinks } from '../src/model/format';
+import { BOLD, ITALIC, MARKER, URL, caretOutside, formatFlags, linkOver, plainText, toggleFormat, webLinks } from '../src/model/format';
 import { decorate } from '../src/model/search';
 
 /** Flags as a string: b bold, i italic, B bold+italic, m marker, . plain. */
@@ -121,5 +121,60 @@ describe('web addresses', () => {
     expect(pieces.filter((p) => p.url)).toEqual([{ text: 'https://x.org/a_b', url: 'https://x.org/a_b' }]);
     expect(pieces.find((p) => p.tag)?.tag).toBe('тег');
     expect(decorate('[[Пьер]]', []).some((p) => p.url)).toBe(false);
+  });
+});
+
+describe('Markdown links [words](address)', () => {
+  it('the words lead to the address; brackets and address are hidden markers', () => {
+    const text = 'см. [Яндекс](https://ya.ru) тут';
+    expect(webLinks(text)).toEqual([{ start: 4, end: 27, href: 'https://ya.ru', label: { start: 5, end: 11 } }]);
+    expect(plainText(text)).toBe('см. Яндекс тут');
+    const pieces = decorate(text, []);
+    expect(pieces.filter((p) => p.url && !p.marker)).toEqual([{ text: 'Яндекс', url: 'https://ya.ru' }]);
+    expect(pieces.filter((p) => p.marker).map((p) => p.text)).toEqual(['[', '](https://ya.ru)']);
+    expect(webLinks('[сайт](www.x.org)')[0].href).toBe('https://www.x.org');
+  });
+
+  it('a bare address and a Markdown link side by side; the address inside is not a second link', () => {
+    const text = 'https://a.ru и [б](https://b.ru)';
+    expect(webLinks(text).map((w) => [text.slice(w.start, w.end), w.href])).toEqual([
+      ['https://a.ru', 'https://a.ru'],
+      ['[б](https://b.ru)', 'https://b.ru'],
+    ]);
+  });
+
+  it('the other way round, (words)[address], or spaces in the address, are not links; [[links]] stay theirs', () => {
+    expect(webLinks('(Яндекс)[https://ya.ru]').map((w) => w.href)).toEqual(['https://ya.ru']);
+    expect(webLinks('(Яндекс)[https://ya.ru]')[0].label).toBeUndefined();
+    expect(webLinks('[а](https://ya .ru)').every((w) => !w.label)).toBe(true);
+    expect(webLinks('[[Пьер]](https://ya.ru)').every((w) => !w.label)).toBe(true);
+  });
+
+  it('bold and italic inside the words, and around the whole link', () => {
+    const tail = '](https://x.ru)'.length;
+    expect(show('[**жир**](https://x.ru)')).toBe('mmm' + 'bbb' + 'm'.repeat(2 + tail));
+    expect(show('**[жир](https://x.ru)**')).toBe('mmm' + 'bbb' + 'm'.repeat(tail + 2));
+    expect(show('*[к](https://x.ru)*')).toBe('mm' + 'i' + 'm'.repeat(tail + 1));
+  });
+
+  it('a click by its edge puts the caret outside it', () => {
+    const text = 'а [б](https://x.ru)';
+    expect(caretOutside(text, 4)).toBe(text.length);
+    expect(caretOutside(text, 3)).toBe(2);
+  });
+
+  it('an address pasted over words makes them its link', () => {
+    expect(linkOver('открыть ссылка тут', 8, 14, 'https://ya.ru')).toBe('[ссылка](https://ya.ru)');
+    // Spaces at the selection's edges stay outside; the pasted address is trimmed.
+    expect(linkOver('a слово b', 1, 8, ' https://ya.ru\n')).toBe(' [слово](https://ya.ru) ');
+    // Parentheses in the address are escaped, so the link still reads as one.
+    expect(linkOver('вики', 0, 4, 'https://x.org/A_(b)')).toBe('[вики](https://x.org/A_%28b%29)');
+    expect(webLinks('[вики](https://x.org/A_%28b%29)')[0].label).toEqual({ start: 1, end: 5 });
+    // Not an address, nothing selected, or words a link cannot hold: an ordinary paste.
+    expect(linkOver('слово', 0, 5, 'просто текст')).toBeNull();
+    expect(linkOver('слово', 0, 5, 'https://a.ru https://b.ru')).toBeNull();
+    expect(linkOver('слово', 2, 2, 'https://ya.ru')).toBeNull();
+    expect(linkOver('   ', 0, 3, 'https://ya.ru')).toBeNull();
+    expect(linkOver('[[Пьер]]', 0, 8, 'https://ya.ru')).toBeNull();
   });
 });

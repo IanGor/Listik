@@ -22,18 +22,39 @@ export const URL = 32;
 const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`[\]{}«»]+/gi;
 const TRAILING = /[.,;:!?…'"»*_]$/;
 
+/**
+ * A Markdown link, `[words](address)`: words of one's own leading to a web
+ * address. Not the inner brackets of a `[[link]]`; the address has no spaces
+ * or parentheses (linkOver writes them as %28 %29).
+ */
+const MD_LINK_RE = /(?<!\[)\[(?=[^[\]\n]*[^[\]\s])([^[\]\n]+)\]\(((?:https?:\/\/|www\.)[^\s()<>]+)\)/gi;
+const ADDRESS_RE = /^(?:https?:\/\/|www\.)[^\s<>]+$/i;
+
 /** A web address in a text: where it stands and where it leads. */
 export interface WebLink {
   start: number;
   end: number;
   href: string;
+  /** A Markdown link's words; the rest of it (brackets, address) is markers. */
+  label?: { start: number; end: number };
 }
 
-/** The web addresses of a text, in order. */
+const hrefOf = (url: string) => (/^www\./i.test(url) ? `https://${url}` : url);
+
+/** The web addresses of a text, Markdown links among them, in order. */
 export function webLinks(text: string): WebLink[] {
   if (!text.includes('://') && !/www\./i.test(text)) return [];
   const out: WebLink[] = [];
+  if (text.includes('](')) {
+    for (const m of text.matchAll(MD_LINK_RE)) {
+      const start = m.index;
+      out.push({ start, end: start + m[0].length, href: hrefOf(m[2]), label: { start: start + 1, end: start + 1 + m[1].length } });
+    }
+  }
+  const links = out.length;
   for (const m of text.matchAll(URL_RE)) {
+    // Inside a Markdown link: its address, or an address as its words.
+    if (out.some((l, i) => i < links && m.index >= l.start && m.index < l.end)) continue;
     let url = m[0];
     for (;;) {
       if (TRAILING.test(url)) url = url.slice(0, -1);
@@ -41,9 +62,25 @@ export function webLinks(text: string): WebLink[] {
       else break;
     }
     if (/^(?:https?:\/\/|www\.)$/i.test(url)) continue;
-    out.push({ start: m.index, end: m.index + url.length, href: /^www\./i.test(url) ? `https://${url}` : url });
+    out.push({ start: m.index, end: m.index + url.length, href: hrefOf(url) });
   }
-  return out;
+  return links ? out.sort((a, b) => a.start - b.start) : out;
+}
+
+/**
+ * A web address pasted over selected words: they become its link,
+ * `[words](address)`; spaces at the selection's edges stay outside. The
+ * replacement of [start, end), or null when it is not that (no words, more
+ * than an address, words a link cannot hold).
+ */
+export function linkOver(text: string, start: number, end: number, pasted: string): string | null {
+  const url = pasted.trim();
+  const words = text.slice(start, end);
+  const core = words.trim();
+  if (!core || !ADDRESS_RE.test(url) || /[[\]\n]/.test(core)) return null;
+  const lead = words.slice(0, words.indexOf(core));
+  const trail = words.slice(lead.length + core.length);
+  return `${lead}[${core}](${url.replace(/\(/g, '%28').replace(/\)/g, '%29')})${trail}`;
 }
 
 /** `[[title]]`: no brackets or line breaks inside, and not blank. */
@@ -73,13 +110,21 @@ export function formatFlags(text: string): Uint8Array | null {
   }
   // A web address outside a link: its `_` and `*` are not markers. Formatting
   // is looked for with it written over in letters (same length), so a bold
-  // run may still hold a whole address.
+  // run may still hold a whole address. A Markdown link's brackets and
+  // address are markers, written over in dashes: its words may be bold or
+  // italic, and a bold run may hold the whole link.
   let plain = text;
   for (const w of web) {
     if (flags && flags[w.start] & LINK) continue;
     flags ??= new Uint8Array(text.length);
-    for (let i = w.start; i < w.end; i++) flags[i] |= URL;
-    plain = plain.slice(0, w.start) + 'x'.repeat(w.end - w.start) + plain.slice(w.end);
+    const label = w.label;
+    if (!label) {
+      for (let i = w.start; i < w.end; i++) flags[i] |= URL;
+      plain = plain.slice(0, w.start) + 'x'.repeat(w.end - w.start) + plain.slice(w.end);
+      continue;
+    }
+    for (let i = w.start; i < w.end; i++) flags[i] |= i < label.start || i >= label.end ? URL | MARKER : URL;
+    plain = plain.slice(0, w.start) + '-' + plain.slice(label.start, label.end) + '-'.repeat(w.end - label.end) + plain.slice(w.end);
   }
   const mark = (source: string, re: RegExp, style: number, marker: number) => {
     for (const m of source.matchAll(re)) {
@@ -91,21 +136,22 @@ export function formatFlags(text: string): Uint8Array | null {
   };
   mark(plain, BOLD_RE, BOLD, 2);
   // Italic is looked for with bold's (and links') markers blanked out (same length, so
-  // offsets hold): they neither open nor glue to an italic run.
+  // offsets hold): they neither open nor glue to an italic run. A web link's
+  // stay dashes: an italic run may hold the whole link.
   let source = plain;
   const bold = flags as Uint8Array | null;
   if (bold) {
     source = '';
-    for (let i = 0; i < plain.length; i++) source += bold[i] & MARKER ? ' ' : plain[i];
+    for (let i = 0; i < plain.length; i++) source += (bold[i] & (MARKER | URL)) === MARKER ? ' ' : plain[i];
   }
   mark(source, ITALIC_RE, ITALIC, 1);
   return flags;
 }
 
-/** How many of bold, italic and link a character is inside. */
+/** How many of bold, italic, a link and a web link a character is inside. */
 function depth(flags: Uint8Array, i: number): number {
   if (i < 0 || i >= flags.length) return 0;
-  return (flags[i] & BOLD ? 1 : 0) + (flags[i] & ITALIC ? 1 : 0) + (flags[i] & LINK ? 1 : 0);
+  return (flags[i] & BOLD ? 1 : 0) + (flags[i] & ITALIC ? 1 : 0) + (flags[i] & LINK ? 1 : 0) + (flags[i] & URL ? 1 : 0);
 }
 
 /**
