@@ -1,7 +1,8 @@
-import { Show } from 'solid-js';
+import { onCleanup, Show } from 'solid-js';
 import { DocumentMenu } from './Menu';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
+import { watchWindowControls } from './window-controls';
 
 /**
  * The header, as in Workflowy: name (it leads to today, in the
@@ -9,6 +10,8 @@ import { SearchBar } from './SearchBar';
  * switch and the sync state live in the menu, on every screen.
  */
 export function TopBar(props: { o: Outliner }) {
+  // In an iPadOS window the controls lie over the header's left corner: the name steps aside.
+  onCleanup(watchWindowControls());
   return (
     <header class="topbar">
       <button

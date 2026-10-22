@@ -147,7 +147,9 @@ button {
   gap: 20px;
   align-items: center;
   height: 64px;
-  padding: 0 20px;
+  /* --controls-left: room for the window controls iPadOS draws over the corner
+     (view/window-controls.ts); unset, the name stays where it was. */
+  padding: 0 20px 0 calc(20px + var(--controls-left, 0px));
   background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
 }
@@ -1122,7 +1124,7 @@ mark,
   .topbar {
     gap: 8px;
     height: 56px;
-    padding: 0 12px;
+    padding: 0 12px 0 calc(12px + var(--controls-left, 0px));
   }
 
   .brand {
