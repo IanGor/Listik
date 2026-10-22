@@ -1410,10 +1410,11 @@ export class Outliner {
       } else {
         let matches = findMatches(query, this.tags, this.text, this.doc);
         const zoom = this.zoom();
-        // The zoomed-in bullet is found itself (gone up to it by the path): all that is inside it shows, as below a match.
-        const self = zoom !== null && matches.has(zoom);
         // Zoomed in: search only inside the zoomed-in bullet (under its mirrors too: their originals' insides show there), and the bullet itself.
         if (zoom) matches = new Set([...matches].filter((id) => id === zoom || this.rows.reaches(id)));
+        // The zoomed-in bullet is found itself (gone up to it by the path) and nothing inside it is: all that is
+        // inside shows, as below a match, rather than nothing. Found inside too (a tag in its note and its rows), the list narrows.
+        const self = zoom !== null && matches.has(zoom) && matches.size === 1;
         this.rows.setFilter(self
           ? { keep: new Set([zoom]), open: new Set([zoom]) }
           : { keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });

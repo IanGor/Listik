@@ -702,6 +702,18 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual([DEMO[1].trim()]);
   });
 
+  test('the zoomed-in bullet has the tag in its note, and so do rows inside: a click on the tag narrows to those rows', async ({ page }) => {
+    await edit(page, 'Том первый');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('#салон');
+    await page.keyboard.press('Escape');
+    await page.locator('.row', { hasText: /^Том первый/ }).first().locator('.bullet').click();
+    await expect(title(page)).toHaveText('Том первый');
+    await page.locator('.row .tag', { hasText: '#салон' }).click();
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
+    expect(await outline(page)).toEqual([DEMO[1].trim(), `  ${DEMO[2].trim()}`]);
+  });
+
   test('inside a zoom, search covers only the zoomed-in bullet and Shift+Tab cannot leave it', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
     await page.locator('.search').fill('Том');
