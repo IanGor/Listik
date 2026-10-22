@@ -10,7 +10,7 @@ import { toMarkdown } from '../src/model/outline-text';
 import { TextIndex } from '../src/model/search';
 import { TagIndex } from '../src/model/tags';
 import { deserialize, serialize } from '../src/persist/serialize';
-import { VisibleRows, nodeOf } from '../src/model/rows';
+import { VisibleRows, keepSet, nodeOf } from '../src/model/rows';
 import type { Focus, NodeId, Op } from '../src/model/types';
 import { dump, dumpRows, rng, setup, viewRows } from './helpers';
 
@@ -228,6 +228,39 @@ function mirrored(lines: string[], mirrors: Record<string, string>) {
   return s;
 }
 
+describe('a search through mirrors', () => {
+  it('in a zoom, a match inside a mirror\'s original (kept outside) shows under the mirror', () => {
+    const { doc, rows } = mirrored(['day', '  m', '  note', 'project', '  task #x', '  other'], { m: 'project' });
+    rows.setTop('day');
+    expect(rows.contains('task #x')).toBe(false);
+    expect(rows.reaches('task #x')).toBe(true);
+    expect(rows.reaches('other')).toBe(true);
+    rows.setFilter({ keep: keepSet(doc, ['task #x'], 'day'), open: new Set() });
+    expect(rows.ids).toEqual(['m', 'm/task #x']);
+  });
+
+  it('zoomed into an original, a match whose copy is inside shows as that copy', () => {
+    const { doc, rows } = mirrored(['project', '  m', '  plain', 'inbox', '  t #x'], { m: 't #x' });
+    rows.setTop('project');
+    expect(rows.reaches('t #x')).toBe(true);
+    expect(rows.reaches('inbox')).toBe(false);
+    rows.setFilter({ keep: keepSet(doc, ['t #x'], 'project'), open: new Set() });
+    expect(rows.ids).toEqual(['m']);
+  });
+
+  it('through a mirror of a mirror\'s original, and a new bullet next to a match stays in view', () => {
+    const { doc, ctx, rows, run } = mirrored(['day', '  m', 'a', '  m2', 'b', '  c #x'], { m: 'a', m2: 'b' });
+    rows.setTop('day');
+    expect(rows.reaches('c #x')).toBe(true);
+    rows.setFilter({ keep: keepSet(doc, ['c #x'], 'day'), open: new Set() });
+    expect(rows.ids).toEqual(['m', 'm/m2', 'm/m2/c #x']);
+    // Enter at the end of the match: the new bullet is the original's, and its row shows under the mirrors.
+    const f = run(() => cmd.split(ctx, 'm/m2/c #x', 'c #x'.length));
+    expect(doc.get(f.id).parent).toBe('b');
+    expect(rows.ids).toEqual(['m', 'm/m2', 'm/m2/c #x', `m/m2/${f.id}`]);
+  });
+});
+
 describe('a mirror shows the subtree of its original', () => {
   it('lists the original\'s children under the mirror, all the way down, keyed by the mirror row', () => {
     const { doc, rows } = mirrored(['a', '  b', '    c', '  d', 'm'], { m: 'a' });
@@ -321,19 +354,25 @@ describe('a mirror shows the subtree of its original', () => {
     expect(doc.get('a').done).toBe(false);
   });
 
-  for (const mode of ['plain', 'zoom', 'filter'] as const) {
+  for (const mode of ['plain', 'zoom', 'filter', 'filter-mirror'] as const) {
     it(`stays equal to a full rebuild under random editing through mirrors (${mode})`, () => {
       let steps = 0;
       const seeds = 20;
       for (let seed = 1; seed <= seeds; seed++) {
         const rand = rng(seed);
         const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+        // Under a filter in h the list is short: more of h's own, so editing does not run out of rows.
+        const more = mode === 'filter-mirror' ? ['  i', '    k', '  j', '  l'] : [];
         const { doc, rows, ctx } = mirrored(
-          ['top', '  a', '    b', '      c', '    d #x', '  e', '    f', '  m1', '  g', '    m2', 'h', '  m3'],
+          ['top', '  a', '    b', '      c', '    d #x', '  e', '    f', '  m1', '  g', '    m2', 'h', '  m3', ...more],
           { m1: 'a', m2: 'e', m3: 'g' },
         );
         if (mode === 'zoom') rows.setTop('top');
-        const filter = mode === 'filter' ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']) } : null;
+        // Zoomed into h, whose mirror m3 shows g, whose mirror m2 shows e: f matches there only through them.
+        if (mode === 'filter-mirror') rows.setTop('h');
+        const filter = mode === 'filter'
+          ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']) }
+          : mode === 'filter-mirror' ? { keep: keepSet(doc, ['f'], 'h'), open: new Set<NodeId>(['h', 'm3']) } : null;
         if (filter) rows.setFilter(filter);
         const initial = dump(doc);
         const history: Op[][] = [];

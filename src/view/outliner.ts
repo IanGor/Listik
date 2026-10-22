@@ -1176,10 +1176,10 @@ export class Outliner {
     this.setSearchRequests((n) => n + 1);
   }
 
-  /** The first visible row that matches the search. */
+  /** The first visible row that matches the search (a mirror's row matches as its original). */
   firstMatch(): RowKey | null {
     const f = this.filter();
-    return (f && this.rows.ids.find((key) => f.matches.has(nodeOf(key)))) ?? null;
+    return (f && this.rows.ids.find((key) => f.matches.has(this.doc.origin(nodeOf(key))))) ?? null;
   }
 
   /**
@@ -1412,8 +1412,8 @@ export class Outliner {
         const zoom = this.zoom();
         // The zoomed-in bullet is found itself (gone up to it by the path): all that is inside it shows, as below a match.
         const self = zoom !== null && matches.has(zoom);
-        // Zoomed in: search only inside the zoomed-in bullet, and the bullet itself.
-        if (zoom) matches = new Set([...matches].filter((id) => id === zoom || this.rows.contains(id)));
+        // Zoomed in: search only inside the zoomed-in bullet (under its mirrors too: their originals' insides show there), and the bullet itself.
+        if (zoom) matches = new Set([...matches].filter((id) => id === zoom || this.rows.reaches(id)));
         this.rows.setFilter(self
           ? { keep: new Set([zoom]), open: new Set([zoom]) }
           : { keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });

@@ -59,13 +59,19 @@ const PATCH_LIMIT = 16;
 
 /**
  * Matches plus their ancestors up to `top` (the root, or the zoomed-in
- * bullet). Always includes `top`, so that no matches shows nothing rather
- * than everything.
+ * bullet), and every copy of a bullet on those paths with its own
+ * ancestors: a mirror's row shows its original's inside (model/mirrors.ts),
+ * so a match there shows under the mirror too. Always includes `top`, so
+ * that no matches shows nothing rather than everything.
  */
 export function keepSet(doc: Doc, matches: Iterable<NodeId>, top: NodeId = doc.root): Set<NodeId> {
   const keep = new Set<NodeId>([top]);
-  for (const id of matches) {
-    for (let p: NodeId | null = id; p !== null && !keep.has(p); p = doc.get(p).parent) keep.add(p);
+  const stack = [...matches];
+  while (stack.length) {
+    for (let p: NodeId | null = stack.pop()!; p !== null && !keep.has(p); p = doc.get(p).parent) {
+      keep.add(p);
+      if (doc.hasMirrors(p)) for (const c of doc.copies(p)) if (!keep.has(c)) stack.push(c);
+    }
   }
   return keep;
 }
@@ -92,6 +98,8 @@ export class VisibleRows implements DocListener {
   private filter: Filter | null = null;
   /** Where the last `indexOf` found its row. */
   private hint = 0;
+  /** `shownRoots`, until the next op or zoom. */
+  private roots: Set<NodeId> | null = null;
   /** Ops patched in the current transaction, and whether patching gave up. */
   private patched = 0;
   private stale = false;
@@ -141,6 +149,7 @@ export class VisibleRows implements DocListener {
   setTop(top: NodeId): void {
     this.top = top;
     this.hint = 0;
+    this.roots = null;
     this.rebuild();
   }
 
@@ -150,6 +159,42 @@ export class VisibleRows implements DocListener {
       if (p === this.top) return true;
     }
     return false;
+  }
+
+  /**
+   * Does the bullet `id` show below `top`: inside it, or inside a bullet a
+   * copy of which is (a mirror's row shows its original's inside)? A search
+   * in a zoom keeps such matches.
+   */
+  reaches(id: NodeId): boolean {
+    const roots = (this.roots ??= this.shownRoots());
+    if (roots.size === 1) return this.contains(id);
+    // An original shows as its mirror's row; `top` is in `roots`, so one walk up does both.
+    if (id !== this.top && roots.has(id)) return true;
+    for (let p = this.doc.get(id).parent; p !== null; p = this.doc.get(p).parent) if (roots.has(p)) return true;
+    return false;
+  }
+
+  /**
+   * `top`, and the original of every mirror below it, whose inside shows
+   * under the mirror's row (and the originals of mirrors in there, and so
+   * on). One walk per zoom and change (`roots`), so a search tests each
+   * match by its ancestors alone. A mirror inside its own original shows
+   * nothing (`host`), so adds nothing.
+   */
+  private shownRoots(): Set<NodeId> {
+    const roots = new Set<NodeId>([this.top]);
+    const stack = [this.top];
+    while (stack.length) {
+      this.doc.walk(stack.pop()!, (n) => {
+        if (!n.mirrorOf) return;
+        const o = this.doc.host(n.id);
+        if (!o || roots.has(o.id) || this.doc.within(n.id, o.id)) return;
+        roots.add(o.id);
+        stack.push(o.id);
+      });
+    }
+    return roots;
   }
 
   /** Under a filter: is the node shown as part of a match's path (folding then is filter-only)? */
@@ -336,6 +381,7 @@ export class VisibleRows implements DocListener {
   op(op: Op): void {
     // Text and task state change no rows: completed bullets always show, struck through.
     if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone') return;
+    this.roots = null;
     // Under a filter, edited bullets must stay visible (admit), which needs
     // the in-place patches; there, every op is patched.
     if (!this.filter && (this.stale || ++this.patched > PATCH_LIMIT)) {
@@ -432,7 +478,7 @@ export class VisibleRows implements DocListener {
   /** Inserts rows for a node that is already in its final place in the doc, wherever it shows. */
   private show(id: NodeId): void {
     const n = this.doc.get(id);
-    if (this.filter && this.contains(id)) {
+    if (this.filter && this.reaches(id)) {
       const anchor = this.admit(n);
       if (anchor !== n.parent) {
         this.refreshAll(anchor);
@@ -479,9 +525,12 @@ export class VisibleRows implements DocListener {
   private admit(n: OutlineNode): NodeId {
     const f = this.filter!;
     let anchor = n.parent!;
-    while (anchor !== this.top && this.indexOf(anchor) < 0) {
+    while (anchor !== this.top && !this.listed(anchor)) {
       f.keep.add(anchor);
-      anchor = this.doc.get(anchor).parent!;
+      const up = this.doc.get(anchor).parent;
+      // Shown only under a mirror (`reaches`): its rows there are the mirror's, refreshed by `show`.
+      if (up === null) break;
+      anchor = up;
     }
     const parent = n.parent!;
     if (f.keep.has(parent) && !f.open.has(parent) && !f.keep.has(n.id)) {
@@ -489,6 +538,13 @@ export class VisibleRows implements DocListener {
       f.open.add(n.id);
     }
     return anchor;
+  }
+
+  /** Is the bullet on a row anywhere: outside any mirror, under one, or as the original a mirror row shows. */
+  private listed(id: NodeId): boolean {
+    if (this.indexOf(id) >= 0) return true;
+    for (const m of this.mirrors) if (this.host(m)?.id === id || this.indexOf(keyIn(m, id)) >= 0) return true;
+    return false;
   }
 
   /** Re-lists the children of every row of bullet `id`. */

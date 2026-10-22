@@ -3001,6 +3001,35 @@ test.describe('mirrors', () => {
     await expect(page.getByRole('option', { name: 'Том второй' })).toHaveCount(1);
     await expect(page.getByRole('option', { name: /Создать/ })).toHaveCount(0);
   });
+
+  /** A copy of the bullet titled `title`, made a child of "Том второй"; then zoomed into "Том второй". */
+  async function mirrorIntoSecond(page: Page, title: string) {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type(`((${title}`);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.locator('.row', { hasText: /^Том второй$/ }).locator('.bullet').click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+  }
+
+  test('zoomed in, a tag inside a mirror finds what the mirror shows of its original', async ({ page }) => {
+    await mirrorIntoSecond(page, 'Часть перв');
+    await page.locator('.tag', { hasText: '#салон' }).click();
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
+    expect(await outline(page)).toEqual(['Часть первая', '  ' + DEMO[2].trim()]);
+  });
+
+  test('zoomed in, a tag on a copy of a bullet kept elsewhere finds the copy; Enter goes to it', async ({ page }) => {
+    await mirrorIntoSecond(page, 'Так говорила');
+    await page.locator('.tag', { hasText: '#шерер' }).click();
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
+    expect(await outline(page)).toEqual([DEMO[3].trim()]);
+    await page.locator('.search').focus();
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText(DEMO[3].trim());
+  });
 });
 
 test.describe('bold and italic', () => {
