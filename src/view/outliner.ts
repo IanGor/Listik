@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, checkOff, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -1010,6 +1010,32 @@ export class Outliner {
   /** A click on a task's checkbox: checked or unchecked. */
   toggleDone(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => toggleDone(ctx, ids), ids, keep);
+  }
+
+  /**
+   * A row swiped to the left (swipe.ts): the bullet goes to the trash with
+   * all it holds, however much that is; one undo step, and the toast can take
+   * it back. A caret in another row stays there.
+   */
+  swipeDelete(key: RowKey): void {
+    const i = this.rows.indexOf(key);
+    if (this.readOnly || i < 0) return;
+    const cur = this.focus();
+    const at = cur ? this.rows.indexOf(cur.id) : -1;
+    const keep = cur && 'caret' in cur && at >= 0 && (at < i || at >= this.rows.subtreeEnd(i)) ? cur : undefined;
+    if (this.selection()) this.select(null);
+    const ops = this.run((ctx) => {
+      deleteNode(ctx, key);
+      return keep;
+    }, keep);
+    this.notify('Удалено', { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') });
+  }
+
+  /** A row swiped to the right (swipe.ts): checked off, a task if it was not one; checked, unchecked. */
+  swipeDone(key: RowKey): void {
+    if (this.rows.indexOf(key) < 0) return;
+    const cur = this.focus();
+    this.changeTasks((ctx) => checkOff(ctx, key), [key], cur && 'caret' in cur ? cur : undefined);
   }
 
   /**

@@ -2196,6 +2196,77 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  /**
+   * A finger across a row, from `from` to `to` of its width (0…1; a number
+   * over 1 is a screen x), `dy` px down on the way; `lift: false` leaves it down.
+   */
+  async function swipeRow(page: Page, text: string, from: number, to: number, opts: { dy?: number; lift?: boolean } = {}) {
+    const cdp = await page.context().newCDPSession(page);
+    const box = (await page.locator('.row', { hasText: text }).first().boundingBox())!;
+    const x = (f: number) => (f > 1 ? f : box.x + box.width * f);
+    const y = box.y + box.height / 2;
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', p?: { x: number; y: number }) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
+    await touch('touchStart', { x: x(from), y });
+    for (let i = 1; i <= 10; i++) {
+      await touch('touchMove', { x: x(from) + ((x(to) - x(from)) * i) / 10, y: y + ((opts.dy ?? 0) * i) / 10 });
+      await page.waitForTimeout(16);
+    }
+    if (opts.lift !== false) await touch('touchEnd');
+    return { lift: async () => { await touch('touchEnd'); await cdp.detach(); } };
+  }
+
+  test('a swipe to the left deletes the row with all it holds; the toast takes it back', async ({ page }) => {
+    const finger = await swipeRow(page, 'Том первый', 0.8, 0.3, { lift: false });
+    // Half the row: the content follows the finger, the backing says what letting go will do.
+    await expect(page.locator('.swipe-back')).toHaveText('Удалить');
+    await expect(page.locator('.swipe-back')).toHaveClass(/armed/);
+    await finger.lift();
+    await expect(page.locator('.row')).toHaveCount(1);
+    expect(await outline(page)).toEqual(['Том второй']);
+    await expect(editing(page)).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('Удалено');
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: 'Отменить' }).tap();
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('a short swipe springs back: nothing is deleted, nothing edited', async ({ page }) => {
+    const finger = await swipeRow(page, 'Часть вторая', 0.8, 0.65, { lift: false });
+    await expect(page.locator('.swipe-back')).not.toHaveClass(/armed/);
+    await finger.lift();
+    await expect(page.locator('.swipe-back')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(editing(page)).toHaveCount(0);
+  });
+
+  test('a swipe to the right checks the bullet off as a task; again, unchecks it', async ({ page }) => {
+    const row = page.locator('.row', { hasText: 'Часть вторая' });
+    await (await swipeRow(page, 'Часть вторая', 0.3, 0.85, { lift: false })).lift();
+    await expect(row.locator('.bullet')).toHaveClass(/todo/);
+    await expect(row.locator('.bullet')).toHaveClass(/checked/);
+    await expect(row).toHaveClass(/done/);
+    // The row is back in place before the next finger.
+    await expect(row).not.toHaveClass(/settling/);
+    const finger = await swipeRow(page, 'Часть вторая', 0.3, 0.85, { lift: false });
+    await expect(page.locator('.swipe-back')).toHaveText('Снять отметку');
+    await finger.lift();
+    await expect(row.locator('.bullet')).not.toHaveClass(/checked/);
+    await expect(row.locator('.bullet')).toHaveClass(/todo/);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('no swipe when the finger goes up or down, starts at the screen edge, or is in the edited row', async ({ page }) => {
+    await swipeRow(page, 'Часть вторая', 0.8, 0.6, { dy: 80 });
+    // The system's back gesture lives at the right edge.
+    await swipeRow(page, 'Часть вторая', 412 - 10, 0.2);
+    expect(await outline(page)).toEqual(DEMO);
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await expect(editing(page)).toBeFocused();
+    await swipeRow(page, 'Том второй', 0.8, 0.2);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
   test('a tapped button does not stay lit: no hover on a touch screen', async ({ page }) => {
     // A stored document opens on today, its path above the list.
     await page.goto('/?db=hover');

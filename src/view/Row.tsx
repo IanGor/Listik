@@ -12,6 +12,7 @@ import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setC
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
 import { suggestKey } from './Suggest';
+import { swipe } from './swipe';
 
 interface RowProps {
   o: Outliner;
@@ -72,6 +73,8 @@ export function Row(props: RowProps) {
     bullet.addEventListener('touchmove', hold, { passive: false });
     onCleanup(() => bullet.removeEventListener('touchmove', hold));
   });
+  // A finger sideways across the row: left deletes, right checks off (swipe.ts).
+  onMount(() => onCleanup(swipe(o, el, id, focused)));
   o.nodes.acquire(nid);
   onCleanup(() => o.nodes.release(nid));
 

@@ -1650,6 +1650,86 @@ mark,
   }
 }
 
+/* --- Swipe (swipe.ts) -------------------------------------------------------- */
+
+/* Up and down scrolls the list; sideways is the row's own (left deletes, right
+   checks off). */
+@media (pointer: coarse) {
+  .row {
+    touch-action: pan-y pinch-zoom;
+  }
+}
+
+/* The content follows the finger; the row clips it (the list must not scroll
+   sideways), and the backing fills the room it leaves. */
+.row.swiping {
+  overflow-x: clip;
+}
+
+.row.swiping > :not(.swipe-back) {
+  transform: translateX(var(--swipe));
+}
+
+.row.settling > * {
+  transition: transform 150ms var(--ease-out), left 150ms var(--ease-out), right 150ms var(--ease-out);
+}
+
+.swipe-back {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.swipe-back.left {
+  left: calc(100% + var(--swipe));
+  right: 0;
+}
+
+.swipe-back.right {
+  left: 0;
+  right: calc(100% - var(--swipe));
+  justify-content: flex-end;
+}
+
+.swipe-back svg {
+  flex: none;
+  color: var(--primary);
+}
+
+/* Past the threshold: letting go does it. */
+.swipe-back svg,
+.swipe-back span {
+  opacity: 0.5;
+  transition: opacity 120ms, transform 160ms var(--ease-out);
+}
+
+.swipe-back.armed svg,
+.swipe-back.armed span {
+  opacity: 1;
+}
+
+.swipe-back.armed svg {
+  transform: scale(1.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row.settling > *,
+  .swipe-back svg,
+  .swipe-back span {
+    transition: none;
+  }
+}
+
 /* --- Drag and drop ----------------------------------------------------------- */
 
 /* A finger on a bullet may still scroll the list up and down; held still,

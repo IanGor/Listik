@@ -242,6 +242,17 @@ export function untask({ doc }: Ctx, ids: RowKey[]): void {
 }
 
 /**
+ * A row swiped to the right (view/swipe.ts): a checked task, whatever it was
+ * before; a checked one is unchecked again, and stays a task.
+ */
+export function checkOff({ doc }: Ctx, key: RowKey): void {
+  const n = doc.content(nodeOf(key));
+  if (n.done) return void doc.apply({ t: 'setDone', id: n.id, from: true, to: false });
+  if (!n.todo) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
+  doc.apply({ t: 'setDone', id: n.id, from: false, to: true });
+}
+
+/**
  * Folds the row's bullet. Each copy folds on its own (model/mirrors.ts), and
  * so do the bullets shown under it: under a mirror the fold is the place's
  * (`VisibleRows.setFold`, kept by the view, never an op); elsewhere it is the

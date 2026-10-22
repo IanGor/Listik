@@ -319,6 +319,20 @@ describe('tasks (checkbox bullets)', () => {
     expect(state()).toEqual({ todo: false, done: false });
   });
 
+  it('a swipe to the right checks off a plain bullet or an open task at once; a checked one is unchecked, still a task', () => {
+    const { doc, ctx, run } = setup(['a', 'b']);
+    const state = (id: string) => ({ todo: doc.get(id).todo, done: doc.get(id).done });
+    run(() => cmd.checkOff(ctx, 'a'));
+    expect(state('a')).toEqual({ todo: true, done: true });
+    run(() => cmd.checkOff(ctx, 'a'));
+    expect(state('a')).toEqual({ todo: true, done: false });
+    run(() => cmd.checkOff(ctx, 'a'));
+    expect(state('a')).toEqual({ todo: true, done: true });
+    run(() => cmd.cycleTask(ctx, ['b']));
+    run(() => cmd.checkOff(ctx, 'b'));
+    expect(state('b')).toEqual({ todo: true, done: true });
+  });
+
   it('on several bullets, makes the plain ones tasks first, then checks them all', () => {
     const { doc, ctx, run } = setup(['a', 'b']);
     run(() => cmd.cycleTask(ctx, ['a']));
