@@ -833,6 +833,11 @@ test.describe('structure and calendar', () => {
   const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
   const title = (page: Page) => page.locator('.zoom-title');
   const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
+  /** Opens the title for editing: a click past its text, as a day's title is all tags and a click on one filters. */
+  const editTitle = async (page: Page) => {
+    const box = (await title(page).boundingBox())!;
+    await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
+  };
 
   test('the menu puts it last at the top level and goes to today, filled, with no caret; undo takes it back', async ({ page }) => {
     await create(page);
@@ -912,7 +917,7 @@ test.describe('structure and calendar', () => {
     await page.goto('/?db=e2e-day-year');
     await expect(title(page)).toHaveText(today);
     const old = today.replace(/ @y\d\d/, '');
-    await title(page).click();
+    await editTitle(page);
     await page.keyboard.press('Control+a');
     await page.keyboard.type(old);
     await page.keyboard.press('Escape');
@@ -925,7 +930,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.search').fill('');
     // The year's bullet as earlier versions wrote it.
     await page.locator('.crumbs .crumb', { hasText: new RegExp(`^${year}$`) }).click();
-    await title(page).click();
+    await editTitle(page);
     await page.keyboard.press('Control+a');
     await page.keyboard.type(`@y${now.getFullYear()}`);
     await page.keyboard.press('Escape');
