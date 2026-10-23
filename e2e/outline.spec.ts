@@ -3424,6 +3424,26 @@ test.describe('motion', () => {
     await page.mouse.up();
   });
 
+  test('states move: the tick grows in, the strike fades in, the fold halo springs up', async ({ page }) => {
+    const transitions = () =>
+      page.evaluate(() => document.getAnimations().map((a) => (a as CSSTransition).transitionProperty).filter(Boolean).sort());
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    const row = page.locator('.row', { hasText: 'Часть вторая' });
+    await row.locator('.bullet').click();
+    expect(await transitions()).toEqual(expect.arrayContaining(['background-size', 'text-decoration-color']));
+    await expect.poll(() => row.locator('.bullet').evaluate((el) => getComputedStyle(el, '::after').backgroundSize)).toBe('11px auto');
+    await expect.poll(() => row.locator('.text').evaluate((el) => getComputedStyle(el).textDecorationColor)).not.toBe('rgba(0, 0, 0, 0)');
+
+    const parent = page.locator('.row', { hasText: 'Часть первая' });
+    await parent.hover();
+    await parent.locator('.toggle').click();
+    expect(await transitions()).toContain('scale');
+    await expect.poll(() => parent.locator('.bullet').evaluate((el) => getComputedStyle(el, '::before').opacity)).toBe('1');
+  });
+
   test('reduced motion: a bullet picked up does not pop', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const bullet = page.locator('.row .bullet').nth(1);
