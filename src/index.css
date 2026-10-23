@@ -1524,6 +1524,19 @@ mark,
   }
 }
 
+/* Its time up, it sinks and fades the way it came (Outline.tsx keeps it that long). */
+.toast.leaving {
+  animation: toast-out 180ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
 /* Read-only tab: another tab holds the document. */
 .banner {
   display: flex;

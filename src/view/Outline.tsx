@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { keyboard, touch } from './screen';
+import { keyboard, still, touch } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -32,6 +32,8 @@ const ROW_PAD = 4;
 const NOTE_SCALE = 0.81;
 /** Lines of a note shown under a row not being edited (`.note.clamped` in index.css). */
 const NOTE_LINES = 3;
+/** How long a toast takes to leave, ms (`.toast.leaving` in index.css). */
+const TOAST_LEAVE = 180;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
 /** The column kept free at the end of every row for the fold arrow on a touch screen, px (`--fold` in index.css). */
@@ -88,6 +90,32 @@ export function Outline(props: { o: Outliner }) {
   };
   /** Where the first row starts in the scrolled area. */
   const top = () => PAD + (o.zoom() ? head() : 0);
+
+  /**
+   * The toast as shown: when its time is up it stays a moment longer as it
+   * was, sinking and fading (`.toast.leaving`), rather than vanish. A new
+   * message in the meantime takes its place at once.
+   */
+  const [toast, setToast] = createSignal<{ text: string; link: ReturnType<Outliner['toastLink']>; action: ReturnType<Outliner['toastAction']> } | null>(null);
+  const [leaving, setLeaving] = createSignal(false);
+  let gone: ReturnType<typeof setTimeout> | undefined;
+  createEffect(() => {
+    const text = o.toast();
+    const link = o.toastLink();
+    const action = o.toastAction();
+    clearTimeout(gone);
+    if (text) {
+      setLeaving(false);
+      setToast({ text, link, action });
+    } else if (toast() && !still()) {
+      setLeaving(true);
+      gone = setTimeout(() => {
+        setToast(null);
+        setLeaving(false);
+      }, TOAST_LEAVE);
+    } else setToast(null);
+  });
+  onCleanup(() => clearTimeout(gone));
 
   const range = createMemo(() => {
     o.rowsVersion();
@@ -379,11 +407,11 @@ export function Outline(props: { o: Outliner }) {
           Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
         </div>
       </Show>
-      <Show when={o.toast()}>
-        {(text) => (
-          <div class="toast" role="status">
-            {text()}
-            <Show when={o.toastLink()}>
+      <Show when={toast()}>
+        {(t) => (
+          <div class="toast" classList={{ leaving: leaving() }} role="status" inert={leaving()}>
+            {t().text}
+            <Show when={t().link}>
               {(link) => (
                 <>
                   {' '}
@@ -393,7 +421,7 @@ export function Outline(props: { o: Outliner }) {
                 </>
               )}
             </Show>
-            <Show when={o.toastAction()}>
+            <Show when={t().action}>
               {(action) => (
                 <button type="button" class="toast-action" onMouseDown={(e) => e.preventDefault()} onClick={() => action().run()}>
                   {action().label}

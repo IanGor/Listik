@@ -3509,6 +3509,25 @@ test.describe('motion', () => {
     await expect(page.locator('.row', { hasText: 'Часть первая' })).toBeVisible();
   });
 
+  test('the search count rises into place when it changes; a toast sinks and fades before it goes', async ({ page }) => {
+    const search = page.locator('.search');
+    await search.fill('часть');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
+    await search.fill('часть пер');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
+    expect(await page.locator('.searchbar .count').evaluate((el) => el.getAnimations().length)).toBe(1);
+    await search.press('Escape');
+
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('мысль');
+    await page.keyboard.press('Enter');
+    const toast = page.locator('.toast');
+    await expect(toast).toContainText('Записано');
+    await toast.locator('.toast-link').click();
+    await expect(page.locator('.toast.leaving')).toHaveCount(1);
+    await expect(toast).toHaveCount(0);
+  });
+
   test('reduced motion: a bullet picked up does not pop, a new row does not fade in, a zoom is instant', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
