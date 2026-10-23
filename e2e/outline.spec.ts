@@ -3398,3 +3398,41 @@ test.describe('#secret', () => {
     await expect(page.locator('.row .text', { hasText: 'Eh bien' })).toBeVisible();
   });
 });
+
+test.describe('motion', () => {
+  const scale = (page: Page, selector: string, pseudo: string | null = null) =>
+    page.locator(selector).first().evaluate((el, ps) => getComputedStyle(el, ps).scale, pseudo);
+
+  test('press: a button and a bullet give under the pointer at once and spring back when let go', async ({ page }) => {
+    const box = (await page.locator('.menu-button').boundingBox())!;
+    await page.mouse.move(box.x + 20, box.y + 20);
+    await page.mouse.down();
+    await expect.poll(() => scale(page, '.menu-button')).toBe('0.94');
+    await page.mouse.up();
+    await expect.poll(() => scale(page, '.menu-button')).toBe('none');
+    await page.keyboard.press('Escape');
+
+    const bullet = page.locator('.row .bullet').nth(1);
+    const b = (await bullet.boundingBox())!;
+    await page.mouse.move(b.x + 10, b.y + 8);
+    await page.mouse.down();
+    await expect.poll(() => bullet.evaluate((el) => getComputedStyle(el, '::after').scale)).toBe('0.75');
+    // Moved: picked up, the bullet pops.
+    await page.mouse.move(b.x + 10, b.y + 60, { steps: 4 });
+    expect(await bullet.evaluate((el) => el.getAnimations().length)).toBe(1);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+  });
+
+  test('reduced motion: a bullet picked up does not pop', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const bullet = page.locator('.row .bullet').nth(1);
+    const b = (await bullet.boundingBox())!;
+    await page.mouse.move(b.x + 10, b.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(b.x + 10, b.y + 60, { steps: 4 });
+    expect(await bullet.evaluate((el) => el.getAnimations().length)).toBe(0);
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+  });
+});

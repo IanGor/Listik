@@ -3,6 +3,7 @@ import { moveManyTo } from '../model/commands';
 import type { RowKey } from '../model/rows';
 import { indentation } from './indent';
 import type { Outliner } from './outliner';
+import { still } from './screen';
 
 /** Where a drop would land (rows: under a mirror row, into its original), and the line that shows it (px, relative to the spacer). */
 export interface DropTarget {
@@ -76,6 +77,8 @@ export function createDrag(o: Outliner, el: () => Elements) {
       }
       o.setDragged(inside);
       document.body.classList.add('is-dragging');
+      // Picked up: the bullet pops under the finger or pointer, so the hand knows it holds it.
+      if (!still()) handle.animate([{ scale: 1 }, { scale: 1.7 }, { scale: 1 }], { duration: 380, easing: 'cubic-bezier(0.2, 0.9, 0.25, 1)' });
       autoScroll();
     };
 

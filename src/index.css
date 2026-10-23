@@ -70,6 +70,12 @@
   /* The bullet's box: its dot, halo, guide line and fold arrow centre on it. */
   --bullet: 20px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Springs, sampled (damping 0.8 and 0.6): `--spring` settles with a hint of
+     overshoot (1.5%), for what is let go; `--spring-pop` swings past by ~9%,
+     for what appears with a little life (a tick, a halo). On the compositor
+     with `scale`/`opacity`; length sets the speed (300–400 ms). */
+  --spring: linear(0, 0.025, 0.087, 0.172, 0.268, 0.368, 0.466, 0.558, 0.641, 0.715, 0.779, 0.833, 0.877, 0.914, 0.942, 0.965, 0.982, 0.994, 1.003, 1.009, 1.013, 1.015, 1.015, 1.015, 1.014, 1.013, 1.011, 1.01, 1);
+  --spring-pop: linear(0, 0.044, 0.152, 0.296, 0.453, 0.605, 0.741, 0.856, 0.947, 1.013, 1.057, 1.083, 1.094, 1.093, 1.086, 1.073, 1.059, 1.044, 1.03, 1.018, 1.009, 1.001, 0.996, 0.993, 0.991, 0.991, 0.991, 0.993, 1);
 }
 
 :root[data-theme='light'] {
@@ -564,7 +570,13 @@ kbd {
   /* Bullets carry the coral of the palette (Reference/color_pallete.png). */
   background: var(--primary);
   transform: translate(-50%, -50%);
-  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out);
+  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out), scale 360ms var(--spring);
+}
+
+/* Pressed, the dot (or checkbox) gives under the finger at once; let go, it springs back. */
+.bullet:active::after {
+  scale: 0.75;
+  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out), scale 90ms var(--ease-out);
 }
 
 /* The bullet is the way in (zoom): it answers the pointer by growing. */
@@ -2831,4 +2843,41 @@ body.is-dragging * {
     padding: 0;
     margin-left: -13px;
   }
+}
+
+/* --- Press ------------------------------------------------------------------ */
+
+/* A pressed control gives at once under the finger or pointer, a little
+   smaller, and springs back when let go, as controls do on Apple's systems.
+   `scale`, not `transform`: it stacks with a control's own transform and
+   stays on the compositor. iOS applies :active only with a touch listener
+   on the page (index.tsx). Last in the file: these transitions replace the
+   controls' own lists, which they repeat. */
+.icon-button,
+.editbar button,
+.button,
+.pending-box,
+.toast-action,
+.toast-link {
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), opacity 160ms var(--ease-out), scale 360ms var(--spring);
+}
+
+.icon-button:active,
+.editbar button:active:not(:disabled),
+.button:active:not(:disabled),
+.pending-box:active:not(:disabled),
+.toast-action:active,
+.toast-link:active {
+  scale: 0.94;
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), opacity 160ms var(--ease-out), scale 90ms var(--ease-out);
+}
+
+/* A wide button gives less: the same few pixels at its edges. */
+.button:active:not(:disabled) {
+  scale: 0.97;
+}
+
+/* Rows being dragged fade out of the way rather than blink (drag.ts). */
+.row {
+  transition: opacity 160ms var(--ease-out);
 }
