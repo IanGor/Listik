@@ -22,6 +22,7 @@ import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
 import { narrow, still } from './screen';
+import { zoomMotion } from './zoom-motion';
 
 /** While a bullet is being edited at midnight, the new day waits this long and is tried again, ms. */
 const MIDNIGHT_RETRY = 60_000;
@@ -876,10 +877,23 @@ export class Outliner {
     });
   }
 
+  /**
+   * `zoomTo` as a move the eye can follow, in or out (view/zoom-motion.ts):
+   * the bullet pressed, Alt+→ and Alt+←, the crumbs. The change may come a
+   * frame later, inside the transition; `then` follows it, in the new view.
+   */
+  zoomVisibly(key: RowKey | null, keepSearch = false, then?: () => void): void {
+    const id = key && nodeOf(key);
+    const to = id && this.doc.has(id) ? this.doc.origin(id) : null;
+    zoomMotion(this.doc, this.zoom(), to === this.doc.root ? null : to, () => batch(() => {
+      this.zoomTo(key, keepSearch);
+      then?.();
+    }), key ?? undefined);
+  }
+
   /** Alt+→: zoom into a bullet and edit its first child, or its title if it has none. */
   zoomIn(id: RowKey): void {
-    batch(() => {
-      this.zoomTo(id);
+    this.zoomVisibly(id, false, () => {
       const first = this.rows.ids[0];
       if (first) this.setFocus({ id: first, caret: 0 });
       // The title mounts with the new zoom: ask once it exists.
@@ -891,10 +905,7 @@ export class Outliner {
   zoomOut(): void {
     const z = this.zoom();
     if (!z) return;
-    batch(() => {
-      this.zoomTo(this.doc.get(z).parent);
-      this.setFocus({ id: z, caret: 0 });
-    });
+    this.zoomVisibly(this.doc.get(z).parent, false, () => this.setFocus({ id: z, caret: 0 }));
   }
 
   /**
@@ -1057,7 +1068,7 @@ export class Outliner {
    * bullet zooms in.
    */
   pressBullet(id: RowKey): void {
-    if (!this.contentOf(id).todo) return this.zoomTo(id);
+    if (!this.contentOf(id).todo) return this.zoomVisibly(id);
     const cur = this.focus();
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }

@@ -3400,6 +3400,11 @@ test.describe('#secret', () => {
 });
 
 test.describe('motion', () => {
+  // The other tests run with reduced motion (playwright.config.ts); these watch it move.
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+  });
+
   const scale = (page: Page, selector: string, pseudo: string | null = null) =>
     page.locator(selector).first().evaluate((el, ps) => getComputedStyle(el, ps).scale, pseudo);
 
@@ -3473,8 +3478,43 @@ test.describe('motion', () => {
     expect(await waits()).toEqual([]);
   });
 
-  test('reduced motion: a bullet picked up does not pop, a new row does not fade in', async ({ page }) => {
+  test('zoom: in, the text of the row grows into the title and the list slides; out, the title goes back into its row; the header stays', async ({ page }) => {
+    const watch = () =>
+      page.evaluate(() => new Promise<string[]>((done) => {
+        const seen = new Set<string>();
+        const look = () => {
+          const z = document.documentElement.dataset.zoom;
+          if (z) seen.add(`zoom:${z}`);
+          for (const a of document.getAnimations()) {
+            const p = (a.effect as KeyframeEffect | null)?.pseudoElement;
+            if (p?.startsWith('::view-transition')) seen.add(p);
+          }
+          if (seen.size && !z) return done([...seen].sort());
+          requestAnimationFrame(look);
+        };
+        look();
+      }));
+    const going = watch();
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    expect(await going).toEqual(expect.arrayContaining([
+      'zoom:in', '::view-transition-group(zoom-title)', '::view-transition-new(root)', '::view-transition-old(root)',
+    ]));
+    await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    expect(await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('*')].filter((e) => e.style.viewTransitionName).length)).toBe(0);
+
+    const back = watch();
+    await page.locator('.crumbs .crumb', { hasText: 'Том первый' }).click();
+    expect(await back).toEqual(expect.arrayContaining(['zoom:out', '::view-transition-group(zoom-title)']));
+    await expect(page.locator('.zoom-title')).toHaveText('Том первый');
+    await expect(page.locator('.row', { hasText: 'Часть первая' })).toBeVisible();
+  });
+
+  test('reduced motion: a bullet picked up does not pop, a new row does not fade in, a zoom is instant', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
+    // At once: no transition holds the old view for a frame.
+    expect(await page.locator('.zoom-title').textContent()).toBe('Часть первая');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await edit(page, 'Том второй');
     await page.keyboard.press('Enter');
     expect(await page.evaluate(() => [...document.querySelectorAll('.row')].flatMap((r) => r.getAnimations()).length)).toBe(0);
