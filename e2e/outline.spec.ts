@@ -3444,8 +3444,41 @@ test.describe('motion', () => {
     await expect.poll(() => parent.locator('.bullet').evaluate((el) => getComputedStyle(el, '::before').opacity)).toBe('1');
   });
 
-  test('reduced motion: a bullet picked up does not pop', async ({ page }) => {
+  test('rows appear: a new or brought back bullet fades in, unfolded ones in a wave; loading and scrolling mount rows plainly', async ({ page }) => {
+    const waits = () =>
+      page.evaluate(() => [...document.querySelectorAll('.row')].flatMap((r) => r.getAnimations().map((a) => Number(a.effect!.getTiming().delay))));
+    expect(await waits()).toEqual([]);
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    expect(await waits()).toEqual([0]);
+    await page.keyboard.press('Control+Shift+Backspace');
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Control+z');
+    expect(await waits()).toEqual([0]);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    const top = page.locator('.row', { hasText: 'Том первый' }).first();
+    await top.hover();
+    await top.locator('.toggle').click();
+    await page.waitForTimeout(300);
+    expect(await waits()).toEqual([]);
+    await top.locator('.toggle').click();
+    expect(await waits()).toEqual([0, 15, 30, 45]);
+
+    await page.goto('/?sample=20000');
+    await expect(page.locator('.row').first()).toBeVisible();
+    for (let i = 0; i < 5; i++) await page.mouse.wheel(0, 2000);
+    await page.waitForTimeout(300);
+    expect(await waits()).toEqual([]);
+  });
+
+  test('reduced motion: a bullet picked up does not pop, a new row does not fade in', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    expect(await page.evaluate(() => [...document.querySelectorAll('.row')].flatMap((r) => r.getAnimations()).length)).toBe(0);
+    await page.keyboard.press('Escape');
     const bullet = page.locator('.row .bullet').nth(1);
     const b = (await bullet.boundingBox())!;
     await page.mouse.move(b.x + 10, b.y + 8);

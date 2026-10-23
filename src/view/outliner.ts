@@ -3,7 +3,7 @@ import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
 import { appendTrees, checkOff, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
-import { invert, type Doc } from '../model/doc';
+import { TRASH, invert, walkSnapshot, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
@@ -21,7 +21,7 @@ import { plural } from '../util/plural';
 import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
-import { narrow } from './screen';
+import { narrow, still } from './screen';
 
 /** While a bullet is being edited at midnight, the new day waits this long and is tried again, ms. */
 const MIDNIGHT_RETRY = 60_000;
@@ -43,6 +43,11 @@ const SAVED_SEARCHES = 'listik-saved-searches';
 export const SAVED_MAX = 20;
 /** Places gone to lately, kept at most (the search box shows fewer). */
 const RECENT_MAX = 20;
+/** Rows that appear with motion at most, per action (`appear`): a long paste shows the rest at once. */
+const APPEAR_MAX = 40;
+/** Rows unfolded one after another, ms apart (the first `APPEAR_WAVE` of them; the rest with the last). */
+const APPEAR_STEP = 15;
+const APPEAR_WAVE = 10;
 
 function readSaved(): string[] {
   try {
@@ -208,6 +213,15 @@ export class Outliner {
    * to the new one.
    */
   private retitled: { id: NodeId; before: string } | null = null;
+  /**
+   * Bullets that have just come into the list by the user's hand (made,
+   * pasted, brought back, unfolded), with how long each one's row waits
+   * before it fades in, ms (Row.tsx `appearing`). Kept until the frame
+   * after the one that mounts their rows, so a row that later scrolls into
+   * view mounts plainly.
+   */
+  private fresh = new Map<NodeId, number>();
+  private freshFrame = 0;
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
   /** Bumped to open the sync dialog. */
@@ -1203,20 +1217,28 @@ export class Outliner {
     const id = nodeOf(key);
     if (this.rows.onPath(id)) {
       batch(() => {
-        this.rows.setOpen(id, folded === undefined ? !this.rows.isOpen(id) : !folded);
+        const open = folded === undefined ? !this.rows.isOpen(id) : !folded;
+        this.rows.setOpen(id, open);
+        if (open) this.unfolded(key);
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
     } else if (contextOf(key)) {
       // Under a mirror: folded there only, a view state, not an undo step.
       batch(() => {
-        setCollapsed(this.ctx, key, folded ?? !this.rows.folded(key));
+        const fold = folded ?? !this.rows.folded(key);
+        setCollapsed(this.ctx, key, fold);
+        if (!fold) this.unfolded(key);
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
     } else {
       const n = this.doc.get(id);
-      this.run((ctx) => setCollapsed(ctx, id, folded ?? !n.collapsed), keep);
+      const fold = folded ?? !n.collapsed;
+      batch(() => {
+        this.run((ctx) => setCollapsed(ctx, id, fold), keep);
+        if (!fold) this.unfolded(key);
+      });
     }
   }
 
@@ -1243,9 +1265,46 @@ export class Outliner {
       const key = target && this.rows.locate(target.id, near);
       if (target && key) target = { ...target, id: key };
       this.history.record({ ops, before, after: target ?? null });
+      this.appeared(ops);
       this.moveFocus(target ?? null);
     });
     return ops;
+  }
+
+  /** Bullets the ops brought into the outline: made (insert) or back from the trash (undo of a deletion, "Вернуть"), with their insides. */
+  private appeared(ops: Op[]): void {
+    const ids: NodeId[] = [];
+    for (const op of ops) {
+      if (ids.length >= APPEAR_MAX) break;
+      if (op.t === 'insert') walkSnapshot(op.node, (s) => void (ids.length < APPEAR_MAX && ids.push(s.id)));
+      else if (op.t === 'move' && op.from.parent === TRASH && this.doc.inOutline(op.id)) {
+        this.doc.walk(op.id, (n) => void (ids.length < APPEAR_MAX && ids.push(n.id)));
+      }
+    }
+    this.appear(ids, 0);
+  }
+
+  /** The rows under a row just unfolded: in a short wave, top down. */
+  private unfolded(key: RowKey): void {
+    const i = this.rows.indexOf(key);
+    if (i < 0) return;
+    const end = Math.min(this.rows.subtreeEnd(i), i + 1 + APPEAR_MAX);
+    this.appear(this.rows.ids.slice(i + 1, end).map(nodeOf), APPEAR_STEP);
+  }
+
+  /** `ids` fade in when their rows mount, each `step` ms after the one before (Row.tsx). Not with reduced motion. */
+  private appear(ids: NodeId[], step: number): void {
+    if (!ids.length || still()) return;
+    ids.forEach((id, k) => this.fresh.has(id) || this.fresh.set(id, Math.min(k, APPEAR_WAVE) * step));
+    cancelAnimationFrame(this.freshFrame);
+    this.freshFrame = requestAnimationFrame(() => {
+      this.freshFrame = requestAnimationFrame(() => this.fresh.clear());
+    });
+  }
+
+  /** How long a row of the bullet waits before it fades in, ms; undefined if it was already there (`fresh`). */
+  appearing(id: NodeId): number | undefined {
+    return this.fresh.get(id);
   }
 
   /** Bullets erased to nothing that the command just deleted take their text along into the trash (`erased`). */
@@ -1442,7 +1501,10 @@ export class Outliner {
     if (this.readOnly) return;
     batch(() => {
       const e = step(this.doc);
-      if (e) this.moveFocus(focusAfter(e, forward));
+      if (!e) return;
+      // Undone or redone forward, the ops as they were; back, their inverses.
+      this.appeared(forward ? e.ops : [...e.ops].reverse().map(invert));
+      this.moveFocus(focusAfter(e, forward));
     });
   }
 
