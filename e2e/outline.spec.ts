@@ -2191,15 +2191,16 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toHaveText('Том второй');
   });
 
-  /** A finger down on a row's bullet, optionally held, moved in steps to (x, y), and lifted. */
-  async function finger(page: Page, from: string, opts: { hold: number; to?: (b: { x: number; y: number }) => { x: number; y: number } }) {
+  /** A finger down on a row's bullet (or its text, `on`), optionally held, moved in steps to (x, y), and lifted. */
+  async function finger(page: Page, from: string, opts: { hold: number; on?: '.bullet' | '.text'; to?: (b: { x: number; y: number }) => { x: number; y: number }; during?: () => Promise<void> }) {
     const cdp = await page.context().newCDPSession(page);
-    const box = (await page.locator('.row', { hasText: from }).locator('.bullet').first().boundingBox())!;
-    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const box = (await page.locator('.row', { hasText: from }).locator(opts.on ?? '.bullet').first().boundingBox())!;
+    const start = { x: box.x + Math.min(box.width / 2, 30), y: box.y + box.height / 2 };
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', p?: { x: number; y: number }) =>
       cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y }] : [] });
     await touch('touchStart', start);
     await page.waitForTimeout(opts.hold);
+    await opts.during?.();
     const end = opts.to?.(start);
     if (end) {
       for (let i = 1; i <= 8; i++) {
@@ -2226,6 +2227,30 @@ test.describe('touch screen', () => {
     // A short tap: in.
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').tap();
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+  });
+
+  test('a row held by its text lights up and drags too; moved at once it does not; a tap on the text still edits', async ({ page }) => {
+    await finger(page, 'Часть вторая', { hold: 0, on: '.text', to: (s) => ({ x: s.x, y: s.y + 60 }) });
+    await expect(page.locator('.drop-line')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+
+    const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+    await finger(page, 'Часть первая', {
+      hold: 500,
+      on: '.text',
+      during: async () => {
+        await expect(page.locator('.row.holding')).toHaveText('Часть первая');
+        await expect(page.locator('.row.dragged').first()).toHaveText('Часть первая');
+      },
+      to: () => ({ x: target.x + 10 + indent, y: target.y + target.height * 0.75 }),
+    });
+    await expect(page.locator('.row.holding')).toHaveCount(0);
+    expect(await outline(page)).toEqual(['Том первый', '  Часть вторая', 'Том второй', '  Часть первая', ...DEMO.slice(2, 4)]);
+    await expect(page.locator('.zoom-title')).toHaveCount(0);
+
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await expect(editing(page)).toHaveText('Часть вторая');
   });
 
   /**

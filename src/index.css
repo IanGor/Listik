@@ -1880,6 +1880,24 @@ body.is-dragging * {
   opacity: 0.4;
 }
 
+/* A finger held on a row's text (drag.ts): the text lights up as the hold
+   goes on, the way the edited row sits on its surface; a touch on its way
+   to a scroll lets go before the delay, so it never flashes. No word is
+   selected and no callout comes meanwhile. */
+.row.holding .body {
+  background: var(--surface);
+  border-radius: 4px;
+  box-shadow: -6px 0 0 2px var(--surface), 6px 0 0 2px var(--surface);
+  transition: background 200ms var(--ease-out) 120ms, box-shadow 200ms var(--ease-out) 120ms;
+}
+
+.row.holding,
+.row.holding * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* Where the drop lands: a coral line at the target level, with a dot at its start. */
 .drop-line {
   position: absolute;

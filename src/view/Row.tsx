@@ -22,7 +22,7 @@ interface RowProps {
   /** Starts measuring the row element; returns the stop function. */
   observe: (el: HTMLElement) => () => void;
   /** A press on the bullet: a click zooms in, a drag moves (drag.ts). */
-  grab: (e: PointerEvent, id: RowKey) => void;
+  grab: (e: PointerEvent, id: RowKey, from?: 'bullet' | 'row') => void;
 }
 
 const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
@@ -71,15 +71,22 @@ export function Row(props: RowProps) {
       el.animate([{ opacity: 0, translate: '0 -4px' }, { opacity: 1, translate: '0 0' }], { duration: 200, delay: wait, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
     }
   });
-  // A finger that picked the bullet up (drag.ts) moves it instead of
-  // scrolling the list. Must be a non-passive listener of its own.
+  // A finger that picked the row up (drag.ts: by its bullet or its text)
+  // moves it instead of scrolling the list. Must be a non-passive listener
+  // of its own.
   onMount(() => {
     const hold = (e: TouchEvent) => {
       if (o.dragged().size && e.cancelable) e.preventDefault();
     };
-    bullet.addEventListener('touchmove', hold, { passive: false });
-    onCleanup(() => bullet.removeEventListener('touchmove', hold));
+    el.addEventListener('touchmove', hold, { passive: false });
+    onCleanup(() => el.removeEventListener('touchmove', hold));
   });
+  /** A finger on the row's text, not the row being edited, nor what has a press of its own: held, it picks the row up (drag.ts). */
+  const onRowPointerDown = (e: PointerEvent) => {
+    if (e.pointerType !== 'touch' || o.readOnly || focused()) return;
+    if ((e.target as Element).closest('.bullet, .toggle, button, a, [contenteditable]')) return;
+    props.grab(e, id, 'row');
+  };
   // A finger sideways across the row: left deletes, right checks off (swipe.ts).
   onMount(() => onCleanup(swipe(o, el, id, focused)));
   o.nodes.acquire(nid);
@@ -209,6 +216,9 @@ export function Row(props: RowProps) {
       classList={{ task: !!content()?.todo, done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
       data-id={id}
       data-depth={props.depth}
+      onPointerDown={onRowPointerDown}
+      // The browser's long press (a word selected, a menu) would come while the finger holds the row.
+      onContextMenu={(e) => (el.classList.contains('holding') || o.dragged().size) && e.preventDefault()}
       style={{ 'padding-left': 'var(--shift)', '--depth': String(props.depth) }}
     >
       <Show when={hasChildren()}>

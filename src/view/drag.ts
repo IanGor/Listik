@@ -39,15 +39,27 @@ const EDGE = 48;
  * still for LONG_PRESS first. Moving sooner is a scroll (the bullet allows
  * vertical panning, index.css), and the browser then cancels the pointer.
  * Once picked up, Row.tsx stops the panning, so the finger moves the bullet.
+ *
+ * A finger can also pick a row up by its text (`from` 'row'): held still
+ * there, the row lights up and then is picked up the same way. Until then
+ * the press is left to the browser, so a tap still edits, a move still
+ * scrolls or swipes (swipe.ts), and a tap is never a zoom.
  */
 export function createDrag(o: Outliner, el: () => Elements) {
   const [target, setTarget] = createSignal<DropTarget | null>(null);
 
-  function start(e: PointerEvent, id: RowKey): void {
+  function start(e: PointerEvent, id: RowKey, from: 'bullet' | 'row' = 'bullet'): void {
     if (e.button !== 0) return;
-    e.preventDefault();
+    const byRow = from === 'row';
+    if (byRow && e.pointerType !== 'touch') return;
     const handle = e.currentTarget as HTMLElement;
-    handle.setPointerCapture(e.pointerId);
+    if (!byRow) {
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+    }
+    // Held on the row: it lights up as the hold goes on, and the browser's own long press (selecting a word) stays out.
+    const row = byRow ? handle : null;
+    row?.classList.add('holding');
     const startX = e.clientX;
     const startY = e.clientY;
     let dragging = false;
@@ -78,7 +90,8 @@ export function createDrag(o: Outliner, el: () => Elements) {
       o.setDragged(inside);
       document.body.classList.add('is-dragging');
       // Picked up: the bullet pops under the finger or pointer, so the hand knows it holds it.
-      if (!still()) handle.animate([{ scale: 1 }, { scale: 1.7 }, { scale: 1 }], { duration: 380, easing: 'cubic-bezier(0.2, 0.9, 0.25, 1)' });
+      const bullet = byRow ? handle.querySelector<HTMLElement>('.bullet') : handle;
+      if (bullet && !still()) bullet.animate([{ scale: 1 }, { scale: 1.7 }, { scale: 1 }], { duration: 380, easing: 'cubic-bezier(0.2, 0.9, 0.25, 1)' });
       autoScroll();
     };
 
@@ -169,12 +182,13 @@ export function createDrag(o: Outliner, el: () => Elements) {
       window.removeEventListener('keydown', onKey, true);
       clearTimeout(hold);
       cancelAnimationFrame(scrollFrame);
+      row?.classList.remove('holding');
       const t = target();
       setTarget(null);
       o.setDragged(new Set<RowKey>());
       document.body.classList.remove('is-dragging');
       if (!dragging) {
-        if (drop) o.pressBullet(id);
+        if (drop && !byRow) o.pressBullet(id);
         return;
       }
       if (drop && t) o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));

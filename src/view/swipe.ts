@@ -64,6 +64,8 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
       const mx = ev.clientX - x0;
       const my = ev.clientY - y0;
       if (!swiping) {
+        // Held long enough to be picked up (drag.ts): the finger moves the row, not its content.
+        if (o.dragged().size) return stop();
         if (Math.hypot(mx, my) < SLOP) return;
         if (ev.timeStamp - t0 > HOLD || Math.abs(mx) < SIDEWAYS * Math.abs(my) || editing()) return stop();
         swiping = true;
