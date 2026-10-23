@@ -381,8 +381,8 @@ test.describe('move to a place', () => {
 
   test('selected bullets move together, in their order', async ({ page }) => {
     await edit(page, 'Часть первая');
-    // Down through its own bullets to the next part.
-    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+    // The whole text, the bullet, then down through its own bullets to the next part.
+    for (let i = 0; i < 5; i++) await page.keyboard.press('Shift+ArrowDown');
     await page.keyboard.press('Control+Shift+m');
     await expect(input(page)).toHaveAttribute('placeholder', 'Переместить 2 пункта в…');
     await page.keyboard.type('том вт');
@@ -1454,7 +1454,7 @@ test.describe('selecting several bullets', () => {
   test('Shift+↓ selects; Tab, Ctrl+L, copy, Delete and undo act on the block', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await edit(page, 'Часть вторая');
-    await page.keyboard.press('Shift+ArrowDown');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
     expect(await selected(page)).toEqual(['Часть вторая', 'Том второй']);
     await expect(editing(page)).toHaveCount(0);
 
@@ -1476,6 +1476,64 @@ test.describe('selecting several bullets', () => {
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[5]]);
     await page.keyboard.press('Control+z');
     expect((await outline(page)).length).toBe(DEMO.length);
+  });
+
+  test('Shift+↓ / Shift+↑ widen to the text edge, the whole text, the bullet, the rows around; Backspace takes the bullet out with its rows', async ({ page }) => {
+    const text = () => page.evaluate(() => getSelection()!.toString());
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Home');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Shift+ArrowDown');
+    expect(await text()).toBe('ть первая');
+    await page.keyboard.press('Shift+ArrowDown');
+    expect(await text()).toBe('Часть первая');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect(editing(page)).toHaveCount(0);
+    expect(await selected(page)).toEqual(['Часть первая', DEMO[2].trim(), DEMO[3].trim()]);
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[4], DEMO[5]]);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DEMO);
+
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await text()).toBe('Часть втора');
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await text()).toBe('Часть вторая');
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await selected(page)).toEqual(['Часть вторая']);
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await selected(page)).toEqual([DEMO[3].trim(), 'Часть вторая']);
+  });
+
+  test('Ctrl+A selects the text, then the bullet, then all; an empty bullet with rows inside is selected by Backspace before it goes', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+a');
+    expect(await page.evaluate(() => getSelection()!.toString())).toBe('Часть первая');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Control+a');
+    expect(await selected(page)).toEqual(['Часть первая', DEMO[2].trim(), DEMO[3].trim()]);
+    await page.keyboard.press('Control+a');
+    expect(await selected(page)).toEqual(DEMO.map((l) => l.trim()));
+    await page.keyboard.press('Escape');
+
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
+    await expect(editing(page)).toHaveText('');
+    await page.keyboard.press('Backspace');
+    expect(await selected(page)).toEqual(['', DEMO[2].trim(), DEMO[3].trim()]);
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[4], DEMO[5]]);
+
+    // An empty bullet with nothing inside goes at once, as before.
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Backspace');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[4], DEMO[5]]);
+    await expect(editing(page)).toHaveText('Том второй');
   });
 
   test('Shift+click selects a range from the edited row; Esc clears it', async ({ page }) => {

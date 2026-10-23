@@ -1,7 +1,7 @@
 import * as cmd from '../model/commands';
 import { markdownOf } from '../model/outline-text';
 import { nodeOf, type RowKey } from '../model/rows';
-import { caretOnFirstLine, caretOnLastLine, caretX, selectRange, selectionIn } from './caret';
+import { caretOnFirstLine, caretOnLastLine, caretX, focusIn, selectRange, selectionIn } from './caret';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 
@@ -30,12 +30,21 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
   const mod = e.ctrlKey || e.metaKey;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const collapsed = start === end;
+  const length = o.contentOf(id).text.length;
+  const whole = start === 0 && end === length;
   const here = { id, caret: start };
   const handle = (fn: () => void) => {
     e.preventDefault();
     fn();
   };
+  // The bullet itself, with the rows under it: Backspace or Delete then takes it all out.
+  const selectBullet = () => {
+    el.blur();
+    o.select({ anchor: id, head: id });
+  };
 
+  // Ctrl/Cmd+A over the whole text (or in an empty one) selects the bullet; the first one selects the text.
+  if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyA' && whole) return handle(selectBullet);
   // Ctrl/Cmd+L (by physical key): task on, checked, unchecked; with Shift, a plain bullet again.
   if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
   // Ctrl/Cmd+Shift+M: "Переместить в…", the bullet into a place found by name.
@@ -64,6 +73,12 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       // there it only removes an empty bullet, never joins two texts. (At a
       // copy's start it takes out that copy, as it does with a keyboard.)
       if (touch() && o.contentOf(id).text && !o.isCopy(id)) return;
+      // An empty bullet with a note or bullets inside is selected first, to show
+      // what would go; the next Backspace takes it all out. (Not on a touch
+      // screen: there the keyboard would close with nothing to delete it by.)
+      if (!touch() && !o.contentOf(id).text && !o.isCopy(id) && (o.contentOf(id).note || o.contentOf(id).children.length)) {
+        return handle(selectBullet);
+      }
       return handle(() => o.mergeUp(id, here));
 
     case 'Delete': {
@@ -87,15 +102,15 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
         return handle(() => o.run((ctx) => (up ? cmd.moveUp : cmd.moveDown)(ctx, id), here));
       }
       if (mod) return handle(() => o.fold(id, up, here));
-      // Shift+↑/↓ past the text's edge starts selecting bullets: this one and the next.
-      if (e.shiftKey && !e.altKey && collapsed && (up ? caretOnFirstLine(el) : caretOnLastLine(el))) {
-        const next = o.rows.ids[o.rows.indexOf(id) + (up ? -1 : 1)];
-        return handle(() => {
-          el.blur();
-          o.select({ anchor: id, head: next ?? id });
-        });
+      // Shift+↑/↓ widens step by step: line by line to the text's edge (the
+      // browser's own), then the whole text, then the bullet itself; from there
+      // onSelectionKeys takes in the rows around.
+      if (e.shiftKey && !e.altKey) {
+        if (whole) return handle(selectBullet);
+        if (focusIn(el) === (up ? 0 : length)) return handle(() => (up ? selectRange(el, length, 0) : selectRange(el, 0, length)));
+        return;
       }
-      if (e.shiftKey || e.altKey) return;
+      if (e.altKey) return;
       if (up ? !caretOnFirstLine(el) : !caretOnLastLine(el)) return;
       // Down from the text goes into its note first, if there is one.
       if (!up && o.contentOf(id).note) return handle(() => o.setFocus({ id, x: caretX(el), line: 'first', note: true }));

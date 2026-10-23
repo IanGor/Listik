@@ -20,6 +20,13 @@ export function selectionIn(el: HTMLElement): [number, number] | null {
   return [offsetIn(el, r.startContainer, r.startOffset), offsetIn(el, r.endContainer, r.endOffset)];
 }
 
+/** Text offset of the selection's moving end (where Shift+arrows act) in `el`, or null if it is elsewhere. */
+export function focusIn(el: HTMLElement): number | null {
+  const sel = getSelection();
+  if (!sel?.focusNode || !el.contains(sel.focusNode)) return null;
+  return offsetIn(el, sel.focusNode, sel.focusOffset);
+}
+
 /** The DOM position of text offset `offset` in `el`. */
 function pointAt(el: HTMLElement, offset: number): [Node, number] {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
