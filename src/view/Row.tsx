@@ -6,7 +6,7 @@ import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
 import { nodeOf, type RowKey } from '../model/rows';
-import { decorate, type Piece } from '../model/search';
+import { decorate, type Piece, type Query } from '../model/search';
 import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
 import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
@@ -32,7 +32,7 @@ const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
  * Formatting markers stay in the DOM, hidden, so offsets in the element
  * are offsets in the text (a click puts the caret where it belongs).
  */
-export function Pieces(props: { o: Outliner; pieces: Piece[] }) {
+export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | null }) {
   return (
     <For each={props.pieces}>
       {(p) => {
@@ -44,7 +44,7 @@ export function Pieces(props: { o: Outliner; pieces: Piece[] }) {
             // Opens in the browser (another tab; the system browser from the installed app).
             ? <a class="url" href={p.url} target="_blank" rel="noopener noreferrer">{plain}</a>
             : p.tag
-            ? <span class="tag" classList={{ active: !!props.o.filter()?.query.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+            ? <span class="tag" classList={{ active: !!props.query?.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
             : plain;
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
       }}
@@ -138,7 +138,8 @@ export function Row(props: RowProps) {
     const t = o.doc.nodes.get(p.task);
     return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
   };
-  const terms = () => o.filter()?.query.terms ?? [];
+  const query = () => o.highlightFor(nid);
+  const terms = () => query()?.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
   const notePieces = createMemo(() => decorate(content()?.note ?? '', terms()));
 
@@ -226,7 +227,7 @@ export function Row(props: RowProps) {
           when={editingText()}
           fallback={
             <div class="text" onMouseDown={onStaticMouseDown(false)}>
-              <Pieces o={o} pieces={pieces()} />
+              <Pieces o={o} pieces={pieces()} query={query()} />
             </div>
           }
         >
@@ -258,7 +259,7 @@ export function Row(props: RowProps) {
             <Show when={content()?.note}>
               {/* Its first lines only (NOTE_LINES), all of them while the row is edited. */}
               <div class="note" classList={{ clamped: !focused() }} onMouseDown={onStaticMouseDown(true)}>
-                <Pieces o={o} pieces={notePieces()} />
+                <Pieces o={o} pieces={notePieces()} query={query()} />
               </div>
             </Show>
           }

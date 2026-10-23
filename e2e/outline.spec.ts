@@ -458,6 +458,26 @@ test.describe('search', () => {
     await expect(page.locator('.row .tag.hit')).toHaveText(['шерер']);
   });
 
+  test('words and tags together: only a bullet with all of them is found and highlighted, its path shows plain', async ({ page }) => {
+    await edit(page, 'Часть первая');
+    await page.keyboard.type(' #шерер про Анну');
+    await page.keyboard.press('Escape');
+    await page.locator('.search').fill('#шерер анна');
+    await expect(page.locator('.searchbar .count')).toHaveText('1 пункт');
+    expect(await outline(page)).toEqual([DEMO[0], '  Часть первая #шерер про Анну', DEMO[3]]);
+    // The path has the tag, not the word "анна" (Анну): shown, but nothing in it reads as found.
+    const path = page.locator('.row', { hasText: 'Часть первая' });
+    await expect(path.locator('mark')).toHaveCount(0);
+    await expect(path.locator('.tag.active')).toHaveCount(0);
+    await expect(page.locator('.row .tag.active')).toHaveText(['#шерер']);
+    await expect(page.locator('.row mark')).toHaveText(['Анна']);
+
+    await page.locator('.search').fill('#шерер анн');
+    await expect(page.locator('.searchbar .count')).toHaveText('2 пункта');
+    await expect(path.locator('mark')).toHaveText(['Анн']);
+    await expect(page.locator('.row .tag.active')).toHaveCount(2);
+  });
+
   test('Enter edits the first match; Esc in the row returns to the full outline', async ({ page }) => {
     await page.locator('.search').fill('вторая');
     await page.keyboard.press('Enter');

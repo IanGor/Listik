@@ -192,7 +192,8 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   onCleanup(() => setEdit(null));
   /** An editor lost focus: editing ends, unless it has moved to the other part already. */
   const leave = (isNote: boolean) => edit()?.note === isNote && setEdit(null);
-  const terms = () => o.filter()?.query.terms ?? [];
+  const query = () => o.highlightFor(id);
+  const terms = () => query()?.terms ?? [];
   const pieces = createMemo(() => decorate(text(), terms()));
   const notePieces = createMemo(() => decorate(note(), terms()));
 
@@ -220,7 +221,7 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
         when={edit() && !edit()!.note}
         fallback={
           <div class="zoom-title" onMouseDown={onMouseDown(false)}>
-            <Pieces o={o} pieces={pieces()} />
+            <Pieces o={o} pieces={pieces()} query={query()} />
           </div>
         }
       >
@@ -231,7 +232,7 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
         fallback={
           <Show when={note()}>
             <div class="note zoom-note" onMouseDown={onMouseDown(true)}>
-              <Pieces o={o} pieces={notePieces()} />
+              <Pieces o={o} pieces={notePieces()} query={query()} />
             </div>
           </Show>
         }

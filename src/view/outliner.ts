@@ -1176,6 +1176,18 @@ export class Outliner {
     this.setSearchRequests((n) => n + 1);
   }
 
+  /**
+   * The search as a bullet's text shows it: its words and tags highlighted
+   * only in a bullet found (all the words and tags of a clause are in it;
+   * a mirror's row as its original), not in those shown above one as its
+   * path, where a single word or tag would read as found too. Null: nothing
+   * to highlight.
+   */
+  highlightFor(id: NodeId): Query | null {
+    const f = this.filter();
+    return f && this.doc.has(id) && f.matches.has(this.doc.origin(id)) ? f.query : null;
+  }
+
   /** The first visible row that matches the search (a mirror's row matches as its original). */
   firstMatch(): RowKey | null {
     const f = this.filter();

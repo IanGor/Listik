@@ -83,6 +83,15 @@ describe('findMatches', () => {
     expect(find('@в')).toEqual([]);
   });
 
+  it('needs every word and tag in the bullet itself: two or more are AND, the path above does not count', () => {
+    expect(find('пьер андрей')).toEqual(['Пьер и Андрей #война #бал']);
+    expect(find('#война #бал')).toEqual(['Пьер и Андрей #война #бал']);
+    expect(find('#бал андрей')).toEqual(['Пьер и Андрей #война #бал']);
+    // The tag or the word is on the parent, the other one in the child.
+    expect(find('#война балу')).toEqual([]);
+    expect(find('князь пьер')).toEqual([]);
+  });
+
   it('excludes words, phrases and tags, filters by completion, and joins alternatives with OR', () => {
     expect(find('пьер -балу')).toEqual(['Пьер и Андрей #война #бал']);
     expect(find('андрей -#бал')).toEqual(['Князь Андрей #война']);
