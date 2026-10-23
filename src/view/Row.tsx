@@ -64,13 +64,6 @@ export function Row(props: RowProps) {
   let el!: HTMLDivElement;
   let bullet!: HTMLSpanElement;
   onMount(() => onCleanup(props.observe(el)));
-  // A bullet just made, brought back or unfolded fades in, a few pixels from above (Outliner.appearing).
-  onMount(() => {
-    const wait = o.appearing(nid);
-    if (wait !== undefined) {
-      el.animate([{ opacity: 0, translate: '0 -4px' }, { opacity: 1, translate: '0 0' }], { duration: 200, delay: wait, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' });
-    }
-  });
   // A finger that picked the row up (drag.ts: by its bullet or its text)
   // moves it instead of scrolling the list. Must be a non-passive listener
   // of its own.
@@ -213,7 +206,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ task: !!content()?.todo, done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
+      classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
       data-id={id}
       data-depth={props.depth}
       onPointerDown={onRowPointerDown}

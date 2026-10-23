@@ -15,9 +15,6 @@ export default defineConfig({
   testDir: 'e2e',
   use: {
     launchOptions: chromium ? { executablePath: chromium } : {},
-    // Motion off: a zoom then changes the view at once, not a frame later
-    // inside a view transition. The "motion" tests turn it on themselves.
-    contextOptions: { reducedMotion: 'reduce' },
   },
   projects: [
     { name: 'app', testMatch: /outline\.spec\.ts|sync\.spec\.ts/, use: { baseURL: dev } },

@@ -20,12 +20,6 @@ export const narrow = query('(max-width: 640px)');
  */
 export const touch = query('(pointer: coarse)');
 
-/**
- * "Reduce motion" is on: what moves only to show a change (a pop, an
- * appearing row, a zoom) is left out. CSS transitions it stops in index.css.
- */
-export const still = query('(prefers-reduced-motion: reduce)');
-
 /** Shrinking the window by more than this is the keyboard, not the address bar, px. */
 const KEYBOARD_MIN = 150;
 

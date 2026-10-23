@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, on } from 'solid-js';
 import { normalize } from '../model/search';
 import { plural } from '../util/plural';
 import type { Outliner } from './outliner';
-import { narrow, still } from './screen';
+import { narrow } from './screen';
 
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
@@ -97,13 +97,8 @@ export function SearchBar(props: { o: Outliner }) {
       <Show when={o.filter()?.count ? o.filter() : null}>
         {(f) => {
           const label = () => `${f().count} ${plural(f().count, 'пункт', 'пункта', 'пунктов')}`;
-          let el!: HTMLSpanElement;
-          // A new number rises into place, as counters do on Apple's systems.
-          createEffect(on(() => f().count, () => {
-            if (!still()) el.animate([{ opacity: 0, translate: '0 4px' }, { opacity: 1, translate: '0 0' }], { duration: 180, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
-          }, { defer: true }));
           // A phone keeps the field for the query: the number alone, the words in the tooltip.
-          return <span ref={el} class="count" title={label()}>{narrow() ? f().count : label()}</span>;
+          return <span class="count" title={label()}>{narrow() ? f().count : label()}</span>;
         }}
       </Show>
       <Show

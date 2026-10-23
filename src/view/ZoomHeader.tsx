@@ -122,7 +122,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           classList={{ current: !path().length }}
           aria-current={path().length ? undefined : 'page'}
           title={path().length ? 'На главную' : 'Свернуть весь первый уровень; ещё раз — развернуть'}
-          onClick={() => (path().length ? o.zoomVisibly(null, true) : o.goHome())}
+          onClick={() => (path().length ? o.zoomTo(null, true) : o.goHome())}
         >
           Главная
         </button>
@@ -160,7 +160,7 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
         </button>
       }
     >
-      <button type="button" class="crumb" title={text()} onClick={() => o.zoomVisibly(id, true)}>
+      <button type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id, true)}>
         {text()}
       </button>
     </Show>

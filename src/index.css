@@ -70,12 +70,6 @@
   /* The bullet's box: its dot, halo, guide line and fold arrow centre on it. */
   --bullet: 20px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  /* Springs, sampled (damping 0.8 and 0.6): `--spring` settles with a hint of
-     overshoot (1.5%), for what is let go; `--spring-pop` swings past by ~9%,
-     for what appears with a little life (a tick, a halo). On the compositor
-     with `scale`/`opacity`; length sets the speed (300–400 ms). */
-  --spring: linear(0, 0.025, 0.087, 0.172, 0.268, 0.368, 0.466, 0.558, 0.641, 0.715, 0.779, 0.833, 0.877, 0.914, 0.942, 0.965, 0.982, 0.994, 1.003, 1.009, 1.013, 1.015, 1.015, 1.015, 1.014, 1.013, 1.011, 1.01, 1);
-  --spring-pop: linear(0, 0.044, 0.152, 0.296, 0.453, 0.605, 0.741, 0.856, 0.947, 1.013, 1.057, 1.083, 1.094, 1.093, 1.086, 1.073, 1.059, 1.044, 1.03, 1.018, 1.009, 1.001, 0.996, 0.993, 0.991, 0.991, 0.991, 0.993, 1);
 }
 
 :root[data-theme='light'] {
@@ -489,73 +483,6 @@ kbd {
   mix-blend-mode: normal;
 }
 
-/* Zoom in and out (view/zoom-motion.ts): the row's text and the title are
-   one element that moves and grows (or shrinks back); the list slides the
-   way you went, 24px, and fades; the header stays, the crumbs cross-fade.
-   Only while html[data-zoom] is set: the theme switch keeps its circle. */
-html[data-zoom] .topbar {
-  view-transition-name: topbar;
-}
-
-html[data-zoom] .crumbbar {
-  view-transition-name: crumbs;
-}
-
-html[data-zoom]::view-transition-old(root) {
-  animation: 140ms var(--ease-out) both zoom-leave;
-}
-
-html[data-zoom]::view-transition-new(root) {
-  animation: 280ms var(--ease-out) both zoom-enter;
-}
-
-html[data-zoom='out']::view-transition-old(root) {
-  animation-name: zoom-leave-back;
-}
-
-html[data-zoom='out']::view-transition-new(root) {
-  animation-name: zoom-enter-back;
-}
-
-html[data-zoom]::view-transition-group(zoom-title) {
-  animation-duration: 300ms;
-  animation-timing-function: var(--ease-out);
-}
-
-html[data-zoom]::view-transition-group(crumbs),
-html[data-zoom]::view-transition-old(crumbs),
-html[data-zoom]::view-transition-new(crumbs) {
-  animation-duration: 200ms;
-}
-
-@keyframes zoom-leave {
-  to {
-    opacity: 0;
-    translate: -24px 0;
-  }
-}
-
-@keyframes zoom-enter {
-  from {
-    opacity: 0;
-    translate: 24px 0;
-  }
-}
-
-@keyframes zoom-leave-back {
-  to {
-    opacity: 0;
-    translate: 24px 0;
-  }
-}
-
-@keyframes zoom-enter-back {
-  from {
-    opacity: 0;
-    translate: -24px 0;
-  }
-}
-
 /* --- Outline ------------------------------------------------------------ */
 
 .scroller {
@@ -637,13 +564,7 @@ html[data-zoom]::view-transition-new(crumbs) {
   /* Bullets carry the coral of the palette (Reference/color_pallete.png). */
   background: var(--primary);
   transform: translate(-50%, -50%);
-  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out), scale 360ms var(--spring);
-}
-
-/* Pressed, the dot (or checkbox) gives under the finger at once; let go, it springs back. */
-.bullet:active::after {
-  scale: 0.75;
-  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out), scale 90ms var(--ease-out);
+  transition: transform 180ms var(--ease-out), background 180ms var(--ease-out);
 }
 
 /* The bullet is the way in (zoom): it answers the pointer by growing. */
@@ -653,21 +574,14 @@ html[data-zoom]::view-transition-new(crumbs) {
   }
 }
 
-/* A task: the bullet is a coral checkbox. Checked, it fills with a tick
-   that grows from the middle and swings a little past its size (the tick is
-   always there, sized 0 while unchecked, so the change can move). */
+/* A task: the bullet is a coral checkbox. Checked, it fills with a tick. */
 .bullet.todo::after {
   width: 13px;
   height: 13px;
-  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 0 no-repeat;
+  background: transparent;
   border: 1.5px solid var(--primary);
   border-radius: 4px;
   box-sizing: border-box;
-  transition: transform 180ms var(--ease-out), background-color 160ms var(--ease-out), background-size 320ms var(--spring-pop), scale 360ms var(--spring);
-}
-
-.bullet.todo:active::after {
-  transition: transform 180ms var(--ease-out), background-color 160ms var(--ease-out), background-size 320ms var(--spring-pop), scale 90ms var(--ease-out);
 }
 
 @media (hover: hover) {
@@ -677,8 +591,8 @@ html[data-zoom]::view-transition-new(crumbs) {
 }
 
 .bullet.todo.checked::after {
-  background-color: var(--primary);
-  background-size: 11px;
+  background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px no-repeat;
+  border-color: var(--primary);
 }
 
 /* A mirror (model/mirrors.ts): a diamond of the dot's size, same coral; a task mirror keeps its checkbox and wears a small diamond at its corner. */
@@ -718,9 +632,6 @@ html[data-zoom]::view-transition-new(crumbs) {
   background: var(--primary);
   border-radius: 1px;
   transform: rotate(45deg);
-  opacity: 1;
-  scale: none;
-  transition: none;
 }
 
 /* A mirror whose original is gone (purged from the trash): an empty row that says so. */
@@ -729,10 +640,8 @@ html[data-zoom]::view-transition-new(crumbs) {
   color: var(--faint);
 }
 
-/* Hidden children: a round halo behind the bullet, as in Workflowy. Always
-   there, unseen and small while open, so folding grows it and unfolding
-   lets it go. */
-.bullet::before {
+/* Hidden children: a round halo behind the bullet, as in Workflowy. */
+.bullet.collapsed::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -742,15 +651,6 @@ html[data-zoom]::view-transition-new(crumbs) {
   border-radius: 50%;
   background: var(--halo);
   transform: translate(-50%, -50%);
-  opacity: 0;
-  scale: 0.4;
-  pointer-events: none;
-  transition: opacity 140ms var(--ease-out), scale 320ms var(--spring-pop);
-}
-
-.bullet.collapsed::before {
-  opacity: 1;
-  scale: 1;
 }
 
 /* Fold arrow, 23px left of the bullet's centre. While the pointer is over the
@@ -853,13 +753,6 @@ html[data-zoom]::view-transition-new(crumbs) {
 .row.selected .text,
 .row.selected .note {
   user-select: none;
-}
-
-/* A task's text carries an unseen strike, so checking it off fades the line
-   and the ink in rather than snapping. */
-.row.task .text {
-  text-decoration: line-through transparent;
-  transition: color 220ms var(--ease-out), text-decoration-color 220ms var(--ease-out);
 }
 
 /* Completed: struck through and quiet. */
@@ -1524,19 +1417,6 @@ mark,
   }
 }
 
-/* Its time up, it sinks and fades the way it came (Outline.tsx keeps it that long). */
-.toast.leaving {
-  animation: toast-out 180ms var(--ease-out) forwards;
-  pointer-events: none;
-}
-
-@keyframes toast-out {
-  to {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-}
-
 /* Read-only tab: another tab holds the document. */
 .banner {
   display: flex;
@@ -1839,7 +1719,7 @@ mark,
 .swipe-back svg,
 .swipe-back span {
   opacity: 0.5;
-  transition: opacity 120ms, transform 320ms var(--spring-pop);
+  transition: opacity 120ms, transform 160ms var(--ease-out);
 }
 
 .swipe-back.armed svg,
@@ -2969,41 +2849,4 @@ body.is-dragging * {
     padding: 0;
     margin-left: -13px;
   }
-}
-
-/* --- Press ------------------------------------------------------------------ */
-
-/* A pressed control gives at once under the finger or pointer, a little
-   smaller, and springs back when let go, as controls do on Apple's systems.
-   `scale`, not `transform`: it stacks with a control's own transform and
-   stays on the compositor. iOS applies :active only with a touch listener
-   on the page (index.tsx). Last in the file: these transitions replace the
-   controls' own lists, which they repeat. */
-.icon-button,
-.editbar button,
-.button,
-.pending-box,
-.toast-action,
-.toast-link {
-  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), opacity 160ms var(--ease-out), scale 360ms var(--spring);
-}
-
-.icon-button:active,
-.editbar button:active:not(:disabled),
-.button:active:not(:disabled),
-.pending-box:active:not(:disabled),
-.toast-action:active,
-.toast-link:active {
-  scale: 0.94;
-  transition: color 160ms var(--ease-out), background 160ms var(--ease-out), opacity 160ms var(--ease-out), scale 90ms var(--ease-out);
-}
-
-/* A wide button gives less: the same few pixels at its edges. */
-.button:active:not(:disabled) {
-  scale: 0.97;
-}
-
-/* Rows being dragged fade out of the way rather than blink (drag.ts). */
-.row {
-  transition: opacity 160ms var(--ease-out);
 }
