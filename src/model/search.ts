@@ -1,6 +1,6 @@
-import { walkSnapshot, type Doc, type DocListener } from './doc';
+import type { Doc, DocListener } from './doc';
 import { BOLD, ITALIC, LINK, LINK_RE, MARKER, URL, formatFlags, webLinks } from './format';
-import { content, splitTags, tagKey, type TagIndex } from './tags';
+import { content, searchChanges, splitTags, tagKey, walkSearchable, type TagIndex } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
@@ -110,6 +110,8 @@ export const isEmptyQuery = (q: Query) => !q.clauses.length;
 /**
  * Normalized text of every bullet, kept in sync by ops, so a search is a
  * single pass of `includes` over ready strings: no lowercasing per query.
+ * Bullets search must not see (the trash, `#secret` ones with their
+ * insides: tags.ts `searchChanges`) are left out.
  * Built lazily so it never slows down loading: in small slices while the
  * browser is idle (`warmUpInIdle`), and finished on the spot by a search
  * that comes earlier.
@@ -154,7 +156,7 @@ export class TextIndex implements DocListener {
     if (!this.texts) {
       this.texts = new Map();
       this.pending = [];
-      this.doc.walk(this.doc.root, (n) => n.id !== this.doc.root && this.pending!.push(n.id));
+      walkSearchable(this.doc, this.doc.root, (n) => n.id !== this.doc.root && this.pending!.push(n.id));
     }
     return this.texts;
   }
@@ -210,37 +212,23 @@ export class TextIndex implements DocListener {
 
   op(op: Op, doc: Doc): void {
     // Not started yet: it will be built from the doc as it is then. Bullets
-    // still pending get their current text when their turn comes.
+    // still pending get their current text when their turn comes; those
+    // hidden meanwhile (the trash, `#secret`) are skipped then.
     const texts = this.texts;
     if (!texts) return;
-    switch (op.t) {
-      case 'setText':
-      case 'setNote':
-        if (doc.inOutline(op.id)) texts.set(op.id, normalize(content(doc.get(op.id))));
-        break;
-      case 'insert':
-        if (doc.inOutline(op.parent)) walkSnapshot(op.node, (s) => texts.set(s.id, normalize(content(s))));
-        break;
-      case 'remove':
-        walkSnapshot(op.node, (s) => texts.delete(s.id));
-        break;
-      case 'move': {
-        // Across the trash boundary: the subtree enters or leaves the index.
-        const now = doc.inOutline(op.to.parent);
-        if (now === doc.inOutline(op.from.parent)) break;
-        const excluded = this.pending ? (this.excluded ??= new Set()) : null;
-        doc.walk(op.id, (n) => {
-          if (now) {
-            texts.set(n.id, normalize(content(n)));
-            excluded?.delete(n.id);
-          } else {
-            texts.delete(n.id);
-            excluded?.add(n.id);
-          }
-        });
-        break;
-      }
-    }
+    const excluded = this.pending ? (this.excluded ??= new Set()) : null;
+    searchChanges(
+      op,
+      doc,
+      (n) => {
+        texts.set(n.id, normalize(content(n)));
+        excluded?.delete(n.id);
+      },
+      (id) => {
+        texts.delete(id);
+        excluded?.add(id);
+      },
+    );
   }
 }
 

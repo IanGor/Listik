@@ -1,5 +1,6 @@
 import { spliceAll } from '../util/splice';
 import type { Doc, DocListener } from './doc';
+import { searchable } from './tags';
 import type { NodeId, Op, OutlineNode } from './types';
 
 /**
@@ -61,7 +62,8 @@ const PATCH_LIMIT = 16;
  * Matches plus their ancestors up to `top` (the root, or the zoomed-in
  * bullet), and every copy of a bullet on those paths with its own
  * ancestors: a mirror's row shows its original's inside (model/mirrors.ts),
- * so a match there shows under the mirror too. Always includes `top`, so
+ * so a match there shows under the mirror too, unless that copy stands
+ * inside a `#secret` bullet (tags.ts `searchable`). Always includes `top`, so
  * that no matches shows nothing rather than everything.
  */
 export function keepSet(doc: Doc, matches: Iterable<NodeId>, top: NodeId = doc.root): Set<NodeId> {
@@ -70,7 +72,7 @@ export function keepSet(doc: Doc, matches: Iterable<NodeId>, top: NodeId = doc.r
   while (stack.length) {
     for (let p: NodeId | null = stack.pop()!; p !== null && !keep.has(p); p = doc.get(p).parent) {
       keep.add(p);
-      if (doc.hasMirrors(p)) for (const c of doc.copies(p)) if (!keep.has(c)) stack.push(c);
+      if (doc.hasMirrors(p)) for (const c of doc.copies(p)) if (!keep.has(c) && searchable(doc, c)) stack.push(c);
     }
   }
   return keep;

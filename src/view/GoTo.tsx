@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { dayOf, periodName } from '../model/calendar';
 import { findPlaces, meansToday, placeOf, type Place } from '../model/places';
+import { searchable } from '../model/tags';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 
@@ -64,7 +65,7 @@ function Line(props: { o: Outliner }) {
       q.trim()
         ? [...today, ...findPlaces(o.doc, o.text, q, PLACES, skip)]
         : recent
-            .filter((id) => o.doc.has(id) && o.doc.inOutline(id) && !skip?.(id))
+            .filter((id) => o.doc.has(id) && searchable(o.doc, id) && !skip?.(id))
             .slice(0, RECENT)
             .map((id) => placeOf(o.doc, id)),
     );

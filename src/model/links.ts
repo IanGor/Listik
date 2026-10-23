@@ -1,6 +1,7 @@
 import type { Doc } from './doc';
 import { LINK, LINK_RE, MARKER, formatFlags } from './format';
 import { normalize, type TextIndex } from './search';
+import { searchable } from './tags';
 import type { NodeId } from './types';
 
 /**
@@ -9,6 +10,8 @@ import type { NodeId } from './types';
  * any case, ё = е). A link holds the title, not an id: it reads the same
  * while editing, in exports and in another app. Several bullets with the
  * same title: the first in document order wins.
+ * A `#secret` bullet and all inside it are not linked to: links see only
+ * what the text index does (tags.ts `searchable`).
  *
  * Typing `[[` closes the pair; completion offers bullets by title
  * (view/Suggest.tsx); a click on a link zooms into its bullet
@@ -267,10 +270,10 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
       offer({ id, rank, length, updated: null, key: '' }, () => t.slice(0, end));
     }
   } else {
-    // By recency alone, straight from the doc's nodes: the trash and the root are checked only for those kept.
+    // By recency alone, straight from the doc's nodes: the trash, `#secret` and the root are checked only for those kept.
     for (const n of doc.nodes.values()) {
       if (best.length === limit && n.updated <= best[limit - 1].updated!) continue;
-      if (n.id === self || n.id === doc.root || !n.text || !doc.inOutline(n.id)) continue;
+      if (n.id === self || n.id === doc.root || !n.text || !searchable(doc, n.id)) continue;
       offer({ id: n.id, rank: 0, length: 0, updated: n.updated, key: '' }, () => normalize(n.text));
     }
   }
@@ -292,7 +295,7 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
   else {
     for (const n of doc.nodes.values()) {
       if (n.text && (lengths.has(n.text.length) || shifts(n.text, 0) || shifts(n.text, n.text.length - 1))) {
-        if (chosen.has(normalize(titleOf(n.text))) && doc.inOutline(n.id)) same(n.id, normalize(n.text));
+        if (chosen.has(normalize(titleOf(n.text))) && searchable(doc, n.id)) same(n.id, normalize(n.text));
       }
     }
   }

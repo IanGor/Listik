@@ -3327,3 +3327,54 @@ test.describe('at scale', () => {
     expect(ms).toBeLessThan(100);
   });
 });
+
+test.describe('#secret', () => {
+  test('hides a bullet with all inside it from search, tags, links and places; the outline still shows it; erased, all is found again', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.type(' #план');
+    await edit(page, 'Часть первая');
+    await page.keyboard.type(' #secret');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    expect(await outline(page)).toEqual([DEMO[0], '  Часть первая #secret', ...DEMO.slice(2, 4), '  Часть вторая #план', DEMO[5]]);
+
+    const search = page.locator('.search');
+    for (const q of ['#салон', 'Шерер', '#secret', 'Часть первая']) {
+      await search.fill(q);
+      await expect(page.getByText('Ничего не найдено')).toBeVisible();
+      expect(await outline(page)).toEqual([]);
+    }
+    await search.fill('часть');
+    await expect(page.locator('.row')).toHaveCount(2);
+    expect(await outline(page)).toEqual([DEMO[0], '  Часть вторая #план']);
+    await search.press('Escape');
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+
+    // Tags inside are not offered, #secret itself neither.
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' #');
+    await expect(page.getByRole('listbox', { name: 'Теги' })).toBeVisible();
+    expect(await page.getByRole('option').allTextContents()).toEqual(['#план1']);
+    await page.keyboard.type('s');
+    await expect(page.getByRole('listbox', { name: 'Теги' })).toHaveCount(0);
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    // A link offers only the bullet outside.
+    await page.keyboard.type('[[Часть');
+    await expect(page.getByRole('listbox', { name: 'Ссылки' }).getByRole('option')).toHaveText([/^Часть вторая/]);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    // Nor is it a place to go to.
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('часть');
+    await expect(page.getByRole('listbox', { name: 'Места' }).getByRole('option')).toHaveText([/^Часть вторая/]);
+    await page.keyboard.press('Escape');
+
+    await edit(page, 'Часть первая');
+    for (let i = 0; i < ' #secret'.length; i++) await page.keyboard.press('Backspace');
+    await page.keyboard.press('Escape');
+    await search.fill('#салон');
+    await expect(page.locator('.row .text', { hasText: 'Eh bien' })).toBeVisible();
+  });
+});

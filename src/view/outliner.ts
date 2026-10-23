@@ -10,7 +10,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { PendingTasks } from '../model/tasks';
-import { TagIndex, tagText } from '../model/tags';
+import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
@@ -473,9 +473,9 @@ export class Outliner {
     }
   }
 
-  /** A place zoomed into goes first among the recent ones; calendar periods are reached by the logo and ‹ ›. */
+  /** A place zoomed into goes first among the recent ones; calendar periods are reached by the logo and ‹ ›, `#secret` ones through the outline only. */
   private visited(id: NodeId): void {
-    if (periodAt(this.doc, id)) return;
+    if (periodAt(this.doc, id) || !searchable(this.doc, id)) return;
     this.remember(id, this.recentPlaces, this.setRecentPlaces, 'listik-recent');
   }
 
@@ -659,7 +659,7 @@ export class Outliner {
    * its first bullet, or its title, as Alt+→ does.
    */
   goToPlace(id: NodeId, edit: boolean): void {
-    if (!this.doc.has(id) || !this.doc.inOutline(id)) return;
+    if (!this.doc.has(id) || !searchable(this.doc, id)) return;
     this.setPlaceLine(null);
     this.placeBack = null;
     batch(() => {
@@ -972,7 +972,7 @@ export class Outliner {
   private linkTarget(title: string, version: number): NodeId | null {
     const key = normalize(title.trim());
     const hit = this.linkCache.get(key);
-    if (hit?.id && this.doc.has(hit.id) && this.doc.inOutline(hit.id) && normalize(titleOf(this.doc.get(hit.id).text)) === key) return hit.id;
+    if (hit?.id && this.doc.has(hit.id) && searchable(this.doc, hit.id) && normalize(titleOf(this.doc.get(hit.id).text)) === key) return hit.id;
     if (hit && hit.id === null && hit.version === version) return null;
     const id = resolveLink(this.doc, this.text, title);
     this.linkCache.set(key, { id, version });
@@ -1347,7 +1347,8 @@ export class Outliner {
   settleTitle(): void {
     const r = this.retitled;
     this.retitled = null;
-    if (!r || this.readOnly || !this.doc.has(r.id) || !this.doc.inOutline(r.id)) return;
+    // A `#secret` bullet is not linked to (model/tags.ts `searchable`): links naming its old title led elsewhere.
+    if (!r || this.readOnly || !this.doc.has(r.id) || !searchable(this.doc, r.id)) return;
     let result = 0 as number | 'taken';
     const before = r.before;
     this.run((ctx) => {
