@@ -181,3 +181,79 @@ test('the sync state lives in the menu: a dot on its button while changes wait',
   await expect(dot).toHaveCount(0, { timeout: 30_000 });
   await context.close();
 });
+
+test('a log with a gap opens, and the server gives back what the gap took; so does the button in the sync dialog', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const a = await (await browser.newContext()).newPage();
+  await a.goto('/?db=e2e-sync-gap&empty');
+  await a.locator('.row .text').click();
+  await a.keyboard.type('с сервера');
+  await a.waitForTimeout(400);
+  await openSyncDialog(a);
+  await a.locator('.sync-dialog input[type="url"]').fill(SYNC);
+  const passwords = a.locator('.sync-dialog input[type="password"]');
+  await passwords.nth(0).fill(PASS);
+  await passwords.nth(1).fill(PASS);
+  await a.getByRole('button', { name: 'Создать и включить' }).click();
+  await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
+
+  const outbox = () => a.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { openVault } = (await load('/src/sync/setup.ts')) as typeof import('../src/sync/setup.ts');
+    const { dataKey } = (await load('/src/sync/crypto.ts')) as typeof import('../src/sync/crypto.ts');
+    const { readSyncState } = (await load('/src/sync/engine.ts')) as typeof import('../src/sync/engine.ts');
+    const opened = await openVault('e2e-sync-gap');
+    const state = opened.secret ? await readSyncState(opened.db, await dataKey(opened.secret.dek)) : undefined;
+    opened.db.close();
+    return state?.outbox.length ?? -1;
+  });
+  // A new bullet, then an edit of the first one: both on the server.
+  await a.locator('.row .text').first().click();
+  await a.keyboard.press('Control+End');
+  await a.keyboard.press('Enter');
+  await a.keyboard.type('раз');
+  await a.locator('.row .text').first().click();
+  await a.keyboard.press('Control+End');
+  await a.keyboard.type('!');
+  await a.keyboard.press('Escape');
+  await expect.poll(outbox, { timeout: 15_000 }).toBe(0);
+
+  // The batch that inserted the bullet never reached the disk here, as a dropped write left it before.
+  await a.evaluate(async () => {
+    const load = (path: string) => import(/* @vite-ignore */ path);
+    const { openVault } = (await load('/src/sync/setup.ts')) as typeof import('../src/sync/setup.ts');
+    const { dataKey } = (await load('/src/sync/crypto.ts')) as typeof import('../src/sync/crypto.ts');
+    const { encryptedCodec } = (await load('/src/persist/codec.ts')) as typeof import('../src/persist/codec.ts');
+    const { done } = (await load('/src/persist/db.ts')) as typeof import('../src/persist/db.ts');
+    const opened = await openVault('e2e-sync-gap');
+    const codec = encryptedCodec(await dataKey(opened.secret!.dek));
+    const read = opened.db.transaction('oplog').objectStore('oplog');
+    const [keys, records] = await Promise.all([
+      new Promise<IDBValidKey[]>((resolve) => { read.getAllKeys().onsuccess = (e) => resolve((e.target as IDBRequest<IDBValidKey[]>).result); }),
+      new Promise<unknown[]>((resolve) => { read.getAll().onsuccess = (e) => resolve((e.target as IDBRequest<unknown[]>).result); }),
+    ]);
+    let gap: IDBValidKey | null = null;
+    for (let i = 0; i < records.length && gap === null; i++) {
+      if ((await codec.decodeBatch(records[i])).some((op) => op.t === 'insert')) gap = keys[i];
+    }
+    const tx = opened.db.transaction('oplog', 'readwrite');
+    tx.objectStore('oplog').delete(gap!);
+    await done(tx);
+    opened.db.close();
+  });
+
+  await a.reload();
+  await expect(a.locator('.row .text')).toHaveText(['с сервера!']);
+  await expect(a.locator('.toast')).toContainText('не дошла до диска');
+  await a.locator('.toast').getByRole('button', { name: 'Взять с сервера' }).click();
+  await expect(a.locator('.row .text')).toHaveText(['с сервера!', 'раз'], { timeout: 30_000 });
+  await expect(a.locator('.toast')).toContainText('Документ загружен с сервера');
+  await expect(syncOn(a)).toBeVisible();
+
+  // The same by hand: the dialog's button, after a confirmation.
+  a.once('dialog', (d) => void d.accept());
+  await openSyncDialog(a);
+  await a.getByRole('button', { name: 'Загрузить с сервера' }).click();
+  await expect(a.locator('.toast')).toContainText('Документ загружен с сервера', { timeout: 30_000 });
+  await expect(a.locator('.row .text')).toHaveText(['с сервера!', 'раз']);
+});

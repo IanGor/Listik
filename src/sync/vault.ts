@@ -50,3 +50,6 @@ export async function rememberSecret(db: IDBDatabase, secret: Secret): Promise<v
 }
 
 export const forgetSecret = (db: IDBDatabase) => putMeta(db, 'device', undefined);
+/** Set: the next load rebuilds this device's copy from the server's (setup.ts `requestRestore`). */
+export const readRestore = (db: IDBDatabase) => getMeta<true>(db, 'restore');
+export const writeRestore = (db: IDBDatabase, asked: true | undefined) => putMeta(db, 'restore', asked);

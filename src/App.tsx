@@ -3,7 +3,7 @@ import { demoDoc, sampleDoc } from './dev/sample';
 import { Backup } from './persist/backup';
 import { Persistence } from './persist/idb';
 import { acquireWriteLock } from './persist/lock';
-import { codecFor, openVault, startSync, type Opened } from './sync/setup';
+import { codecFor, openVault, requestRestore, restoreFromServer, startSync, takeRestore, type Opened } from './sync/setup';
 import { Outline } from './view/Outline';
 import { Outliner } from './view/outliner';
 import { Restore } from './view/Restore';
@@ -41,6 +41,16 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
     opened.db.close();
     return outliner;
   }
+  // Asked for in the sync dialog (or after a log with a gap): the server's copy replaces this one before it opens.
+  let restored: string | null = null;
+  if (await takeRestore(opened)) {
+    try {
+      await restoreFromServer(opened);
+      restored = 'Документ загружен с сервера';
+    } catch (e) {
+      restored = `Не удалось загрузить с сервера: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
   const started = performance.now();
   let stored: Awaited<ReturnType<typeof Persistence.open>>;
   try {
@@ -69,7 +79,15 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.syncHandle = await startSync(doc, opened, persistence);
   outliner.watchSync();
   outliner.tagYears();
-  if (merged) outliner.notify('Часть прежних правок не дошла до диска: документ собран из сохранённого');
+  if (restored) outliner.notify(restored);
+  else if (merged) {
+    const handle = outliner.syncHandle;
+    // The lost ops may have reached the server (the sync tail is cumulative): its copy is the whole one.
+    outliner.notify(
+      'Часть прежних правок не дошла до диска: документ собран из сохранённого',
+      handle ? { label: 'Взять с сервера', run: () => void requestRestore(handle, persistence, opened).then(() => location.reload()) } : null,
+    );
+  }
   return outliner;
 }
 

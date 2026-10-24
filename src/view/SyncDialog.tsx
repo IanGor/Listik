@@ -1,7 +1,7 @@
 import { Match, Show, Switch, createEffect, createSignal, on } from 'solid-js';
 import { normalizeServer } from '../sync/client';
 import type { SyncStatus } from '../sync/engine';
-import { changePassphrase, createSync, disconnectSync, forgetOnDevice, joinSync } from '../sync/setup';
+import { changePassphrase, createSync, disconnectSync, forgetOnDevice, joinSync, requestRestore } from '../sync/setup';
 import { plural } from '../util/plural';
 import type { Outliner } from './outliner';
 
@@ -102,6 +102,13 @@ export function SyncDialog(props: { o: Outliner }) {
     o.notify('При следующем открытии здесь спросят пароль');
   });
 
+  const restore = attempt(async () => {
+    if (!o.syncHandle || !o.persistence || !o.opened) return;
+    if (!confirm('Заменить документ в этом браузере копией с сервера? Правки, ещё не отправленные туда, сохранятся.')) return;
+    await requestRestore(o.syncHandle, o.persistence, o.opened);
+    location.reload();
+  });
+
   const disconnect = attempt(async () => {
     if (!o.syncHandle || !o.persistence || !o.opened) return;
     if (!confirm('Отключить синхронизацию в этом браузере? Документ останется здесь и на сервере, но перестанет обновляться.')) return;
@@ -153,6 +160,7 @@ export function SyncDialog(props: { o: Outliner }) {
                   <button type="button" class="button" disabled={busy()} onClick={() => void h().engine.sync().catch(() => {})}>Синхронизировать сейчас</button>
                   <button type="button" class="button" onClick={() => setMode(mode() === 'change' ? 'create' : 'change')}>Сменить пароль</button>
                   <button type="button" class="button" disabled={busy()} onClick={(e) => void forget(e)}>Забыть пароль здесь</button>
+                  <button type="button" class="button" disabled={busy()} onClick={(e) => void restore(e)}>Загрузить с сервера</button>
                   <button type="button" class="button danger" disabled={busy()} onClick={(e) => void disconnect(e)}>Отключить</button>
                 </div>
                 <Show when={mode() === 'change'}>

@@ -6,7 +6,8 @@ import { HttpError, httpTransport, normalizeServer, type Transport } from './cli
 import { createKeyslot, dataKey, deriveKek, newDocId, openKeyslot, rewrapKeyslot, tokenFromKek, type Keyslot } from './crypto';
 import { SyncEngine, bootstrap, writeSyncState, type StateStore } from './engine';
 import {
-  forgetSecret, readKeyslot, readSyncConfig, recallSecret, rememberSecret, writeKeyslot, writeSyncConfig, type Secret, type SyncConfig,
+  forgetSecret, readKeyslot, readRestore, readSyncConfig, recallSecret, rememberSecret, writeKeyslot, writeRestore, writeSyncConfig,
+  type Secret, type SyncConfig,
 } from './vault';
 
 /**
@@ -152,6 +153,26 @@ export async function restoreFromServer(opened: Opened): Promise<void> {
   if (!config || !secret) throw new Error('Синхронизация на этом устройстве не настроена');
   const key = await dataKey(secret.dek);
   await bootstrap(db, encryptedCodec(key), key, config.docId, httpTransport(config.server, config.docId, secret.token));
+}
+
+/**
+ * Asks for this browser's copy to be rebuilt from the server's on the next
+ * load (`takeRestore`, then `restoreFromServer`), before anything opens the
+ * store: done on a live page, the page's own writes (a late batch of the
+ * log, the sync state) could land on top of the server's snapshot before the
+ * reload. What is not on disk yet goes first. Reload after.
+ */
+export async function requestRestore(handle: SyncHandle, persistence: Persistence, opened: Opened): Promise<void> {
+  await handle.engine.flush();
+  await persistence.flush();
+  await writeRestore(opened.db, true);
+}
+
+/** Was a rebuild from the server asked for, and can this device do it? The request is used up either way. */
+export async function takeRestore(opened: Opened): Promise<boolean> {
+  if (!(await readRestore(opened.db))) return false;
+  await writeRestore(opened.db, undefined);
+  return !!opened.config && !!opened.secret;
 }
 
 /** The passphrase will be asked on the next load of this document here. */
