@@ -60,7 +60,11 @@
      the browser's 13px default. `--font-scale` is the text size picked in
      the menu (view/textsize.ts); it scales the outline, not the chrome. */
   --font-scale: 1;
-  --font-size: calc(17px * var(--font-scale));
+  /* Dynamic Type: on an iPad or iPhone, the text size picked in the system's
+     Settings, relative to its default (textsize.ts `followSystemSize`). */
+  --system-scale: 1;
+  --text-scale: calc(var(--font-scale) * var(--system-scale));
+  --font-size: calc(17px * var(--text-scale));
   --line-height: 1.53;
   /* Indent per nesting level in px, after Workflowy; the text column in
      character cells. The height estimate in Outline.tsx measures --indent and
@@ -735,7 +739,7 @@ kbd {
 /* A note under the bullet: smaller, quieter, may span lines. Notes size is
    mirrored by NOTE_SCALE in Outline.tsx. */
 .note {
-  font-size: calc(14px * var(--font-scale));
+  font-size: calc(14px * var(--text-scale));
   line-height: 1.5;
   color: var(--muted);
   white-space: pre-wrap;
@@ -987,7 +991,7 @@ mark,
 
 .zoom-title {
   min-height: 1lh;
-  font-size: calc(28px * var(--font-scale));
+  font-size: calc(28px * var(--text-scale));
   font-weight: 600;
   line-height: 1.25;
   letter-spacing: -0.02em;
@@ -1113,7 +1117,7 @@ mark,
 /* Phones. The width is mirrored by view/screen.ts. */
 @media (max-width: 640px) {
   :root {
-    --font-size: calc(16px * var(--font-scale));
+    --font-size: calc(16px * var(--text-scale));
     --indent: 28px;
     /* Deeper than 4 levels, 12px a level: at depth 10 the text still has
        ~12 characters, not one letter a line. */
@@ -1158,7 +1162,7 @@ mark,
   }
 
   .zoom-title {
-    font-size: calc(24px * var(--font-scale));
+    font-size: calc(24px * var(--text-scale));
   }
 
   .shortcuts-body,
@@ -2691,7 +2695,7 @@ body.is-dragging * {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: calc(14px * var(--font-scale));
+  font-size: calc(14px * var(--text-scale));
   line-height: 1.5;
 }
 

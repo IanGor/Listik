@@ -1823,6 +1823,16 @@ test.describe('text size', () => {
     await expect(page.getByRole('button', { name: 'Мельче' })).toBeDisabled();
     expect(await fontSize(page)).toBe('14.45px');
   });
+
+  test("the system's text size (Dynamic Type on an iPad) scales the outline under the menu's", async ({ page }) => {
+    // What followSystemSize sets on an iPad whose Settings ask for 20px body text.
+    await page.evaluate(() => document.documentElement.style.setProperty('--system-scale', String(20 / 17)));
+    expect(await fontSize(page)).toBe('20px');
+    await menu(page).click();
+    await page.getByRole('button', { name: 'Крупнее' }).click();
+    expect(await fontSize(page)).toBe('23px');
+    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('15px');
+  });
 });
 
 test.describe('phone screen', () => {

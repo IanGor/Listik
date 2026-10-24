@@ -3,8 +3,11 @@ import { render } from 'solid-js/web'
 import './index.css'
 import App from './App.tsx'
 import { watchPointer } from './view/screen'
+import { followSystemSize } from './view/textsize'
 
 const root = document.getElementById('root')
+
+followSystemSize()
 
 render(() => <App />, root!)
 watchPointer()
