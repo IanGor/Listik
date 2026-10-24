@@ -1462,6 +1462,37 @@ test.describe('done and notes', () => {
     expect(Date.now() - last).toBeGreaterThanOrEqual(2900);
   });
 
+  test('a checked task moved by hand while it waits stays where it was put; gone last, it moves by hand freely and stays', async ({ page }) => {
+    await edit(page, 'Так говорила');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Третий');
+    const order = [DEMO[0], DEMO[1], DEMO[2], DEMO[3], '    Третий', DEMO[4], DEMO[5]];
+    expect(await outline(page)).toEqual(order);
+    // Checked, then moved down one place at once: it stays there, not last.
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Alt+Shift+ArrowDown');
+    const placed = [DEMO[0], DEMO[1], DEMO[3], DEMO[2], '    Третий', DEMO[4], DEMO[5]];
+    expect(await outline(page)).toEqual(placed);
+    await page.waitForTimeout(3500);
+    expect(await outline(page)).toEqual(placed);
+    await expect(page.locator('.row', { hasText: 'Eh bien' })).toHaveClass(/done/);
+    // Another one checked goes last once; moved up by hand, it is not pulled back down.
+    await edit(page, 'Так говорила');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
+    const sunk = [DEMO[0], DEMO[1], DEMO[2], '    Третий', DEMO[3], DEMO[4], DEMO[5]];
+    await expect.poll(() => outline(page), { timeout: 5000 }).toEqual(sunk);
+    await edit(page, 'Так говорила');
+    await page.keyboard.press('Alt+Shift+ArrowUp');
+    await page.keyboard.press('Alt+Shift+ArrowUp');
+    const up = [DEMO[0], DEMO[1], DEMO[3], DEMO[2], '    Третий', DEMO[4], DEMO[5]];
+    expect(await outline(page)).toEqual(up);
+    await page.waitForTimeout(3500);
+    expect(await outline(page)).toEqual(up);
+  });
+
   test('Ctrl+L checking off the task being edited: it goes last, the caret stays in the row come up in its place; one Ctrl+Z brings it back unchecked', async ({ page }) => {
     await edit(page, 'Eh bien');
     await page.keyboard.press('Control+l');

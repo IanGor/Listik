@@ -28,11 +28,13 @@ export const SINK_DELAY = 3000;
 
 /**
  * Tasks just checked off (`Outliner.changeTasks`): the ops that checked them,
- * the bullets to go last, and, once they went, the ops that moved them.
+ * the bullets to go last and where each stood then, and, once they went, the
+ * ops that moved them.
  */
 interface Sinking {
   ops: Op[];
   ids: NodeId[];
+  at: Map<NodeId, { parent: NodeId | null; order: string }>;
   moved: Op[];
 }
 
@@ -1097,14 +1099,16 @@ export class Outliner {
     }
     const sink = [...new Set(ids.map(nodeOf))].filter((id) => checked.has(this.doc.content(id).id));
     if (!sink.length) return;
-    const entry: Sinking = { ops, ids: sink, moved: [] };
+    const at = new Map(sink.map((id) => [id, { parent: this.doc.get(id).parent, order: this.doc.get(id).order }]));
+    const entry: Sinking = { ops, ids: sink, at, moved: [] };
     for (const id of checked) this.lastCheck.set(id, entry);
     setTimeout(() => this.sink(entry), SINK_DELAY);
   }
 
   /**
    * Checked-off tasks go last among their siblings (model/commands.ts
-   * `sinkDone`), unless unchecked, checked again since or gone meanwhile;
+   * `sinkDone`), once, unless unchecked, checked again since, gone or moved
+   * by hand meanwhile (the place chosen stays);
    * still the last step, the check takes the move into its undo. A caret in
    * one stays where it was in the list, on the row that comes up in its
    * place. Then the toast "Выполнено": its "Отменить" brings them back
@@ -1113,6 +1117,9 @@ export class Outliner {
   private sink(entry: Sinking): void {
     const ids = entry.ids.filter((id) => {
       if (!this.doc.has(id) || !this.doc.inOutline(id)) return false;
+      const { parent, order } = this.doc.get(id);
+      const was = entry.at.get(id)!;
+      if (parent !== was.parent || order !== was.order) return false;
       const n = this.doc.content(id);
       return n.done && this.lastCheck.get(n.id) === entry;
     });
