@@ -58,6 +58,19 @@ export class History {
     this.typing = opts.typing ? { entry, time: now } : null;
   }
 
+  /**
+   * The step that recorded `ops`, while it is still the last one, takes
+   * `more` too (one undo for both); otherwise false, and nothing changes.
+   */
+  extend(ops: Op[], more: Op[]): boolean {
+    const last = this.undoStack[this.undoStack.length - 1];
+    if (last?.ops !== ops || !more.length) return false;
+    // A new array: the one recorded may be held elsewhere (the journal, a toast).
+    last.ops = [...ops, ...more];
+    this.typing = null;
+    return true;
+  }
+
   undo(doc: Doc): HistoryEntry | null {
     const e = this.undoStack.pop();
     if (!e) return null;

@@ -255,6 +255,30 @@ export function checkOff({ doc }: Ctx, key: RowKey): void {
 }
 
 /**
+ * Checked-off tasks go last among their siblings, with all they hold, in
+ * the order they stand; ones already last there stay. A mirror copy goes
+ * last where it lies.
+ */
+export function sinkDone({ doc, rows }: Ctx, ids: NodeId[]): void {
+  const byParent = new Map<NodeId, NodeId[]>();
+  for (const id of new Set(ids)) {
+    const p = doc.get(id).parent!;
+    byParent.set(p, [...(byParent.get(p) ?? []), id]);
+  }
+  if (ids.length > 2) rows.expectMany();
+  for (const [parent, group] of byParent) {
+    const kids = doc.get(parent).children;
+    group.sort((a, b) => kids.indexOf(a) - kids.indexOf(b));
+    if (group.every((id, i) => kids[kids.length - group.length + i] === id)) continue;
+    const orders = doc.ordersAt(parent, kids.length, group.length);
+    group.forEach((id, i) => {
+      const n = doc.get(id);
+      doc.apply({ t: 'move', id, from: { parent, order: n.order }, to: { parent, order: orders[i] } });
+    });
+  }
+}
+
+/**
  * Folds the row's bullet. Each copy folds on its own (model/mirrors.ts), and
  * so do the bullets shown under it: under a mirror the fold is the place's
  * (`VisibleRows.setFold`, kept by the view, never an op); elsewhere it is the

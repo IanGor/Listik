@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { indent, setNote, setText, split } from '../src/model/commands';
+import { indent, setNote, setText, sinkDone, split, toggleDone } from '../src/model/commands';
 import { History, focusAfter } from '../src/model/history';
 import { dump, setup } from './helpers';
 
@@ -15,6 +15,24 @@ function typeInto(env: ReturnType<typeof setup>, history: History, id: string, t
 }
 
 describe('History', () => {
+  it('a step still the last one takes more ops into its undo; once another came, it does not', () => {
+    const env = setup(['a', 'b', 'c']);
+    const history = new History();
+    const check = env.doc.transact(() => toggleDone(env.ctx, ['a']));
+    history.record({ ops: check, before: null, after: null });
+    const sunk = env.doc.transact(() => sinkDone(env.ctx, ['a']));
+    expect(history.extend(check, sunk)).toBe(true);
+    expect(check).toHaveLength(1);
+    expect(dump(env.doc)).toEqual(['b', 'c', 'a']);
+    history.undo(env.doc);
+    expect(dump(env.doc)).toEqual(['a', 'b', 'c']);
+    expect(env.doc.get('a').done).toBe(false);
+    const again = env.doc.transact(() => toggleDone(env.ctx, ['a']));
+    history.record({ ops: again, before: null, after: null });
+    history.record({ ops: env.doc.transact(() => setText(env.ctx, 'b', 'bb')), before: null, after: null });
+    expect(history.extend(again, env.doc.transact(() => sinkDone(env.ctx, ['a'])))).toBe(false);
+  });
+
   it('groups a typed word into one step and puts the caret back where typing started', () => {
     const env = setup(['x']);
     const history = new History();

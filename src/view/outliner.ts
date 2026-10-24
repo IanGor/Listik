@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
-import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -22,6 +22,20 @@ import type { Opened, SyncHandle } from '../sync/setup';
 import { selectionIn } from './caret';
 import { NodeSignals } from './node-signals';
 import { narrow } from './screen';
+
+/** A task checked off stays struck through where it is this long, then goes last among its siblings, ms. */
+export const SINK_DELAY = 1500;
+
+/**
+ * Tasks just checked off (`Outliner.changeTasks`): the ops that checked them,
+ * the bullets to go last, the wait, and, once they went, the ops that moved them.
+ */
+interface Sinking {
+  ops: Op[];
+  ids: NodeId[];
+  timer: ReturnType<typeof setTimeout> | null;
+  moved: Op[];
+}
 
 /** While a bullet is being edited at midnight, the new day waits this long and is tried again, ms. */
 const MIDNIGHT_RETRY = 60_000;
@@ -996,11 +1010,11 @@ export class Outliner {
     return id;
   }
 
-  /** The checkbox of the task shown under a row: checked; the next open one takes its place there. */
+  /** The checkbox of the task shown under a row: checked (and on its way last, `changeTasks`); the next open one takes its place there. */
   completeTask(task: NodeId): void {
     const n = this.doc.nodes.get(task);
     if (!n || !n.todo || n.done) return;
-    this.run(({ doc }) => doc.apply({ t: 'setDone', id: task, from: false, to: true }), this.keepFocus());
+    this.changeTasks(({ doc }) => doc.apply({ t: 'setDone', id: task, from: false, to: true }), [task], this.keepFocus());
   }
 
   /** The text of the task shown under a row (or the "Inbox" of a capture's toast): to where it is, the caret at its end. */
@@ -1065,9 +1079,55 @@ export class Outliner {
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }
 
-  /** Applies a change to tasks: completed ones stay where they are, struck through. */
+  /**
+   * Applies a change to tasks. Ones it checked off stay struck through where
+   * they are for a moment (`SINK_DELAY`), then go last among their siblings
+   * (`sink`); the toast takes the check back, and them to where they were.
+   */
   private changeTasks(cmd: (ctx: Ctx) => void, ids: RowKey[], keep?: Focus): void {
-    if (ids.length) this.run(cmd, keep);
+    if (!ids.length) return;
+    const ops = this.run(cmd, keep);
+    const checked = new Set(ops.flatMap((op) => (op.t === 'setDone' && op.to ? [op.id] : [])));
+    const sink = [...new Set(ids.map(nodeOf))].filter((id) => checked.has(this.doc.content(id).id));
+    if (!sink.length) return;
+    const entry: Sinking = { ops, ids: sink, timer: null, moved: [] };
+    entry.timer = setTimeout(() => this.sink(entry), SINK_DELAY);
+    const n = checked.size;
+    this.notify(n > 1 ? `${n} ${plural(n, 'пункт выполнен', 'пункта выполнены', 'пунктов выполнены')}` : 'Выполнено', {
+      label: 'Отменить',
+      run: () => this.unsink(entry),
+    });
+  }
+
+  /**
+   * Checked-off tasks go last among their siblings (model/commands.ts
+   * `sinkDone`), unless unchecked or gone meanwhile; still the last step,
+   * the check takes the move into its undo. A caret in one stays where it
+   * was in the list, on the row that comes up in its place.
+   */
+  private sink(entry: Sinking): void {
+    entry.timer = null;
+    const ids = entry.ids.filter((id) => this.doc.has(id) && this.doc.inOutline(id) && this.doc.content(id).done);
+    if (this.readOnly || !ids.length) return;
+    batch(() => {
+      const cur = this.focus();
+      const at = cur ? this.rows.indexOf(cur.id) : -1;
+      const leaving = cur !== null && ids.some((id) => this.doc.within(nodeOf(cur.id), id));
+      entry.moved = this.doc.transact(() => sinkDone(this.ctx, ids));
+      if (!entry.moved.length) return;
+      if (!this.history.extend(entry.ops, entry.moved)) this.history.record({ ops: entry.moved, before: null, after: null });
+      if (this.selection()) this.select(null);
+      if (leaving) {
+        const key = at >= 0 ? this.rows.ids[Math.min(at, this.rows.length - 1)] : undefined;
+        this.setFocus(key ? { id: key, caret: 0 } : null);
+      }
+    });
+  }
+
+  /** The toast's "Отменить" for a check: the task unchecked, back where it was if it went last already. */
+  private unsink(entry: Sinking): void {
+    if (entry.timer) clearTimeout(entry.timer);
+    this.takeBack([...entry.ops, ...entry.moved], 'Выполнение отменено');
   }
 
   /** Shows a message for a few seconds. */

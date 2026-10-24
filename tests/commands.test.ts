@@ -6,6 +6,7 @@ import {
 import * as cmd from '../src/model/commands';
 import { checkInvariants } from '../src/model/invariants';
 import { markdownOf, parseIndented } from '../src/model/outline-text';
+import { VisibleRows } from '../src/model/rows';
 import { dump, dumpRows, setup } from './helpers';
 
 describe('split (Enter)', () => {
@@ -193,6 +194,24 @@ describe('collapseChildren (the logo)', () => {
     run(() => collapseChildren(ctx, doc.root));
     expect(dumpRows(rows, doc)).toEqual(['a [+]', 'd', 'e [+]']);
     expect(doc.get('b').collapsed).toBe(false);
+  });
+});
+
+describe('sinkDone (a task checked off goes last)', () => {
+  it('goes last among its siblings with all it holds; several keep their order; one already last stays', () => {
+    const { doc, rows, ctx, run } = setup(['p', '  a', '    a1', '  b', '  c', '  d', 'q']);
+    expect(doc.transact(() => cmd.sinkDone(ctx, ['a']))).toHaveLength(1);
+    expect(dumpRows(rows, doc)).toEqual(['p', '  b', '  c', '  d', '  a', '    a1', 'q']);
+    run(() => cmd.sinkDone(ctx, ['c', 'b']));
+    expect(dump(doc)).toEqual(['p', '  d', '  a', '    a1', '  b', '  c', 'q']);
+    expect(doc.transact(() => cmd.sinkDone(ctx, ['c']))).toEqual([]);
+    expect(doc.transact(() => cmd.sinkDone(ctx, ['b', 'c']))).toEqual([]);
+    // Each under its own parent.
+    run(() => cmd.sinkDone(ctx, ['d', 'a1', 'p']));
+    expect(dump(doc)).toEqual(['q', 'p', '  a', '    a1', '  b', '  c', '  d']);
+    checkInvariants(doc);
+    const fresh = new VisibleRows(doc);
+    expect(fresh.ids).toEqual(rows.ids);
   });
 });
 

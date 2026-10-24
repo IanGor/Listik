@@ -1415,6 +1415,41 @@ test.describe('done and notes', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('a task checked off stays a moment, struck through, then goes last among its siblings; the toast takes it back where it was', async ({ page }) => {
+    const row = page.locator('.row', { hasText: 'Eh bien' });
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Escape');
+    await row.locator('.bullet').click();
+    await expect(row).toHaveClass(/done/);
+    await expect(page.locator('.toast')).toContainText('Выполнено');
+    expect(await outline(page)).toEqual(DEMO);
+    const sunk = [DEMO[0], DEMO[1], DEMO[3], DEMO[2], DEMO[4], DEMO[5]];
+    await expect.poll(() => outline(page)).toEqual(sunk);
+    await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    await expect(row).not.toHaveClass(/done/);
+    await expect(row.locator('.bullet')).toHaveClass(/todo/);
+    // Unchecked before its time: it stays.
+    await row.locator('.bullet').click();
+    await row.locator('.bullet').click();
+    await page.waitForTimeout(1800);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('Ctrl+L checking off the task being edited: it goes last, the caret stays in the row come up in its place; one Ctrl+Z brings it back unchecked', async ({ page }) => {
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Control+l');
+    await expect.poll(() => outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[3], DEMO[2], DEMO[4], DEMO[5]]);
+    await expect(editing(page)).toContainText('Анна Павловна');
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(DEMO);
+    const row = page.locator('.row', { hasText: 'Eh bien' });
+    await expect(row).not.toHaveClass(/done/);
+    await expect(row.locator('.bullet')).toHaveClass(/todo/);
+  });
+
   test('Shift+Enter writes a note under the bullet; Esc and arrows move between text and note', async ({ page }) => {
     await edit(page, 'Том второй');
     await page.keyboard.press('Shift+Enter');
