@@ -235,7 +235,7 @@ describe('a search through mirrors', () => {
     expect(rows.contains('task #x')).toBe(false);
     expect(rows.reaches('task #x')).toBe(true);
     expect(rows.reaches('other')).toBe(true);
-    rows.setFilter({ keep: keepSet(doc, ['task #x'], 'day'), open: new Set() });
+    rows.setFilter({ keep: keepSet(doc, ['task #x'], 'day'), open: new Set(), shut: new Set() });
     expect(rows.ids).toEqual(['m', 'm/task #x']);
   });
 
@@ -244,7 +244,7 @@ describe('a search through mirrors', () => {
     rows.setTop('project');
     expect(rows.reaches('t #x')).toBe(true);
     expect(rows.reaches('inbox')).toBe(false);
-    rows.setFilter({ keep: keepSet(doc, ['t #x'], 'project'), open: new Set() });
+    rows.setFilter({ keep: keepSet(doc, ['t #x'], 'project'), open: new Set(), shut: new Set() });
     expect(rows.ids).toEqual(['m']);
   });
 
@@ -252,7 +252,7 @@ describe('a search through mirrors', () => {
     const { doc, ctx, rows, run } = mirrored(['day', '  m', 'a', '  m2', 'b', '  c #x'], { m: 'a', m2: 'b' });
     rows.setTop('day');
     expect(rows.reaches('c #x')).toBe(true);
-    rows.setFilter({ keep: keepSet(doc, ['c #x'], 'day'), open: new Set() });
+    rows.setFilter({ keep: keepSet(doc, ['c #x'], 'day'), open: new Set(), shut: new Set() });
     expect(rows.ids).toEqual(['m', 'm/m2', 'm/m2/c #x']);
     // Enter at the end of the match: the new bullet is the original's, and its row shows under the mirrors.
     const f = run(() => cmd.split(ctx, 'm/m2/c #x', 'c #x'.length));
@@ -385,8 +385,8 @@ describe('a mirror shows the subtree of its original', () => {
         // Zoomed into h, whose mirror m3 shows g, whose mirror m2 shows e: f matches there only through them.
         if (mode === 'filter-mirror') rows.setTop('h');
         const filter = mode === 'filter'
-          ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']) }
-          : mode === 'filter-mirror' ? { keep: keepSet(doc, ['f'], 'h'), open: new Set<NodeId>(['h', 'm3']) } : null;
+          ? { keep: new Set(['root', 'top', 'a', 'd #x']), open: new Set<NodeId>(['top']), shut: new Set<NodeId>() }
+          : mode === 'filter-mirror' ? { keep: keepSet(doc, ['f'], 'h'), open: new Set<NodeId>(['h', 'm3']), shut: new Set<NodeId>() } : null;
         if (filter) rows.setFilter(filter);
         const initial = dump(doc);
         const history: Op[][] = [];
@@ -414,6 +414,8 @@ describe('a mirror shows the subtree of its original', () => {
             () => cmd.moveManyTo(ctx, [key], pick(rows.ids), null),
             () => (rows.length > 4 ? cmd.toggleDone(ctx, [key]) : undefined),
             () => doc.apply({ t: 'setMirror', id: n.id, from: n.mirrorOf, to: null }),
+            // Folding by hand under the filter: the filter stays, the rows follow.
+            () => rows.foldOnPath(n.id, rows.unfolded(key)),
           ]);
           let focus: Focus | string | void;
           history.push(doc.transact(() => { focus = action(); }));

@@ -1300,7 +1300,7 @@ export class Outliner {
     const id = nodeOf(key);
     if (this.rows.onPath(id)) {
       batch(() => {
-        this.rows.setOpen(id, folded === undefined ? !this.rows.isOpen(id) : !folded);
+        this.rows.foldOnPath(id, folded ?? this.rows.unfolded(key));
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
@@ -1575,8 +1575,8 @@ export class Outliner {
         // inside shows, as below a match, rather than nothing. Found inside too (a tag in its note and its rows), the list narrows.
         const self = zoom !== null && matches.has(zoom) && matches.size === 1;
         this.rows.setFilter(self
-          ? { keep: new Set([zoom]), open: new Set([zoom]) }
-          : { keep: keepSet(this.doc, matches, this.rows.top), open: new Set() });
+          ? { keep: new Set([zoom]), open: new Set([zoom]), shut: new Set() }
+          : { keep: keepSet(this.doc, matches, this.rows.top), open: new Set(), shut: new Set() });
         this.setFilterSignal({ query, matches, count: matches.size });
         this.setFocus(null);
       }

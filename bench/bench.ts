@@ -127,7 +127,7 @@ async function modelPass(page: Page, n: number) {
 
     // Filter by the most frequent tag, then search.
     const [topTag, topCount] = [...tags.counts()].sort((a, b) => b[1] - a[1])[0];
-    const filterMs = time(() => rows.setFilter({ keep: keepSet(doc, tags.nodesWith(topTag)), open: new Set() }));
+    const filterMs = time(() => rows.setFilter({ keep: keepSet(doc, tags.nodesWith(topTag)), open: new Set(), shut: new Set() }));
     const filterRows = rows.length;
     const clearMs = time(() => rows.setFilter(null));
     const searches = ['наташа смотрел', 'бородино', '"тихо быстро"', `#${topTag} кутузов`, 'а'].map((q) => {
@@ -135,7 +135,7 @@ async function modelPass(page: Page, n: number) {
       const findMs = time(() => { count = findMatches(parseQuery(q), tags, text, doc).size; });
       const ms = time(() => {
         const m = findMatches(parseQuery(q), tags, text, doc);
-        rows.setFilter({ keep: keepSet(doc, m), open: new Set() });
+        rows.setFilter({ keep: keepSet(doc, m), open: new Set(), shut: new Set() });
       });
       rows.setFilter(null);
       return { q, count, findMs, ms };

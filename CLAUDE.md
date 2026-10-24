@@ -38,7 +38,7 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифты — **толь
   - `doc.ts` — `Doc`, `apply(op)`, `transact`, `invert`, `walkSnapshot`;
   - `types.ts` — `OutlineNode`, `NodeSnapshot`, `Op`, `Focus`;
   - `commands.ts` — все команды правки;
-  - `rows.ts` — `VisibleRows`: плоский pre-order список видимых строк по ключам `RowKey` (`nodeOf`, `contextOf`, `keyIn`, `locate`, `parentKey`, `host`), фильтр (`Filter{keep,open}`, `keepSet`), zoom (`top`), своя свёрнутость под каждым зеркалом (`folds`, `folded`, `setFold`, `freeze`);
+  - `rows.ts` — `VisibleRows`: плоский pre-order список видимых строк по ключам `RowKey` (`nodeOf`, `contextOf`, `keyIn`, `locate`, `parentKey`, `host`), фильтр (`Filter{keep,open,shut}`, `keepSet`, `foldOnPath`), zoom (`top`), своя свёрнутость под каждым зеркалом (`folds`, `folded`, `setFold`, `freeze`);
   - `tags.ts` — `TagIndex` (`nodesWithPrefix`: тег в поиске совпадает по началу), `content(n)` = текст + заметка; теги `#имя` (ключ «имя») и `@имя` (ключ «@имя»): `tagKey`, `tagText`; `#secret` (`isSecret`, `searchable`, `walkSearchable`, `searchChanges` — что видят оба индекса);
   - `calendar.ts` — структура PARA и календарь: Inbox, `@q1`–`@q4`, Projects, Hubs, Reference, Archive (`STRUCTURE`, `createStructure`); `@q4` → `@y26` → `@m10` → `@w43` (ISO) → день `@d19 @m10 @y26 @понедельник`; год целиком (`yearTree`, `addYear`), шаблон дня при первом входе (`fillDay`: `#notes` и `todo` с пустым пунктом без чекбокса, 09:00–18:00); `periodAt`/`findPeriod` (по тегам и окружению, не по месту), `neighbour`;
   - `time.ts` — `/time` → время устройства `ЧЧ:ММ` (`Outliner.insert`);

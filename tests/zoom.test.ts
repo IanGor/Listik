@@ -86,9 +86,9 @@ describe('zoom', () => {
     const { doc, rows } = zoomed('a');
     const tags = new TagIndex(doc);
     const inside = [...tags.nodesWith('x')].filter((id) => rows.contains(id));
-    rows.setFilter({ keep: keepSet(doc, inside, rows.top), open: new Set() });
+    rows.setFilter({ keep: keepSet(doc, inside, rows.top), open: new Set(), shut: new Set() });
     expect(dumpRows(rows, doc)).toEqual(['b [+]', '  c #x']);
-    rows.setFilter({ keep: keepSet(doc, [], rows.top), open: new Set() });
+    rows.setFilter({ keep: keepSet(doc, [], rows.top), open: new Set(), shut: new Set() });
     expect(rows.length).toBe(0);
   });
 

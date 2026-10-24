@@ -459,10 +459,26 @@ test.describe('tag filter', () => {
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('a folded path bullet opens within the filter without touching the document', async ({ page }) => {
+  test('a path bullet folds and unfolds within the filter without touching the document; Ctrl+↓ shows all inside', async ({ page }) => {
     await page.locator('.tag', { hasText: '#салон' }).click();
-    await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').click();
+    const part = page.locator('.row', { hasText: 'Часть первая' });
+    // Folded by its arrow: the search stays, the bullet shows nothing inside.
+    await part.locator('.toggle').click();
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1]]);
+    await expect(page.locator('.search')).toHaveValue('#салон');
+    await expect(page.locator('.crumbbar .count')).toHaveText('1 пункт');
+    await expect(part.locator('.bullet')).toHaveClass(/collapsed/);
+    await page.locator('.row', { hasText: 'Том первый' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual([DEMO[0]]);
+    // Unfolded again: back to the path to what was found, not everything inside.
+    await page.locator('.row', { hasText: 'Том первый' }).locator('.toggle').click();
+    await part.locator('.toggle').click();
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2]]);
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+ArrowDown');
     expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[2], DEMO[3]]);
+    await page.keyboard.press('Control+ArrowUp');
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1]]);
     await page.locator('.searchbar .clear').click();
     expect(await outline(page)).toEqual(DEMO);
   });

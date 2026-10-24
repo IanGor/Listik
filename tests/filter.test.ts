@@ -9,7 +9,7 @@ import { dumpRows, rng, setup } from './helpers';
 function filtered(lines: string[], tag: string) {
   const env = setup(lines);
   const index = new TagIndex(env.doc);
-  const filter: Filter = { keep: keepSet(env.doc, index.nodesWith(tag)), open: new Set() };
+  const filter: Filter = { keep: keepSet(env.doc, index.nodesWith(tag)), open: new Set(), shut: new Set() };
   env.rows.setFilter(filter);
   return { ...env, filter };
 }
@@ -27,12 +27,36 @@ describe('filter by tag', () => {
 
   it('opening a bullet on the path shows all its children; the doc is untouched', () => {
     const { doc, rows } = filtered(DOC, 'x');
-    rows.setOpen('b #x', true);
-    rows.setOpen('a', true);
+    rows.foldOnPath('b #x', false);
+    rows.foldOnPath('a', false);
     expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', '    c', '  d', 'e', '  f #x']);
-    rows.setOpen('a', false);
+    expect([...doc.nodes.values()].some((n) => n.collapsed)).toBe(false);
+  });
+
+  it('a bullet on the path folds and unfolds back to the path, the filter kept', () => {
+    const { doc, rows } = filtered(DOC, 'x');
+    rows.foldOnPath('a', true);
+    expect(dumpRows(rows, doc)).toEqual(['a', 'e', '  f #x']);
+    expect(rows.unfolded('a')).toBe(false);
+    expect(rows.hasHiddenChildren('a')).toBe(true);
+    rows.foldOnPath('a', false);
+    expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', 'e', '  f #x']);
+    // Opened to all its children, it folds too, and unfolds back to the path.
+    rows.foldOnPath('a', false);
+    rows.foldOnPath('b #x', false);
+    expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', '    c', '  d', 'e', '  f #x']);
+    rows.foldOnPath('a', true);
+    expect(dumpRows(rows, doc)).toEqual(['a', 'e', '  f #x']);
+    rows.foldOnPath('a', false);
     expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', '    c', 'e', '  f #x']);
     expect([...doc.nodes.values()].some((n) => n.collapsed)).toBe(false);
+  });
+
+  it('a bullet moved into one folded under the filter unfolds it', () => {
+    const { doc, rows, ctx, run } = filtered(DOC, 'x');
+    rows.foldOnPath('a', true);
+    run(() => cmd.indent(ctx, 'e'));
+    expect(dumpRows(rows, doc)).toEqual(['a', '  b #x', '  e', '    f #x']);
   });
 
   it('shows nothing when nothing matches', () => {
@@ -76,7 +100,7 @@ describe('filter by tag', () => {
         const id = pick(rows.ids);
         const n = doc.get(id);
         if (rand() < 0.1) {
-          rows.setOpen(id, !rows.isOpen(id));
+          rows.foldOnPath(id, rand() < 0.5);
           continue;
         }
         // Deleting everything visible is legitimate but ends the run; keep a few rows around.

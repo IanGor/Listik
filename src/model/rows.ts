@@ -40,13 +40,16 @@ export interface RowsListener {
 /**
  * What a filter shows: `keep` holds the matches with all their ancestors
  * (including the root); a kept node shows only its kept children unless it
- * is in `open`, which shows all of them. Below that, nodes follow their own
- * collapsed state. Both sets grow while editing under the filter, so edited
- * bullets never vanish; the doc's collapsed state is never touched.
+ * is in `open`, which shows all of them, or in `shut`, which shows none
+ * (folded by hand under the filter). Below that, nodes follow their own
+ * collapsed state. `keep` and `open` grow while editing under the filter, and
+ * a bullet edited into a shut one opens it, so edited bullets never vanish;
+ * the doc's collapsed state is never touched.
  */
 export interface Filter {
   keep: Set<NodeId>;
   open: Set<NodeId>;
+  shut: Set<NodeId>;
 }
 
 /**
@@ -204,16 +207,25 @@ export class VisibleRows implements DocListener {
     return !!this.filter?.keep.has(id);
   }
 
-  isOpen(id: NodeId): boolean {
-    return !!this.filter?.open.has(id);
-  }
-
-  /** Under a filter: show all children of a node on a match's path, or only the path. */
-  setOpen(id: NodeId, open: boolean): void {
+  /**
+   * Under a filter: folds a node on a match's path (none of its children
+   * shown, the filter kept) or unfolds it: to the path to the matches below
+   * it, or to all its children when none are on the path. Unfolding a node
+   * that already shows the path shows all its children.
+   */
+  foldOnPath(id: NodeId, folded: boolean): void {
     const f = this.filter;
-    if (!f || f.open.has(id) === open) return;
-    if (open) f.open.add(id);
-    else f.open.delete(id);
+    if (!f?.keep.has(id)) return;
+    if (folded) {
+      if (f.shut.has(id) || !this.showsChildren(id)) return;
+      f.shut.add(id);
+      f.open.delete(id);
+    } else if (f.shut.delete(id)) {
+      if (!this.showsChildren(id)) f.open.add(id);
+    } else {
+      if (f.open.has(id)) return;
+      f.open.add(id);
+    }
     this.refreshAll(id);
     this.version++;
   }
@@ -250,7 +262,7 @@ export class VisibleRows implements DocListener {
     const n = this.doc.get(nodeOf(key));
     const kids = this.host(key)?.children ?? [];
     const f = this.filter;
-    if (f?.keep.has(n.id)) return f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
+    if (f?.keep.has(n.id)) return f.shut.has(n.id) ? [] : f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
     return key !== this.top && this.folded(key) ? [] : kids;
   }
@@ -482,8 +494,10 @@ export class VisibleRows implements DocListener {
     const n = this.doc.get(id);
     if (this.filter && this.reaches(id)) {
       const anchor = this.admit(n);
-      if (anchor !== n.parent) {
-        this.refreshAll(anchor);
+      const reopened = this.reopen(n);
+      if (anchor !== n.parent || reopened) {
+        // A shut ancestor is on screen, the anchor at or below it: re-listing it lists the anchor's rows too.
+        this.refreshAll(reopened ?? anchor);
         // Under a mirror the parent may show where the anchor does not.
         for (const context of this.contexts()) if (context && this.indexOf(keyIn(context, id)) < 0) this.showIn(context, n);
         return;
@@ -540,6 +554,18 @@ export class VisibleRows implements DocListener {
       f.open.add(n.id);
     }
     return anchor;
+  }
+
+  /**
+   * Under a filter, unfolds the nodes folded by hand (`shut`) around a node
+   * inserted or moved into them, so that it shows. Returns the outermost one
+   * unfolded, or null.
+   */
+  private reopen(n: OutlineNode): NodeId | null {
+    const shut = this.filter!.shut;
+    let outer: NodeId | null = null;
+    if (shut.size) for (let p = n.parent; p !== null; p = this.doc.get(p).parent) if (shut.delete(p)) outer = p;
+    return outer;
   }
 
   /** Is the bullet on a row anywhere: outside any mirror, under one, or as the original a mirror row shows. */
