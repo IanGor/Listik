@@ -1433,8 +1433,31 @@ test.describe('done and notes', () => {
     // Unchecked before its time: it stays.
     await row.locator('.bullet').click();
     await row.locator('.bullet').click();
-    await page.waitForTimeout(1800);
+    await page.waitForTimeout(3300);
     expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('checked, unchecked and checked again, a task waits the full 3 s from the last check; the first wait no longer counts', async ({ page }) => {
+    const row = page.locator('.row', { hasText: 'Eh bien' });
+    const box = row.locator('.bullet');
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Control+l');
+    await page.keyboard.press('Escape');
+    await box.click();
+    const first = Date.now();
+    await page.waitForTimeout(1000);
+    await box.click();
+    await expect(row).not.toHaveClass(/done/);
+    await page.waitForTimeout(500);
+    await box.click();
+    const last = Date.now();
+    await expect(row).toHaveClass(/done/);
+    // Past the first check's time: still in place.
+    await page.waitForTimeout(Math.max(0, first + 3400 - Date.now()));
+    expect(await outline(page)).toEqual(DEMO);
+    const sunk = [DEMO[0], DEMO[1], DEMO[3], DEMO[2], DEMO[4], DEMO[5]];
+    await expect.poll(() => outline(page), { timeout: 5000 }).toEqual(sunk);
+    expect(Date.now() - last).toBeGreaterThanOrEqual(2900);
   });
 
   test('Ctrl+L checking off the task being edited: it goes last, the caret stays in the row come up in its place; one Ctrl+Z brings it back unchecked', async ({ page }) => {

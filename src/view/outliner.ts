@@ -24,16 +24,15 @@ import { NodeSignals } from './node-signals';
 import { narrow } from './screen';
 
 /** A task checked off stays struck through where it is this long, then goes last among its siblings, ms. */
-export const SINK_DELAY = 1500;
+export const SINK_DELAY = 3000;
 
 /**
  * Tasks just checked off (`Outliner.changeTasks`): the ops that checked them,
- * the bullets to go last, the wait, and, once they went, the ops that moved them.
+ * the bullets to go last, and, once they went, the ops that moved them.
  */
 interface Sinking {
   ops: Op[];
   ids: NodeId[];
-  timer: ReturnType<typeof setTimeout> | null;
   moved: Op[];
 }
 
@@ -252,6 +251,8 @@ export class Outliner {
   private setSelectionSignal: Setter<Selection | null>;
   private selectionCache: { selection: Selection; version: number; set: Set<RowKey>; roots: RowKey[] } | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The last check of each task (by its content), while it waits to go last: an earlier one, unchecked since, does not move it. */
+  private lastCheck = new Map<NodeId, Sinking>();
   private pendingSearch: number | null = null;
 
   constructor(doc: Doc, options: { readOnly?: boolean } = {}) {
@@ -1082,16 +1083,23 @@ export class Outliner {
   /**
    * Applies a change to tasks. Ones it checked off stay struck through where
    * they are for a moment (`SINK_DELAY`), then go last among their siblings
-   * (`sink`); the toast takes the check back, and them to where they were.
+   * (`sink`). Each check waits its own full time: one unchecked and checked
+   * again starts over, the earlier wait no longer counts (`lastCheck`).
    */
   private changeTasks(cmd: (ctx: Ctx) => void, ids: RowKey[], keep?: Focus): void {
     if (!ids.length) return;
     const ops = this.run(cmd, keep);
-    const checked = new Set(ops.flatMap((op) => (op.t === 'setDone' && op.to ? [op.id] : [])));
+    const checked = new Set<NodeId>();
+    for (const op of ops) {
+      if (op.t !== 'setDone') continue;
+      if (op.to) checked.add(op.id);
+      else this.lastCheck.delete(op.id);
+    }
     const sink = [...new Set(ids.map(nodeOf))].filter((id) => checked.has(this.doc.content(id).id));
     if (!sink.length) return;
-    const entry: Sinking = { ops, ids: sink, timer: null, moved: [] };
-    entry.timer = setTimeout(() => this.sink(entry), SINK_DELAY);
+    const entry: Sinking = { ops, ids: sink, moved: [] };
+    for (const id of checked) this.lastCheck.set(id, entry);
+    setTimeout(() => this.sink(entry), SINK_DELAY);
     const n = checked.size;
     this.notify(n > 1 ? `${n} ${plural(n, 'пункт выполнен', 'пункта выполнены', 'пунктов выполнены')}` : 'Выполнено', {
       label: 'Отменить',
@@ -1101,13 +1109,18 @@ export class Outliner {
 
   /**
    * Checked-off tasks go last among their siblings (model/commands.ts
-   * `sinkDone`), unless unchecked or gone meanwhile; still the last step,
-   * the check takes the move into its undo. A caret in one stays where it
-   * was in the list, on the row that comes up in its place.
+   * `sinkDone`), unless unchecked, checked again since or gone meanwhile;
+   * still the last step, the check takes the move into its undo. A caret in
+   * one stays where it was in the list, on the row that comes up in its
+   * place.
    */
   private sink(entry: Sinking): void {
-    entry.timer = null;
-    const ids = entry.ids.filter((id) => this.doc.has(id) && this.doc.inOutline(id) && this.doc.content(id).done);
+    const ids = entry.ids.filter((id) => {
+      if (!this.doc.has(id) || !this.doc.inOutline(id)) return false;
+      const n = this.doc.content(id);
+      return n.done && this.lastCheck.get(n.id) === entry;
+    });
+    for (const [id, e] of this.lastCheck) if (e === entry) this.lastCheck.delete(id);
     if (this.readOnly || !ids.length) return;
     batch(() => {
       const cur = this.focus();
@@ -1126,7 +1139,7 @@ export class Outliner {
 
   /** The toast's "Отменить" for a check: the task unchecked, back where it was if it went last already. */
   private unsink(entry: Sinking): void {
-    if (entry.timer) clearTimeout(entry.timer);
+    for (const [id, e] of this.lastCheck) if (e === entry) this.lastCheck.delete(id);
     this.takeBack([...entry.ops, ...entry.moved], 'Выполнение отменено');
   }
 
