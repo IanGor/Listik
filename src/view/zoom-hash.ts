@@ -5,14 +5,16 @@ import type { Outliner } from './outliner';
  * Keeps the zoom in the URL as `#/<id>`: the browser's back and forward zoom
  * out and in, and a reload stays where it was. A hash that names no bullet
  * (e.g. from another document) is dropped. Call during component setup.
+ * `reload`: the place a reload comes back to shows as it was left (zooming
+ * in folds it, Outliner.zoomTo).
  */
-export function syncZoomWithHash(o: Outliner): void {
+export function syncZoomWithHash(o: Outliner, reload: boolean): void {
   const fromHash = () => {
     const m = /^#\/(.+)$/.exec(location.hash);
     return m ? decodeURIComponent(m[1]) : null;
   };
   const onHashChange = () => o.zoomTo(fromHash());
-  onHashChange();
+  o.zoomTo(fromHash(), false, reload);
   window.addEventListener('hashchange', onHashChange);
   onCleanup(() => window.removeEventListener('hashchange', onHashChange));
 

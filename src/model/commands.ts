@@ -279,6 +279,40 @@ export function collapseChildren({ doc, rows }: Ctx, parent: NodeId): void {
   for (const id of targets) doc.apply({ t: 'setCollapsed', id, from: false, to: true });
 }
 
+/**
+ * Folds every row inside `top` that has children, at any depth, under
+ * mirrors too (there, as that mirror shows them): a zoom into `top` opens on
+ * its first level only. `top` itself keeps its state.
+ */
+export function collapseAll(ctx: Ctx, top: NodeId): void {
+  const { doc, rows } = ctx;
+  const placed: RowKey[] = [];
+  const mirrored: RowKey[] = [];
+  // Where bullets live, node by node; under a mirror, row by row, as it shows them.
+  const stack: NodeId[] = [top];
+  const under: RowKey[] = [];
+  while (stack.length) {
+    for (const c of doc.get(stack.pop()!).children) {
+      const n = doc.get(c);
+      if (!(n.mirrorOf ? rows.host(c) : n)?.children.length) continue;
+      if (!n.collapsed) placed.push(c);
+      (n.mirrorOf ? under : stack).push(c);
+    }
+  }
+  while (under.length) {
+    const key = under.pop()!;
+    for (const c of rows.host(key)?.children ?? []) {
+      const k = rows.childKey(key, c);
+      if (!rows.host(k)?.children.length) continue;
+      if (!rows.folded(k)) mirrored.push(k);
+      under.push(k);
+    }
+  }
+  // Folds under mirrors are not ops: past one op the commit rebuilds the rows, otherwise each fold patches its own.
+  if (placed.length > 1) rows.expectMany();
+  for (const k of [...placed, ...mirrored]) setCollapsed(ctx, k, true);
+}
+
 /** A new empty first child: Enter in the title of a zoomed-in bullet. */
 export function prependChild({ doc }: Ctx, parent: NodeId): Focus {
   return { id: insertNew(doc, parent, 0, ''), caret: 0 };

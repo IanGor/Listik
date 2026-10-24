@@ -571,10 +571,12 @@ test.describe('zoom', () => {
     await page.goForward();
     await expect(title(page)).toHaveText('Часть первая');
 
+    // Zooming in folds what is inside, and it stays folded.
     await crumbs(page).filter({ hasText: 'Том первый' }).click();
     await expect(title(page)).toHaveText('Том первый');
+    expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
     await crumbs(page).filter({ hasText: 'Главная' }).click();
-    expect(await outline(page)).toEqual(DEMO);
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[4], DEMO[5]]);
   });
 
   test('the title scrolls away with the list; the path stays, ending at the bullet', async ({ page }) => {
@@ -685,8 +687,10 @@ test.describe('zoom', () => {
     // Out one level at a time.
     await page.keyboard.press('Alt+ArrowLeft');
     await expect(title(page)).toHaveText('Том первый');
+    // Zoomed into on the way: folded.
+    expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая (черновик)']);
     await page.keyboard.press('Alt+ArrowLeft');
-    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '  Часть вторая (черновик)', '    первая мысль', DEMO[5]]);
+    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], '  Часть вторая (черновик)', DEMO[5]]);
   });
 
   test('Backspace takes out an empty first bullet under the title, the caret going to the title\'s end', async ({ page }) => {
@@ -762,6 +766,7 @@ test.describe('zoom', () => {
     await page.keyboard.press('Escape');
     await page.locator('.row', { hasText: /^Том первый/ }).first().locator('.bullet').click();
     await expect(title(page)).toHaveText('Том первый');
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').click();
     await page.locator('.row .tag', { hasText: '#салон' }).click();
     await expect(page.locator('.crumbbar .count')).toHaveText('2 пункта');
     expect(await outline(page)).toEqual([DEMO[1].trim(), `  ${DEMO[2].trim()}`]);
@@ -889,15 +894,16 @@ test('a click on a guide line folds the bullet whose line it is; the line lights
   expect(await outline(page)).toEqual(DEMO);
 });
 
-test('the place\'s own crumb folds the first level inside, an overview; again, it opens what it folded', async ({ page }) => {
+test('the place\'s own crumb opens the first level a zoom folded; again, it folds it back, an overview', async ({ page }) => {
   await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
-  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
   const crumb = page.locator('.crumbs .crumb.current');
   await expect(crumb).toHaveText('Том первый');
   await crumb.click();
+  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  await crumb.click();
   expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
   await crumb.click();
-  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
   // At home, "Главная" does the same.
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
@@ -972,7 +978,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('the logo opens today, as it was left; nothing comes in twice', async ({ page }) => {
+  test('the logo opens today, folded; nothing comes in twice', async ({ page }) => {
     await page.locator('.brand').click();
     await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
@@ -984,7 +990,9 @@ test.describe('structure and calendar', () => {
     await page.locator('.brand').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['#notes', '  утро', ...DAY.slice(2)]);
+    expect(await outline(page)).toEqual(['#notes', 'todo', ...SLOTS]);
+    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['#notes', '  утро', 'todo', ...SLOTS]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
@@ -1101,7 +1109,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DAY);
     await page.locator('.logo, .brand').first().click();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(DAY);
+    expect(await outline(page)).toEqual(['#notes', 'todo', ...SLOTS]);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
@@ -1123,7 +1131,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
   });
 
-  test('a new document starts with it, on today; a reload stays where it was', async ({ page }) => {
+  test('a new document starts with it, on today; a new start folds the day, a reload stays where and as it was', async ({ page }) => {
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(DAY);
@@ -1132,7 +1140,12 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', '  запись', ...DAY.slice(2)]);
+    expect(await outline(page)).toEqual(['#notes', 'todo', ...SLOTS]);
+    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(title(page)).toHaveText(today);
+    expect(await outline(page)).toEqual(['#notes', '  запись', 'todo', ...SLOTS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE);
@@ -3263,6 +3276,7 @@ test.describe('mirrors', () => {
 
   test('zoomed in, a tag inside a mirror finds what the mirror shows of its original', async ({ page }) => {
     await mirrorIntoSecond(page, 'Часть перв');
+    await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').click();
     await page.locator('.tag', { hasText: '#салон' }).click();
     await expect(page.locator('.crumbbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual(['Часть первая', '  ' + DEMO[2].trim()]);

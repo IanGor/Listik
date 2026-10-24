@@ -331,6 +331,20 @@ describe('a mirror shows the subtree of its original', () => {
     expect(two.doc.get('b').collapsed).toBe(false);
   });
 
+  it('zooming in folds what mirrors inside show there only, not their original where it lives', () => {
+    const { doc, ctx, rows, run } = mirrored(['day', '  m', '  x', '    y', 'project', '  b', '    c'], { m: 'project' });
+    run(() => cmd.collapseAll(ctx, 'day'));
+    expect(['m', 'x', 'project', 'b'].map((id) => doc.get(id).collapsed)).toEqual([true, true, false, false]);
+    expect(rows.folded('m/b')).toBe(true);
+    expect(rows.ids).toEqual(['day', 'm', 'x', 'project', 'b', 'c']);
+    run(() => cmd.setCollapsed(ctx, 'm', false));
+    expect(rows.ids).toEqual(['day', 'm', 'm/b', 'x', 'project', 'b', 'c']);
+    const fresh = new VisibleRows(doc);
+    fresh.loadFolds(rows.foldEntries());
+    expect(fresh.ids).toEqual(rows.ids);
+    fresh.dispose();
+  });
+
   it('a mirror inside what it mirrors, directly or through another mirror, shows no children', () => {
     const one = mirrored(['a', '  b', '  m'], { m: 'a' });
     expect(one.rows.ids).toEqual(['a', 'b', 'm']);

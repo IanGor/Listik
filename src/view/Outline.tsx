@@ -262,11 +262,12 @@ export function Outline(props: { o: Outliner }) {
     setScrollTop(0);
   }, { defer: true }));
 
-  syncZoomWithHash(o);
-  // A reload is the same view again: the zoom from the address, the search
-  // and the scroll as they were (reload.ts). A new start without a place in
-  // the address (the installed app always is): today's day, if there is the structure.
+  // A reload is the same view again: the zoom from the address, folded as
+  // it was, the search and the scroll as they were (reload.ts). A new start
+  // without a place in the address (the installed app always is): today's
+  // day, if there is the structure.
   const again = reloaded();
+  syncZoomWithHash(o, again);
   const spot = again ? takeSpot() : null;
   const same = spot !== null && spot.zoom === o.zoom();
   if (again) {

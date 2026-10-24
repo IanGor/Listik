@@ -49,6 +49,23 @@ describe('zoom', () => {
     expect(dumpRows(rows, doc)).toEqual(['b', '  c #x', 'e', '  d']);
   });
 
+  it('zooming in folds everything inside at any depth, the zoomed-in bullet and the rest as they were', () => {
+    const { doc, rows, ctx, run } = setup(['a', '  b', '    c', '      d', '    e', '  f', '    g', 'h', '  i']);
+    run(() => cmd.collapseAll(ctx, 'a'));
+    expect(['a', 'b', 'c', 'f', 'h'].map((id) => doc.get(id).collapsed)).toEqual([false, true, true, true, false]);
+    rows.setTop('a');
+    expect(dumpRows(rows, doc)).toEqual(['b [+]', 'f [+]']);
+    // Opened by its arrow, a bullet shows one level: the ones below stay folded.
+    run(() => cmd.setCollapsed(ctx, 'b', false));
+    expect(dumpRows(rows, doc)).toEqual(['b', '  c [+]', '  e', 'f [+]']);
+    const fresh = new VisibleRows(doc);
+    fresh.setTop('a');
+    expect(fresh.ids).toEqual(rows.ids);
+    // Nothing left to fold: no ops.
+    run(() => cmd.setCollapsed(ctx, 'b', true));
+    expect(doc.transact(() => cmd.collapseAll(ctx, 'a'))).toEqual([]);
+  });
+
   it('starts the first child from the title', () => {
     const { doc, rows, ctx, run } = zoomed('g', [...DOC]);
     expect(rows.length).toBe(0);

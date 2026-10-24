@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
-import { appendTrees, checkOff, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -460,9 +460,13 @@ export class Outliner {
    * A search in progress is cleared: you went to a place found, so it shows
    * whole (a search started inside a zoom covers only that bullet). With
    * `keepSearch` (a crumb: up the path), the search stays and runs again
-   * over the new place, so its results show level after level.
+   * over the new place, so its results show level after level. A bullet
+   * zoomed into opens folded: everything inside it, at any depth (the
+   * command `collapseAll`, no undo step), so the place reads as an overview.
+   * It stays folded as left. `keepFolds` (a reload coming back to its place)
+   * shows it as it was.
    */
-  zoomTo(key: RowKey | null, keepSearch = false): void {
+  zoomTo(key: RowKey | null, keepSearch = false, keepFolds = false): void {
     this.settleTitle();
     let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
@@ -474,6 +478,8 @@ export class Outliner {
       this.rows.setTop(target ?? this.doc.root);
       this.setZoomSignal(target);
       if (this.query() || this.filter()) this.setQuery(keepSearch ? this.query() : '', true);
+      // Folded once the rows are the place's: a rebuild of only what is inside it, not of the list left.
+      if (target && !keepFolds) this.scaffold((ctx) => collapseAll(ctx, target));
       this.syncRows();
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
