@@ -409,7 +409,7 @@ kbd {
   z-index: 1;
   padding: 8px 8px 4px;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
   background: var(--canvas);
 }
 
@@ -989,11 +989,13 @@ mark,
   color: var(--faint);
 }
 
+/* A Large Title, as Apple's guidelines size it: 34px bold, tight leading
+   and tracking (28px on a phone, where the monospace face runs wide). */
 .zoom-title {
   min-height: 1lh;
-  font-size: calc(28px * var(--text-scale));
-  font-weight: 600;
-  line-height: 1.25;
+  font-size: calc(34px * var(--text-scale));
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
   text-wrap: balance;
   white-space: pre-wrap;
@@ -1031,7 +1033,7 @@ mark,
 
 .backlinks-label {
   margin-right: 4px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .backlink {
@@ -1162,7 +1164,7 @@ mark,
   }
 
   .zoom-title {
-    font-size: calc(24px * var(--text-scale));
+    font-size: calc(28px * var(--text-scale));
   }
 
   .shortcuts-body,
@@ -1333,7 +1335,7 @@ mark,
 
 .menu .hint {
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .menu-stepper {
@@ -1569,7 +1571,7 @@ mark,
 }
 
 .editbar-caption {
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -1658,7 +1660,7 @@ mark,
   flex: none;
   margin-left: auto;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* Finger-sized rows; mirrored by rowHeight in Suggest.tsx. */
@@ -2256,7 +2258,7 @@ body.is-dragging * {
   margin: 0;
   padding: 10px 8px 4px;
   background: var(--canvas);
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2289,7 +2291,7 @@ body.is-dragging * {
 
 .trash-meta {
   overflow: hidden;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2344,7 +2346,7 @@ body.is-dragging * {
   margin: 0;
   padding: 8px 16px 10px;
   border-top: 1px solid var(--hairline);
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -2465,7 +2467,7 @@ body.is-dragging * {
 .goto-hint {
   flex: none;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
   white-space: nowrap;
 }
 
@@ -2502,7 +2504,7 @@ body.is-dragging * {
 .goto-label {
   padding: 6px 10px 4px;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .goto-empty {
@@ -2538,7 +2540,7 @@ body.is-dragging * {
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* The place Enter takes (↑/↓ move it; the pointer too). */
@@ -2633,7 +2635,7 @@ body.is-dragging * {
 
 .capture-hint {
   flex: none;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -2735,7 +2737,7 @@ body.is-dragging * {
 
 .pending-more {
   flex: none;
-  color: var(--faint);
+  color: var(--muted);
   font-size: 12px;
 }
 

@@ -40,9 +40,9 @@ colors:
 typography:
   headline:
     fontFamily: "ui-monospace, monospace"
-    fontSize: "calc(28px * var(--font-scale))"
-    fontWeight: 600
-    lineHeight: 1.25
+    fontSize: "calc(34px * var(--text-scale))"
+    fontWeight: 700
+    lineHeight: 1.2
   body:
     fontFamily: "ui-monospace, monospace"
     fontSize: "calc(17px * var(--font-scale))"
