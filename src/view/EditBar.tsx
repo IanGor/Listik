@@ -91,8 +91,9 @@ const REDO: Item = { label: 'Повторить', icon: ['M15 14l5-5-5-5', 'M20 
 const ROW_MAIN: Action[][] = [
   [OUTDENT, INDENT, { label: 'Переместить', icon: ['M8 9l4-4 4 4', 'M12 5v14', 'M8 15l4 4 4-4'], run: () => {}, opens: 'move' }],
   [{ label: 'Задача: сделать, отметить, убрать', icon: ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z', 'M8.5 12.5l2.5 2.5 4.5-5'], run: (o, h) => o.cycleTask([h.id], h) }, NOTE],
-  // The caret goes after the # or between the brackets, and the suggestions (Suggest.tsx) open.
-  [{ label: 'Тег', glyph: '#', run: tag }, { label: 'Ссылка', glyph: '[[]]', run: (o, h) => o.insert(h, '[[]]', 0, 2) }],
+  // The caret goes after the # or between the brackets, and the suggestions (Suggest.tsx) open. A chain for the
+  // link, as Apple draws one, rather than its brackets.
+  [{ label: 'Тег', glyph: '#', run: tag }, { label: 'Ссылка', icon: ['M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71', 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'], run: (o, h) => o.insert(h, '[[]]', 0, 2) }],
   [UNDO, { label: 'Ещё', icon: ['M6 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0z', 'M13 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0z', 'M20 12a1 1 0 1 1-2 0 1 1 0 0 1 2 0z'], run: () => {}, opens: 'extra' }],
 ];
 

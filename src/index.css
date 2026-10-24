@@ -1510,6 +1510,15 @@ mark,
   display: none;
 }
 
+/* A tablet: a compact group in the middle, as iPadOS sets its toolbars,
+   not nine buttons spread across a 1180px screen. */
+@media (min-width: 641px) {
+  .editbar-set {
+    max-width: 600px;
+    margin-inline: auto;
+  }
+}
+
 .editbar-main[inert] {
   opacity: 0;
   transform: translateX(-32px);
@@ -1607,10 +1616,11 @@ mark,
 
 /* The characters a button types, in the link colour: "#", "[[]]", "(( ))". */
 .editbar-glyph {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 20px;
-  color: var(--link);
+  /* The colour of the icons beside it: one tint for the whole bar. */
+  color: currentColor;
   white-space: nowrap;
 }
 
