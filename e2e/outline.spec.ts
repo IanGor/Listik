@@ -40,6 +40,20 @@ test('a button lights the instant it is pressed, not on release', async ({ page 
   await page.mouse.up();
 });
 
+test("a right click on a row opens its menu; in the text being edited the browser's stays", async ({ page }) => {
+  const menu = page.locator('.row-menu');
+  const bullet = page.locator('.row', { hasText: 'Том второй' }).locator('.bullet');
+  await bullet.hover();
+  await bullet.click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitem', { name: 'Удалить' }).click();
+  expect(await outline(page)).toEqual(DEMO.slice(0, -1));
+  await expect(page.locator('.toast')).toContainText('Удалено');
+  await edit(page, 'Часть вторая');
+  await editing(page).click({ button: 'right' });
+  await expect(menu).toHaveCount(0);
+});
+
 test('renders the demo outline', async ({ page }) => {
   expect(await outline(page)).toEqual(DEMO);
 });
@@ -2356,6 +2370,26 @@ test.describe('touch screen', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
+  test('a row held and let go where it was opens its menu; a tap elsewhere closes it and does nothing', async ({ page }) => {
+    const menu = page.locator('.row-menu');
+    await finger(page, 'Часть вторая', { hold: 500 });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Заметка', 'Переместить в…', 'Удалить']);
+    expect(await outline(page)).toEqual(DEMO);
+    await menu.getByRole('menuitem', { name: 'Сделать задачей' }).tap();
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet')).toHaveClass(/todo/);
+    // By its text too; now a task, it offers to take the checkbox away.
+    await finger(page, 'Часть вторая', { hold: 500, on: '.text' });
+    await expect(menu.getByRole('menuitem', { name: 'Убрать чекбокс' })).toBeVisible();
+    // A tap beside it closes it, and what is under the tap is not touched: the bullet is not zoomed into.
+    const other = (await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').boundingBox())!;
+    await page.touchscreen.tap(other.x + other.width / 2, other.y + other.height / 2);
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator('.zoom-title')).toHaveCount(0);
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
   test('a row held by its text lights up and drags too; moved at once it does not; a tap on the text still edits', async ({ page }) => {
     await finger(page, 'Часть вторая', { hold: 0, on: '.text', to: (s) => ({ x: s.x, y: s.y + 60 }) });
     await expect(page.locator('.drop-line')).toHaveCount(0);
@@ -2525,7 +2559,7 @@ test.describe('touch screen', () => {
     await page.getByRole('menuitem', { name: 'Жесты и клавиши' }).tap();
     const panel = page.getByRole('dialog', { name: 'Жесты и клавиши' });
     await expect(panel.locator('h3').first()).toHaveText('Касания');
-    await expect(panel).toContainText('поднять пункт и перетащить');
+    await expect(panel).toContainText('отпустить на месте — меню');
     // The arrows stand at the end of the row on a touch screen.
     await expect(panel).toContainText('стрелка в конце строки');
     // The keys are still listed, for a keyboard attached to the phone.

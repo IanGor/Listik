@@ -80,6 +80,17 @@ export function Row(props: RowProps) {
     if ((e.target as Element).closest('.bullet, .toggle, button, a, [contenteditable]')) return;
     props.grab(e, id, 'row');
   };
+  /**
+   * A held finger is a drag, not the browser's menu. A right click with a
+   * mouse or trackpad opens the row's own menu (RowMenu.tsx), as on a Mac;
+   * in the text being edited, the browser's stays (spelling, paste).
+   */
+  const onContextMenu = (e: MouseEvent) => {
+    if (el.classList.contains('holding') || o.dragged().size) return e.preventDefault();
+    if (!document.documentElement.classList.contains('mouse') || (e.target as Element).closest('[contenteditable]')) return;
+    e.preventDefault();
+    o.openRowMenu(id, e.clientX, e.clientY);
+  };
   // A finger sideways across the row: left deletes, right checks off (swipe.ts).
   onMount(() => onCleanup(swipe(o, el, id, focused)));
   o.nodes.acquire(nid);
@@ -211,7 +222,7 @@ export function Row(props: RowProps) {
       data-depth={props.depth}
       onPointerDown={onRowPointerDown}
       // The browser's long press (a word selected, a menu) would come while the finger holds the row.
-      onContextMenu={(e) => (el.classList.contains('holding') || o.dragged().size) && e.preventDefault()}
+      onContextMenu={onContextMenu}
       style={{ 'padding-left': 'var(--shift)', '--depth': String(props.depth) }}
     >
       <Show when={hasChildren()}>

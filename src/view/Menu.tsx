@@ -14,7 +14,7 @@ import { theme, toggleTheme } from './theme';
  * A menu item's symbol, at the end of its line as in Apple's menus: thin
  * line drawings in the manner of SF Symbols, the text's colour.
  */
-function Symbol(props: { children: JSX.Element }) {
+export function Symbol(props: { children: JSX.Element }) {
   return (
     <svg class="menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       {props.children}

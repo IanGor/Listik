@@ -145,6 +145,12 @@ export class Outliner {
   /** A word of the toast's own that leads somewhere (the "Inbox" of "Записано в Inbox"), after its text. */
   readonly toastLink: Accessor<{ label: string; run: () => void } | null>;
   private setToastLink: Setter<{ label: string; run: () => void } | null>;
+  /**
+   * A row's menu of actions (RowMenu.tsx), where it was asked for: a finger
+   * held on the row and lifted without moving it (drag.ts), or a right click.
+   */
+  readonly rowMenu: Accessor<{ key: RowKey; x: number; y: number } | null>;
+  private setRowMenu: Setter<{ key: RowKey; x: number; y: number } | null>;
   /** Sketches shown or hidden by hand this session (the "Скетч" button), by bullet; the rest show when they have lines. */
   private readonly sketchToggled: Accessor<ReadonlyMap<NodeId, boolean>>;
   private setSketchToggled: Setter<ReadonlyMap<NodeId, boolean>>;
@@ -261,6 +267,7 @@ export class Outliner {
     [this.toastLink, this.setToastLink] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.captureOpen, this.setCaptureOpen] = createSignal(false);
     [this.sketchToggled, this.setSketchToggled] = createSignal<ReadonlyMap<NodeId, boolean>>(new Map());
+    [this.rowMenu, this.setRowMenu] = createSignal<{ key: RowKey; x: number; y: number } | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
@@ -1419,6 +1426,15 @@ export class Outliner {
     if (!z || !this.doc.has(z)) return false;
     this.nodes.track(z);
     return !!this.doc.content(z).strokes?.length;
+  }
+
+  /** Opens the row's menu of actions at (x, y), px in the window. */
+  openRowMenu(key: RowKey, x: number, y: number): void {
+    if (this.rows.indexOf(key) >= 0) this.setRowMenu({ key, x, y });
+  }
+
+  closeRowMenu(): void {
+    this.setRowMenu(null);
   }
 
   /** Shows or hides the zoomed-in bullet's sketch (the "Скетч" button). */

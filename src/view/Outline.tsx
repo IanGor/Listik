@@ -11,6 +11,7 @@ import { keepSpot, reloaded, takeSpot } from './reload';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
+import { RowMenu } from './RowMenu';
 import { Shortcuts } from './Shortcuts';
 import { Sketch } from './Sketch';
 import { QuickCapture } from './QuickCapture';
@@ -480,6 +481,7 @@ export function Outline(props: { o: Outliner }) {
         <EditBar o={o} />
       </Show>
       <Suggest o={o} />
+      <RowMenu o={o} />
     </div>
   );
 }

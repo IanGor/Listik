@@ -39,6 +39,8 @@
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
+  /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
+  --danger: light-dark(#c0392b, #ff6b5e);
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
      darker on cream, for contrast. */
   --bold: light-dark(#2f6497, #8cb4dc);
@@ -1385,6 +1387,26 @@ mark,
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+
+/* A row's menu of actions (RowMenu.tsx): the document menu's look, where it
+   was asked for. Under it, a clear layer takes the tap that closes it. */
+.row-menu {
+  position: fixed;
+  right: auto;
+  z-index: 41;
+  min-width: 240px;
+}
+
+.row-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+/* Deleting: red, last, apart from the rest (Apple's destructive action). */
+.menu button.destructive {
+  color: var(--danger);
 }
 
 /* Between groups: a band across the whole menu, as in Apple's menus, not a hairline. */

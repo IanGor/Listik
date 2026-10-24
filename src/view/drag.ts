@@ -35,7 +35,9 @@ const EDGE = 48;
  * pointer's x within what is allowed there.
  *
  * A finger works the same way except how a drag starts: the finger is held
- * still for LONG_PRESS first. Moving sooner is a scroll (the bullet allows
+ * still for LONG_PRESS first, and lifted without moving after that, it opens
+ * the row's menu of actions (RowMenu.tsx) instead, as a long press does on
+ * an iPhone or iPad. Moving sooner is a scroll (the bullet allows
  * vertical panning, index.css), and the browser then cancels the pointer.
  * Once picked up, Row.tsx stops the panning, so the finger moves the bullet.
  *
@@ -66,10 +68,14 @@ export function createDrag(o: Outliner, el: () => Elements) {
     /** Rows of the dragged subtrees, which cannot take a drop. */
     let inside = new Set<RowKey>();
     let pointer = { x: startX, y: startY };
+    /** Where a finger picked the row up, and whether it has moved off since: lifted in place, the row's menu opens. */
+    let lifted = { x: startX, y: startY };
+    let strayed = false;
     let scrollFrame = 0;
     const finger = e.pointerType === 'touch';
     const hold = finger
       ? window.setTimeout(() => {
+          lifted = pointer;
           begin();
           navigator.vibrate?.(10);
           setTarget(locate());
@@ -161,6 +167,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
 
     const onMove = (ev: PointerEvent) => {
       pointer = { x: ev.clientX, y: ev.clientY };
+      if (dragging && Math.hypot(pointer.x - lifted.x, pointer.y - lifted.y) > TOUCH_SLOP) strayed = true;
       if (!dragging) {
         const travel = Math.hypot(ev.clientX - startX, ev.clientY - startY);
         // A finger on the move before the hold is up: not a press at all.
@@ -187,6 +194,8 @@ export function createDrag(o: Outliner, el: () => Elements) {
         if (drop && !byRow) o.pressBullet(id);
         return;
       }
+      // Picked up by a finger and let go where it was: not a move but a wish to act on it (Apple's long press).
+      if (drop && finger && !strayed) return o.openRowMenu(id, pointer.x, pointer.y);
       if (drop && t) o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));
     };
     const onUp = () => finish(true);
