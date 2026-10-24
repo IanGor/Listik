@@ -1729,12 +1729,15 @@ test.describe('theme', () => {
     await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
-    await page.getByRole('menuitem', { name: 'Дневная тема' }).click();
+    const dark = page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' });
+    await expect(dark).toHaveAttribute('aria-checked', 'true');
+    await dark.click();
     // The switch runs inside a view transition: it lands on the next frame.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect.poll(() => background(page)).toBe(CREAM);
     await menu.click();
-    await expect(page.getByRole('menuitem', { name: 'Ночная тема' })).toBeVisible();
+    // The same item, unchecked: its name does not change with the theme.
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' })).toHaveAttribute('aria-checked', 'false');
     await page.keyboard.press('Escape');
 
     // The system is as it was: the pick holds, after a reload too.
@@ -1857,11 +1860,11 @@ test.describe('phone screen', () => {
     }
 
     await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitem', { name: 'Ночная тема' }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect(page.locator('.menu')).toHaveCount(0);
     await page.getByRole('button', { name: 'Меню документа' }).click();
-    await expect(page.getByRole('menuitem', { name: 'Дневная тема' })).toBeVisible();
+    await expect(page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' })).toHaveAttribute('aria-checked', 'true');
   });
 
   test('the end of a long list scrolls up to mid-screen', async ({ page }) => {

@@ -1279,14 +1279,14 @@ mark,
   z-index: 20;
   display: flex;
   flex-direction: column;
-  min-width: min(300px, calc(100vw - 24px));
+  min-width: min(320px, calc(100vw - 24px));
   /* Inside the window, whatever its items: they wrap on a small phone. */
   max-width: calc(100vw - 24px);
   box-sizing: border-box;
   max-height: calc(100dvh - 80px);
   overflow-y: auto;
   padding: 6px;
-  font-size: 14px;
+  font-size: 15px;
   background: var(--canvas);
   border: 1px solid var(--hairline);
   border-radius: 12px;
@@ -1383,10 +1383,38 @@ mark,
   text-align: center;
 }
 
+/* Between groups: a band across the whole menu, as in Apple's menus, not a hairline. */
 .menu-sep {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--hairline);
+  flex: none;
+  height: 6px;
+  margin: 4px -6px;
+  background: var(--surface);
+}
+
+/* The item's symbol, at the end of its line. */
+.menu-icon {
+  flex: none;
+  margin-left: auto;
+  padding-left: 12px;
+  box-sizing: content-box;
+}
+
+[aria-checked='true'] > .menu-icon {
+  color: var(--primary);
+}
+
+/* The size steps: a small A and a large one. */
+.step-a {
+  font-weight: 600;
+  line-height: 1;
+}
+
+.step-a.small {
+  font-size: 13px;
+}
+
+.step-a.large {
+  font-size: 20px;
 }
 
 .menu-note {

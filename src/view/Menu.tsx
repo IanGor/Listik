@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createSignal, onCleanup } from 'solid-js';
+import { Match, Show, Switch, createSignal, onCleanup, type JSX } from 'solid-js';
 import { appendTrees } from '../model/commands';
 import { countTrees, looksLikeOpml, parseIndented, parseOpml, toMarkdown, toOpml } from '../model/outline-text';
 import type { BackupStatus } from '../persist/backup';
@@ -9,6 +9,30 @@ import { touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
+
+/**
+ * A menu item's symbol, at the end of its line as in Apple's menus: thin
+ * line drawings in the manner of SF Symbols, the text's colour.
+ */
+function Symbol(props: { children: JSX.Element }) {
+  return (
+    <svg class="menu-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      {props.children}
+    </svg>
+  );
+}
+
+const GO = () => <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>;
+const INBOX = () => <Symbol><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></Symbol>;
+const SAVE = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" /></Symbol>;
+const OPEN = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 17v-6M9 14l3-3 3 3" /></Symbol>;
+const KEYS = () => <Symbol><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8" /></Symbol>;
+const MOON = () => <Symbol><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></Symbol>;
+const CHECK = () => <Symbol><path d="M5 12.5l4.5 4.5L19 7.5" /></Symbol>;
+const TRASH = () => <Symbol><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Symbol>;
+const CALENDAR = () => <Symbol><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></Symbol>;
+const CLOUD = () => <Symbol><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 0 0 4.6 12.6 3.5 3.5 0 0 0 6.5 19z" /></Symbol>;
+const FOLDER = () => <Symbol><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></Symbol>;
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -99,27 +123,34 @@ export function DocumentMenu(props: { o: Outliner }) {
           <Show when={!touch()}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
               Перейти к пункту… <span class="hint">Ctrl+K</span>
+              <GO />
             </button>
           </Show>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
               <Show when={!touch()}><span class="hint">Ctrl+Shift+Space</span></Show>
+              <INBOX />
             </button>
             <div class="menu-sep" role="separator" />
           </Show>
           <button type="button" role="menuitem" onClick={() => exportAs('md')}>
             Скачать как Markdown
+            <SAVE />
           </button>
           <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
             Скачать как OPML <span class="hint">для Workflowy</span>
+            <SAVE />
           </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
             <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
+            <KEYS />
           </button>
+          {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}
           <button
             type="button"
-            role="menuitem"
+            role="menuitemcheckbox"
+            aria-checked={theme() === 'dark'}
             onClick={(e) => {
               // Measure before closing: the circle opens from this item.
               const from = e.currentTarget.getBoundingClientRect();
@@ -127,7 +158,10 @@ export function DocumentMenu(props: { o: Outliner }) {
               toggleTheme(from);
             }}
           >
-            {theme() === 'dark' ? 'Дневная тема' : 'Ночная тема'}
+            Тёмная тема
+            <Show when={theme() === 'dark'} fallback={<MOON />}>
+              <CHECK />
+            </Show>
           </button>
           {/* Steps keep the menu open: the outline behind shows each size at once. */}
           <div class="menu-stepper" role="group" aria-label="Размер текста">
@@ -139,9 +173,8 @@ export function DocumentMenu(props: { o: Outliner }) {
               disabled={textScale() === TEXT_SCALES[0]}
               onClick={() => stepTextScale(-1)}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-                <path d="M3 7h8" />
-              </svg>
+              {/* A small and a large A, as Apple sizes text (Safari's "Aa"). */}
+              <span class="step-a small" aria-hidden="true">A</span>
             </button>
             <span class="step-value" aria-live="polite">{Math.round(textScale() * 100)}%</span>
             <button
@@ -151,9 +184,7 @@ export function DocumentMenu(props: { o: Outliner }) {
               disabled={textScale() === TEXT_SCALES[TEXT_SCALES.length - 1]}
               onClick={() => stepTextScale(1)}
             >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-                <path d="M3 7h8M7 3v8" />
-              </svg>
+              <span class="step-a large" aria-hidden="true">A</span>
             </button>
           </div>
           <div class="menu-sep" role="separator" />
@@ -162,13 +193,16 @@ export function DocumentMenu(props: { o: Outliner }) {
             <Show when={!o.trashOpen() && o.deleted().length}>
               <span class="hint">{o.deleted().length}</span>
             </Show>
+            <TRASH />
           </button>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
               Создать структуру <span class="hint">PARA и календарь</span>
+              <CALENDAR />
             </button>
             <button type="button" role="menuitem" onClick={() => void importFile()}>
               Импорт из файла…
+              <OPEN />
             </button>
           </Show>
           <Show when={o.opened && !o.readOnly}>
@@ -178,6 +212,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             </Show>
             <button type="button" role="menuitem" onClick={() => { close(); o.showSync(); }}>
               {o.syncing() ? 'Синхронизация…' : 'Синхронизация между устройствами…'}
+              <CLOUD />
             </button>
           </Show>
           <Show when={backup()}>
@@ -191,6 +226,7 @@ export function DocumentMenu(props: { o: Outliner }) {
                   <Match when={b().state === 'off'}>
                     <button type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>
                       Автокопия в папку…
+                      <FOLDER />
                     </button>
                   </Match>
                   <Match when={b().state === 'on'}>
