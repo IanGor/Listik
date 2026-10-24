@@ -1415,17 +1415,18 @@ test.describe('done and notes', () => {
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
 
-  test('a task checked off stays a moment, struck through, then goes last among its siblings; the toast takes it back where it was', async ({ page }) => {
+  test('a task checked off stays a moment, struck through, then goes last among its siblings; only then the toast, and it takes it back where it was', async ({ page }) => {
     const row = page.locator('.row', { hasText: 'Eh bien' });
     await edit(page, 'Eh bien');
     await page.keyboard.press('Control+l');
     await page.keyboard.press('Escape');
     await row.locator('.bullet').click();
     await expect(row).toHaveClass(/done/);
-    await expect(page.locator('.toast')).toContainText('Выполнено');
     expect(await outline(page)).toEqual(DEMO);
+    await expect(page.locator('.toast')).toHaveCount(0);
     const sunk = [DEMO[0], DEMO[1], DEMO[3], DEMO[2], DEMO[4], DEMO[5]];
-    await expect.poll(() => outline(page)).toEqual(sunk);
+    await expect.poll(() => outline(page), { timeout: 5000 }).toEqual(sunk);
+    await expect(page.locator('.toast')).toContainText('Выполнено');
     await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
     expect(await outline(page)).toEqual(DEMO);
     await expect(row).not.toHaveClass(/done/);
@@ -1435,6 +1436,7 @@ test.describe('done and notes', () => {
     await row.locator('.bullet').click();
     await page.waitForTimeout(3300);
     expect(await outline(page)).toEqual(DEMO);
+    await expect(page.locator('.toast')).toHaveCount(0);
   });
 
   test('checked, unchecked and checked again, a task waits the full 3 s from the last check; the first wait no longer counts', async ({ page }) => {

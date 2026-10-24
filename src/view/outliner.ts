@@ -1100,11 +1100,6 @@ export class Outliner {
     const entry: Sinking = { ops, ids: sink, moved: [] };
     for (const id of checked) this.lastCheck.set(id, entry);
     setTimeout(() => this.sink(entry), SINK_DELAY);
-    const n = checked.size;
-    this.notify(n > 1 ? `${n} ${plural(n, 'пункт выполнен', 'пункта выполнены', 'пунктов выполнены')}` : 'Выполнено', {
-      label: 'Отменить',
-      run: () => this.unsink(entry),
-    });
   }
 
   /**
@@ -1112,7 +1107,8 @@ export class Outliner {
    * `sinkDone`), unless unchecked, checked again since or gone meanwhile;
    * still the last step, the check takes the move into its undo. A caret in
    * one stays where it was in the list, on the row that comes up in its
-   * place.
+   * place. Then the toast "Выполнено": its "Отменить" brings them back
+   * unchecked where they were, not to be looked for at the end.
    */
   private sink(entry: Sinking): void {
     const ids = entry.ids.filter((id) => {
@@ -1135,11 +1131,15 @@ export class Outliner {
         this.setFocus(key ? { id: key, caret: 0 } : null);
       }
     });
+    const n = new Set(ids.map((id) => this.doc.content(id).id)).size;
+    this.notify(n > 1 ? `${n} ${plural(n, 'пункт выполнен', 'пункта выполнены', 'пунктов выполнены')}` : 'Выполнено', {
+      label: 'Отменить',
+      run: () => this.unsink(entry),
+    });
   }
 
-  /** The toast's "Отменить" for a check: the task unchecked, back where it was if it went last already. */
+  /** The toast's "Отменить" for a check: the task unchecked, back where it was if it went last. */
   private unsink(entry: Sinking): void {
-    for (const [id, e] of this.lastCheck) if (e === entry) this.lastCheck.delete(id);
     this.takeBack([...entry.ops, ...entry.moved], 'Выполнение отменено');
   }
 
