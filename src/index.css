@@ -37,6 +37,8 @@
   --tag-chip: light-dark(rgb(40 112 106 / 0.1), rgb(124 194 184 / 0.14));
   --tag-chip-strong: light-dark(rgb(40 112 106 / 0.2), rgb(124 194 184 / 0.26));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
+  /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
+  --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
      darker on cream, for contrast. */
   --bold: light-dark(#2f6497, #8cb4dc);
@@ -2848,5 +2850,178 @@ body.is-dragging * {
     min-width: 44px;
     padding: 0;
     margin-left: -13px;
+  }
+}
+
+/* --- Sketch ------------------------------------------------------------ */
+
+/* The zoomed-in bullet's sketch (Sketch.tsx): a sheet left of the list, the
+   list keeping the rest; below the list on a phone. The sheet scrolls down
+   on its own, with a finger; Apple Pencil draws. */
+.sketch {
+  position: relative;
+  flex: none;
+  width: 62%;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+}
+
+@media (orientation: portrait) {
+  .sketch {
+    width: 57%;
+  }
+}
+
+.sketch-sheet {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  /* Dots to draw by, scrolling with the sheet. */
+  background: radial-gradient(var(--guide) 1.2px, transparent 1.4px) 12px 12px / 24px 24px local;
+  scrollbar-color: var(--halo) transparent;
+}
+
+.sketch-sheet svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--text);
+}
+
+.sketch-sheet svg.drawable {
+  cursor: crosshair;
+}
+
+.sketch-sheet svg.erasing {
+  cursor: cell;
+}
+
+.sketch-sheet .pen,
+.sketch-sheet .mark {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sketch-sheet .pen {
+  stroke: currentColor;
+}
+
+.sketch-sheet .mark {
+  stroke: var(--marker);
+}
+
+.sketch-tools {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: 4px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  box-shadow: var(--shadow-pop);
+  transform: translateX(-50%);
+}
+
+.sketch-tool {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .sketch-tool:hover {
+    color: var(--text);
+    background: var(--surface);
+  }
+}
+
+.sketch-tool.on {
+  color: var(--primary);
+  background: var(--chip);
+}
+
+.sketch-tool .sketch-swatch {
+  stroke: rgb(240 178 80);
+  stroke-width: 2.4;
+}
+
+.sketch-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 6px;
+  background: var(--hairline);
+}
+
+/* In the path's bar, at its end: opens and puts away the sketch. */
+.sketch-toggle {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .sketch-toggle:hover {
+    color: var(--text);
+    background: var(--surface);
+  }
+}
+
+.sketch-toggle.on {
+  color: var(--primary);
+  background: var(--chip);
+  border-color: transparent;
+}
+
+/* A bullet with a sketch, in the list: a faint mark after its text. */
+.sketch-mark {
+  margin-left: 6px;
+  color: var(--faint);
+  vertical-align: -2px;
+}
+
+@media (max-width: 640px) {
+  .sketch {
+    width: auto;
+    height: min(42vh, 380px);
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  /* An icon on a phone: the path keeps the room. */
+  .sketch-toggle span {
+    display: none;
+  }
+
+  .sketch-toggle {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
   }
 }

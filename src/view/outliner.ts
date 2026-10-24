@@ -145,6 +145,9 @@ export class Outliner {
   /** A word of the toast's own that leads somewhere (the "Inbox" of "Записано в Inbox"), after its text. */
   readonly toastLink: Accessor<{ label: string; run: () => void } | null>;
   private setToastLink: Setter<{ label: string; run: () => void } | null>;
+  /** Sketches shown or hidden by hand this session (the "Скетч" button), by bullet; the rest show when they have lines. */
+  private readonly sketchToggled: Accessor<ReadonlyMap<NodeId, boolean>>;
+  private setSketchToggled: Setter<ReadonlyMap<NodeId, boolean>>;
   /** The quick capture line (QuickCapture.tsx) is open: a thought to the Inbox from anywhere. */
   readonly captureOpen: Accessor<boolean>;
   private setCaptureOpen: Setter<boolean>;
@@ -257,6 +260,7 @@ export class Outliner {
     [this.toastAction, this.setToastAction] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.toastLink, this.setToastLink] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.captureOpen, this.setCaptureOpen] = createSignal(false);
+    [this.sketchToggled, this.setSketchToggled] = createSignal<ReadonlyMap<NodeId, boolean>>(new Map());
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
@@ -1395,6 +1399,39 @@ export class Outliner {
     batch(() => {
       const ops = this.doc.transact(() => setNote(this.ctx, id, note));
       this.history.record({ ops, before: null, after: null }, { typing: true });
+    });
+  }
+
+  /**
+   * The zoomed-in bullet whose sketch shows beside its list (view/Sketch.tsx):
+   * one with lines does, unless hidden by hand; one without, once opened.
+   * Reactive to the bullet's lines for whoever holds it (`nodes.acquire`).
+   */
+  sketchShown(): NodeId | null {
+    const z = this.zoom();
+    if (!z || !this.doc.has(z)) return null;
+    this.nodes.track(z);
+    return (this.sketchToggled().get(z) ?? !!this.doc.content(z).strokes?.length) ? z : null;
+  }
+
+  /** Shows or hides the zoomed-in bullet's sketch (the "Скетч" button). */
+  toggleSketch(): void {
+    const z = this.zoom();
+    if (!z) return;
+    const next = new Map(this.sketchToggled());
+    next.set(z, !this.sketchShown());
+    this.setSketchToggled(next);
+  }
+
+  /**
+   * A change to a sketch (model/sketch.ts): one undo step that leaves the
+   * caret where it is, so drawing beside a bullet being typed keeps it.
+   */
+  sketch(cmd: (ctx: Ctx) => void): void {
+    if (this.readOnly) return;
+    batch(() => {
+      const ops = this.doc.transact(() => cmd(this.ctx));
+      this.history.record({ ops, before: null, after: null });
     });
   }
 

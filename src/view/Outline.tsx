@@ -12,6 +12,7 @@ import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { Shortcuts } from './Shortcuts';
+import { Sketch } from './Sketch';
 import { QuickCapture } from './QuickCapture';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
@@ -406,6 +407,10 @@ export function Outline(props: { o: Outliner }) {
       <QuickCapture o={o} />
       <GoTo o={o} />
       <div class="workspace">
+        {/* The zoomed-in bullet's sketch, left of its list (below it on a phone). */}
+        <Show when={o.sketchShown()} keyed>
+          {(id) => <Sketch o={o} id={id} />}
+        </Show>
         <div class="main">
           <Crumbs o={o} scrolled={scrollTop() > 0} />
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>

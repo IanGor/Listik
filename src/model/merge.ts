@@ -19,6 +19,8 @@ import type { NodeId, NodeSnapshot, Op, Position } from './types';
  *   apply in the trash, and anything inserted under it goes to the trash;
  * - a move that would make a cycle is skipped; a move of a bullet that is
  *   already elsewhere wins (its device moved it on purpose);
+ * - sketch lines are added and erased whole, by id: the ones already there
+ *   are not added twice, the ones already erased are not erased again;
  * - the folded state is per device and never follows another device's op.
  */
 export function applyMerged(doc: Doc, op: Op): Op[] {
@@ -64,6 +66,19 @@ function mergeOp(doc: Doc, op: Exclude<Op, { t: 'insert' }>): Op[] {
     case 'setMirror': {
       const n = doc.nodes.get(op.id);
       return n && n.mirrorOf !== op.to && op.to !== op.id ? [{ ...op, from: n.mirrorOf }] : [];
+    }
+    case 'addStrokes': {
+      // Lines are added and erased whole, by id: drawing on two devices at once just adds up.
+      const n = doc.nodes.get(op.id);
+      const have = new Set(n?.strokes?.map((s) => s.id));
+      const strokes = op.strokes.filter((s) => !have.has(s.id));
+      return n && strokes.length ? [{ ...op, strokes }] : [];
+    }
+    case 'removeStrokes': {
+      const n = doc.nodes.get(op.id);
+      const gone = new Set(op.strokes.map((s) => s.id));
+      const strokes = n?.strokes?.filter((s) => gone.has(s.id)) ?? [];
+      return strokes.length ? [{ ...op, strokes }] : [];
     }
   }
 }

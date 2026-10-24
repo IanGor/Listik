@@ -91,7 +91,7 @@ function remove(doc: Doc, id: NodeId): void {
 
 /**
  * All copies of a bullet are alike (model/mirrors.ts), but one of them, the
- * origin, holds the text, note, task state and children. Before the subtree
+ * origin, holds the text, note, task state, sketch and children. Before the subtree
  * of `id` goes, each origin in it with copies outside hands all that over to
  * the first of those copies in the outline, which stops being a mirror; the
  * other copies then mirror it, and so does the origin itself, in the trash:
@@ -117,6 +117,8 @@ function handOver(doc: Doc, id: NodeId): void {
     if (to.note !== from.note) doc.apply({ t: 'setNote', id: heir, from: to.note, to: from.note, at: now });
     if (to.todo !== from.todo) doc.apply({ t: 'setTodo', id: heir, from: to.todo, to: from.todo });
     if (to.done !== from.done) doc.apply({ t: 'setDone', id: heir, from: to.done, to: from.done });
+    if (to.strokes) doc.apply({ t: 'removeStrokes', id: heir, strokes: to.strokes });
+    if (from.strokes) doc.apply({ t: 'addStrokes', id: heir, strokes: from.strokes });
     for (const c of [...from.children]) {
       const order = doc.get(c).order;
       doc.apply({ t: 'move', id: c, from: { parent: o, order }, to: { parent: heir, order } });

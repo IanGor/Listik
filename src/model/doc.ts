@@ -60,6 +60,10 @@ export function invert(op: Op): Op {
       return { t: 'setNote', id: op.id, from: op.to, to: op.from, at: op.at };
     case 'setMirror':
       return { t: 'setMirror', id: op.id, from: op.to, to: op.from };
+    case 'addStrokes':
+      return { t: 'removeStrokes', id: op.id, strokes: op.strokes };
+    case 'removeStrokes':
+      return { t: 'addStrokes', id: op.id, strokes: op.strokes };
   }
 }
 
@@ -236,6 +240,7 @@ export class Doc {
     return {
       id: n.id, order: n.order, text: n.text, note: n.note, collapsed: n.collapsed, todo: n.todo, done: n.done,
       created: n.created, updated: n.updated, ...(n.mirrorOf ? { mirrorOf: n.mirrorOf } : {}),
+      ...(n.strokes ? { strokes: n.strokes } : {}),
       children: n.children.map((c) => this.snapshot(c)),
     };
   }
@@ -331,6 +336,25 @@ export class Doc {
         this.linkMirror(n);
         break;
       }
+      case 'addStrokes': {
+        const n = this.get(op.id);
+        const have = new Set(n.strokes?.map((s) => s.id));
+        for (const s of op.strokes) {
+          if (have.has(s.id)) throw new Error(`addStrokes: ${op.id} already has stroke ${s.id}`);
+          have.add(s.id);
+        }
+        n.strokes = [...(n.strokes ?? []), ...op.strokes];
+        break;
+      }
+      case 'removeStrokes': {
+        const n = this.get(op.id);
+        const gone = new Set(op.strokes.map((s) => s.id));
+        const kept = (n.strokes ?? []).filter((s) => !gone.has(s.id));
+        if (kept.length + gone.size !== (n.strokes?.length ?? 0)) throw new Error(`removeStrokes: stale strokes for ${op.id}`);
+        if (kept.length) n.strokes = kept;
+        else delete n.strokes;
+        break;
+      }
     }
     for (const l of this.listeners) l.op?.(op, this);
   }
@@ -346,6 +370,7 @@ export class Doc {
         note: s.note, collapsed: s.collapsed, todo: s.todo, done: s.done, created: s.created, updated: s.updated,
         mirrorOf: s.mirrorOf && s.mirrorOf !== s.id ? s.mirrorOf : null,
       };
+      if (s.strokes?.length) n.strokes = s.strokes;
       this.nodes.set(n.id, n);
       this.attach(n);
       this.linkMirror(n);

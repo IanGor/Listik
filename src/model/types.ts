@@ -1,5 +1,16 @@
 export type NodeId = string;
 
+/**
+ * One line drawn on a bullet's sketch (model/sketch.ts): a pen line or a
+ * marker band. `d` holds its points on a sheet 1000 units wide, encoded by
+ * `encodePoints`. Its id is unique within the bullet's sketch.
+ */
+export interface Stroke {
+  id: string;
+  tool: 'pen' | 'mark';
+  d: string;
+}
+
 export interface OutlineNode {
   id: NodeId;
   /** null only for the invisible root. */
@@ -24,6 +35,8 @@ export interface OutlineNode {
    * own text, note and flags are unused; it never has children of its own.
    */
   mirrorOf: NodeId | null;
+  /** The bullet's sketch, in drawing order (model/sketch.ts); absent for none. */
+  strokes?: Stroke[];
 }
 
 /** Self-contained copy of a subtree: enough to re-insert it after removal. */
@@ -38,6 +51,7 @@ export interface NodeSnapshot {
   created: number;
   updated: number;
   mirrorOf?: NodeId;
+  strokes?: Stroke[];
   children: NodeSnapshot[];
 }
 
@@ -62,7 +76,11 @@ export type Op =
   /** `at`: edit time, as for setText. */
   | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number }
   /** Makes the bullet a mirror of `to` (or a plain bullet again with null). */
-  | { t: 'setMirror'; id: NodeId; from: NodeId | null; to: NodeId | null };
+  | { t: 'setMirror'; id: NodeId; from: NodeId | null; to: NodeId | null }
+  /** Lines drawn on the bullet's sketch, added after the ones it has. */
+  | { t: 'addStrokes'; id: NodeId; strokes: Stroke[] }
+  /** Lines erased from the bullet's sketch (whole, as they were). */
+  | { t: 'removeStrokes'; id: NodeId; strokes: Stroke[] };
 
 /** Where the caret should go after a command. */
 export interface Focus {

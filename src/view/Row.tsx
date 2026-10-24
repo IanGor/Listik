@@ -238,6 +238,13 @@ export function Row(props: RowProps) {
           fallback={
             <div class="text" onMouseDown={onStaticMouseDown(false)}>
               <Pieces o={o} pieces={pieces()} query={query()} />
+              {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
+              <Show when={content()?.strokes}>
+                <svg class="sketch-mark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Скетч">
+                  <path d="M3 17c3-6 5-9 7-9s0 8 3 8 4-7 8-9" />
+                  <path d="M3 21h18" />
+                </svg>
+              </Show>
             </div>
           }
         >

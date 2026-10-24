@@ -790,6 +790,52 @@ test.describe('zoom', () => {
     await expect(title(page)).toHaveText('Глава');
     expect(await outline(page)).toEqual(['вложенная']);
   });
+
+  test('a sketch beside a zoomed-in bullet: the mouse draws and erases, the caret stays, it all survives a reload', async ({ page }) => {
+    await page.goto('/?db=e2e-sketch&empty');
+    await page.locator('.row .text').click();
+    await page.keyboard.type('Встреча');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('итог');
+    await page.keyboard.press('Tab');
+    await page.locator('.row', { hasText: 'Встреча' }).locator('.bullet').click();
+    await expect(title(page)).toHaveText('Встреча');
+    await expect(page.locator('.sketch')).toHaveCount(0);
+    await page.locator('.sketch-toggle').click();
+    const sheet = page.locator('.sketch-sheet svg');
+    const box = (await sheet.boundingBox())!;
+    const draw = async (points: [number, number][]) => {
+      await page.mouse.move(box.x + points[0][0], box.y + points[0][1]);
+      await page.mouse.down();
+      for (const [x, y] of points.slice(1)) await page.mouse.move(box.x + x, box.y + y, { steps: 5 });
+      await page.mouse.up();
+    };
+    // Typing in a bullet, then drawing: the caret stays in the text.
+    await edit(page, 'итог');
+    await draw([[40, 40], [200, 60], [300, 120]]);
+    await page.getByRole('button', { name: 'Маркер' }).click();
+    await draw([[40, 200], [300, 200]]);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type(' дня');
+    await expect(editing(page)).toHaveText('итог дня');
+    await expect(sheet.locator('g.pen path')).toHaveCount(1);
+    await expect(sheet.locator('g.mark path')).toHaveCount(1);
+    // The eraser takes a whole line; undo brings it back.
+    await page.getByRole('button', { name: 'Ластик' }).click();
+    await draw([[40, 196], [60, 204]]);
+    await expect(sheet.locator('g.mark path')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Отменить' }).click();
+    await expect(sheet.locator('g.mark path')).toHaveCount(1);
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.sketch-sheet svg g.pen path')).toHaveCount(1);
+    await expect(page.locator('.sketch-sheet svg g.mark path')).toHaveCount(1);
+    // Put away by hand, it stays away; the list marks the bullet that has one.
+    await page.locator('.sketch-toggle').click();
+    await expect(page.locator('.sketch')).toHaveCount(0);
+    await page.locator('.crumb', { hasText: 'Главная' }).click();
+    await expect(page.locator('.row', { hasText: 'Встреча' }).locator('.sketch-mark')).toHaveCount(1);
+  });
 });
 
 test('a click on a guide line folds the bullet whose line it is; the line lights under the pointer', async ({ page }) => {

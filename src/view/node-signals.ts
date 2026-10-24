@@ -41,6 +41,8 @@ export class NodeSignals implements DocListener {
       case 'setTodo':
       case 'setCollapsed':
       case 'setMirror':
+      case 'addStrokes':
+      case 'removeStrokes':
         this.dirty.add(op.id);
         break;
       case 'insert':
