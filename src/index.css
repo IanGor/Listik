@@ -3006,8 +3006,8 @@ body.is-dragging * {
   height: 36px;
   padding: 0;
   color: var(--text);
-  background: none;
-  border: none;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
   border-radius: 50%;
   cursor: pointer;
 }
