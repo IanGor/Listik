@@ -23,7 +23,8 @@ export function Symbol(props: { children: JSX.Element }) {
 }
 
 const GO = () => <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>;
-const INBOX = () => <Symbol><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></Symbol>;
+// A note being written (square.and.pencil): the tray is the header's Inbox, a place, not this action.
+const WRITE = () => <Symbol><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" /></Symbol>;
 const SAVE = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" /></Symbol>;
 const OPEN = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 17v-6M9 14l3-3 3 3" /></Symbol>;
 const KEYS = () => <Symbol><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8" /></Symbol>;
@@ -130,7 +131,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
               <Show when={!touch()}><span class="hint">Ctrl+Shift+Space</span></Show>
-              <INBOX />
+              <WRITE />
             </button>
             <div class="menu-sep" role="separator" />
           </Show>

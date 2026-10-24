@@ -127,7 +127,6 @@ body,
   font-family: var(--font-ui);
 }
 
-.brand,
 .trash-text,
 .capture-input {
   font-family: var(--font-text);
@@ -211,44 +210,67 @@ button {
   border-bottom: 1px solid var(--hairline);
 }
 
-.brand {
+/* The places (TopBar.tsx): today's day and the Inbox, named, side by side at
+   the leading edge; the one the view is in stays lit (aria-current), the way
+   a sidebar marks where you are. */
+.places {
   display: flex;
-  gap: 10px;
+  flex: none;
+  gap: 4px;
+  margin-left: -10px;
+}
+
+.place {
+  display: flex;
+  gap: 8px;
   align-items: center;
   height: 40px;
-  padding: 0 12px;
-  margin-left: -12px;
+  padding: 0 12px 0 10px;
+  color: var(--muted);
+  font-family: var(--font-ui);
   font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 500;
   white-space: nowrap;
   background: none;
   border: none;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 160ms var(--ease-out);
+  transition: color 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 
-:where(:root.mouse) .brand:hover {
+:where(:root.mouse) .place:hover {
+  color: var(--text);
   background: var(--surface);
 }
 
-.brand:active {
+.place:active {
   background: var(--surface-2);
 }
 
-/* The mark: one coral pixel. */
-.brand::before {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  background: var(--primary);
-  transition: transform 200ms var(--ease-out);
+.place[aria-current='page'] {
+  color: var(--text);
+  background: var(--surface);
 }
 
-:where(:root.mouse) .brand:hover::before {
-  transform: rotate(45deg);
+.place-icon {
+  flex: none;
+}
+
+/* Today's calendar is the mark's colour: the app's own place. */
+.today-button .place-icon {
+  color: var(--primary);
+}
+
+.place-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  background: var(--surface-2);
+  border-radius: 10px;
 }
 
 .searchbar {
@@ -1151,11 +1173,33 @@ mark,
     padding: 0 12px 0 calc(12px + var(--controls-left, 0px));
   }
 
-  .brand {
-    font-size: 0;
+  /* A phone: the places are their symbols, 44px each, the count a badge on the tray. */
+  .places {
     gap: 0;
-    padding: 0 10px;
-    margin-left: -6px;
+    margin-left: -8px;
+  }
+
+  .place {
+    position: relative;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+
+  .place-label {
+    display: none;
+  }
+
+  .place-count {
+    position: absolute;
+    top: 2px;
+    right: 0;
+    min-width: 18px;
+    padding: 0 4px;
+    font-size: 11px;
+    line-height: 16px;
+    border: 1.5px solid var(--canvas);
   }
 
   .searchbar {
@@ -2643,14 +2687,6 @@ body.is-dragging * {
 
 /* --- Quick capture (view/QuickCapture.tsx) ------------------------------ */
 
-/* The tray in the header: a computer's way in; a phone uses the menu, turned
-   sideways too (wider than 640px, still a touch screen). */
-@media (max-width: 640px), (pointer: coarse) {
-  .capture-button {
-    display: none;
-  }
-}
-
 /* One line under the header, over the outline: nothing dims, nothing moves. */
 .capture {
   position: fixed;
@@ -2918,16 +2954,6 @@ body.is-dragging * {
   }
 }
 
-/* The logo on a phone is its dot alone, 30px wide: 44px to hit, the dot
-   where it was. */
-@media (pointer: coarse) and (max-width: 640px) {
-  .brand {
-    justify-content: center;
-    min-width: 44px;
-    padding: 0;
-    margin-left: -13px;
-  }
-}
 
 /* --- Sketch ------------------------------------------------------------ */
 

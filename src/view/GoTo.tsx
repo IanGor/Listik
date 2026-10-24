@@ -24,7 +24,7 @@ const shortPath = (p: Place) => (p.path.length > 2 ? ['…', ...p.path.slice(-2)
  * the dimmed outline, places under it: bullets whose title holds what is
  * typed (model/places.ts), or, before anything is typed, the places gone to
  * lately (moving: where bullets went lately first). "today" or "сегодня"
- * (its start) puts today's day first, the logo's way there. What is typed is only a
+ * (its start) puts today's day first, as «Сегодня» in the header. What is typed is only a
  * name: the search and the outline stay as they are.
  *
  * The first place is chosen: Enter takes it (going, the keyboard on into its

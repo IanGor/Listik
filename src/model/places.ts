@@ -40,7 +40,7 @@ export function findPlaces(doc: Doc, index: TextIndex, query: string, limit: num
   return found.filter((t) => !skip?.(t.id)).slice(0, limit).map((t) => placeOf(doc, t.id));
 }
 
-/** Words for today's day in "Перейти к…": the logo's way there. */
+/** Words for today's day in "Перейти к…": the header's «Сегодня» way there. */
 const TODAY = ['today', 'сегодня'];
 
 /**

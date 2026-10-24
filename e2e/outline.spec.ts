@@ -994,8 +994,41 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('the logo opens today, folded; nothing comes in twice', async ({ page }) => {
-    await page.locator('.brand').click();
+  test('"Inbox" in the header goes into the Inbox in one click, lit while there, counting what waits; "Сегодня" lit in today', async ({ page }) => {
+    const todayButton = page.locator('.today-button');
+    const inbox = page.locator('.inbox-button');
+    await expect(todayButton.locator('.place-label')).toHaveText('Сегодня');
+    await expect(todayButton).toHaveAccessibleName('Сегодня');
+    await expect(todayButton.locator('text')).toHaveText(String(new Date().getDate()));
+    // No structure yet: the Inbox is made last at the top level, and there it goes.
+    await expect(inbox.locator('.place-count')).toHaveCount(0);
+    await inbox.click();
+    await expect(title(page)).toHaveText('Inbox');
+    await expect(inbox).toHaveAttribute('aria-current', 'page');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    expect((await outline(page)).at(-1)).toBe('Inbox');
+    await expect(inbox).not.toHaveAttribute('aria-current', 'page');
+    await page.keyboard.press('Control+Shift+Space');
+    await page.keyboard.type('мысль');
+    await page.keyboard.press('Enter');
+    await expect(inbox.locator('.place-count')).toHaveText('1');
+    await expect(inbox).toHaveAttribute('title', 'Inbox: 1 в ожидании');
+    await inbox.click();
+    await expect(title(page)).toHaveText('Inbox');
+    await expect(caret(page)).toHaveCount(0);
+    expect(await outline(page)).toEqual(['мысль']);
+    // The search goes, as with "Сегодня".
+    await page.locator('.search').fill('Том');
+    await inbox.click();
+    await expect(page.locator('.search')).toHaveValue('');
+    await create(page);
+    await expect(title(page)).toHaveText(today);
+    await expect(todayButton).toHaveAttribute('aria-current', 'page');
+    await expect(inbox).not.toHaveAttribute('aria-current', 'page');
+  });
+
+  test('"Сегодня" opens today, folded; nothing comes in twice', async ({ page }) => {
+    await page.locator('.today-button').click();
     await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
     await expect(title(page)).toHaveText(today);
@@ -1003,7 +1036,7 @@ test.describe('structure and calendar', () => {
     await page.keyboard.type('утро');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
-    await page.locator('.brand').click();
+    await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
     expect(await outline(page)).toEqual(['#notes', 'todo', ...SLOTS]);
@@ -1074,7 +1107,7 @@ test.describe('structure and calendar', () => {
     await page.reload();
     await expect(title(page)).toHaveText(year);
     // The logo goes on into today, in that year: no second one is made.
-    await page.locator('.brand').click();
+    await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await page.locator('.crumbs .crumb', { hasText: `@q${quarter}` }).click();
     expect(await outline(page)).toEqual([year]);
@@ -1123,7 +1156,7 @@ test.describe('structure and calendar', () => {
     // Still there, with its template.
     await expect(title(page)).toHaveText(other);
     expect(await outline(page)).toEqual(DAY);
-    await page.locator('.logo, .brand').first().click();
+    await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(['#notes', 'todo', ...SLOTS]);
   });
@@ -1223,8 +1256,9 @@ test.describe('quick capture', () => {
     await page.keyboard.type('!');
     await expect(editing(page)).toHaveText('Часть втора!я');
 
-    // The tray in the header: the next one goes last, into the same Inbox.
-    await page.getByRole('button', { name: 'Записать в Inbox' }).click();
+    // From the menu: the next one goes last, into the same Inbox.
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: 'Записать в Inbox' }).click();
     await page.keyboard.type('вторая мысль');
     await page.keyboard.press('Enter');
     expect((await outline(page)).slice(-2)).toEqual([expect.stringMatching(/^  позвонить/), '  вторая мысль']);
@@ -1868,7 +1902,7 @@ test.describe('theme', () => {
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
-    // The switch lives in the menu, as everything but search and quick capture does: the logo, the tray, the menu.
+    // The switch lives in the menu, as everything but search and the places does: «Сегодня», Inbox, the menu.
     await expect(page.locator('.topbar button')).toHaveCount(3);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
@@ -2053,12 +2087,7 @@ test.describe('touch screen', () => {
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
 
-  test('quick capture comes first in the menu; no tray in the header; the line sits at the bottom', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
-    // Turned sideways the window is wider than 640px, still no tray.
-    await page.setViewportSize({ width: 915, height: 412 });
-    await expect(page.getByRole('button', { name: 'Записать в Inbox' })).toBeHidden();
-    await page.setViewportSize({ width: 412, height: 915 });
+  test('quick capture comes first in the menu; the line sits at the bottom', async ({ page }) => {
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.getByRole('menuitem').first()).toHaveText('Записать в Inbox');
     await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
@@ -2634,8 +2663,17 @@ test.describe('touch screen', () => {
     await expect(page.locator('.crumb.current')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   });
 
+  test('the places are symbols on a phone, named for a screen reader; a tap goes there', async ({ page }) => {
+    await expect(page.locator('.today-button .place-label')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Сегодня' })).toBeVisible();
+    await page.getByRole('button', { name: 'Inbox' }).tap();
+    await expect(page.locator('.zoom-title')).toHaveText('Inbox');
+    await expect(page.locator('.inbox-button')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.editbar')).toHaveCount(0);
+  });
+
   test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
-    expect((await page.locator('.brand').boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    for (const place of ['.today-button', '.inbox-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
     // The bullet reaches into the gutter on its left; its dot stays where the row's guide line meets it.
     const bullet = page.locator('.row .bullet').first();

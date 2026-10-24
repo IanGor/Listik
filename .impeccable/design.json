@@ -21,7 +21,7 @@
       "headline": { "displayName": "Заголовок zoom", "purpose": "Пункт, в который вошли." },
       "body": { "displayName": "Текст пункта", "purpose": "Строки листа, колонка до 72 символов." },
       "note": { "displayName": "Заметка", "purpose": "Под пунктом, 3 строки вне правки." },
-      "title": { "displayName": "Заголовок обвязки", "purpose": "Логотип, заголовки панелей." },
+      "title": { "displayName": "Заголовок обвязки", "purpose": "Заголовки панелей." },
       "label": { "displayName": "Подпись", "purpose": "Группы, подсказки клавиш, время." }
     },
     "shadows": [
@@ -45,7 +45,7 @@
       "name": "Кнопка-значок",
       "kind": "button",
       "refersTo": "icon-button",
-      "description": "Круглая кнопка в шапке: «⋯», лоток Inbox.",
+      "description": "Круглая кнопка в шапке: «⋯».",
       "html": "<button class=\"ds-icon-button\" aria-label=\"Меню\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><circle cx=\"5\" cy=\"12\" r=\"1.7\"/><circle cx=\"12\" cy=\"12\" r=\"1.7\"/><circle cx=\"19\" cy=\"12\" r=\"1.7\"/></svg></button>",
       "css": ".ds-icon-button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; color: #6c6a64; background: #faf9f5; border: 1px solid #e6dfd8; border-radius: 50%; cursor: pointer; transition: color 160ms cubic-bezier(0.16, 1, 0.3, 1), background 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-icon-button:hover { color: #1f1e1c; background: #f2ede4; } .ds-icon-button:active { background: #e9e2d6; } .ds-icon-button:focus-visible { outline: 2px solid #c96442; outline-offset: 2px; }"
     },
@@ -97,7 +97,7 @@
       "Один акцент — коралл; он отмечает состояние, а не украшает.",
       "Светлая и тёмная тема из одних и тех же токенов (`light-dark()`), по умолчанию — как в системе.",
       "Всплывающее не затемняет и не сдвигает лист.",
-      "Знаки вместо слов — только там, где их смысл однозначен (точка, ромбик копии, лоток Inbox); «+» значит только «добавить здесь»."
+      "Знаки вместо слов — только там, где их смысл однозначен (точка, ромбик копии; на телефоне — календарь и лоток мест); «+» значит только «добавить здесь»."
     ],
     "rules": [
       { "name": "The One Accent Rule", "body": "Коралл — единственный цвет состояния. Новый цвет допустим только для разметки текста и только как токен в `:root` (`src/index.css`).", "section": "colors" },

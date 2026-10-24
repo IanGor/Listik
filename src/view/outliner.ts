@@ -507,7 +507,7 @@ export class Outliner {
     }
   }
 
-  /** A place zoomed into goes first among the recent ones; calendar periods are reached by the logo and ‹ ›, `#secret` ones through the outline only. */
+  /** A place zoomed into goes first among the recent ones; calendar periods are reached by «Сегодня», `#secret` ones through the outline only. */
   private visited(id: NodeId): void {
     if (periodAt(this.doc, id) || !searchable(this.doc, id)) return;
     this.remember(id, this.recentPlaces, this.setRecentPlaces, 'listik-recent');
@@ -704,7 +704,7 @@ export class Outliner {
     });
   }
 
-  /** "Сегодня" taken in "Перейти к…": the line closes, and the view goes into today's day as the logo leads. */
+  /** "Сегодня" taken in "Перейти к…": the line closes, and the view goes into today's day as «Сегодня» leads. */
   goToTodayPlace(): void {
     this.setPlaceLine(null);
     this.placeBack = null;
@@ -760,7 +760,7 @@ export class Outliner {
   }
 
   /**
-   * The logo, and the start: into today's day in the calendar
+   * «Сегодня» in the header, and the start: into today's day in the calendar
    * (model/calendar.ts), its year made first if this is the first time in
    * it. The caret stays out. `quiet` (the start) says nothing when there is
    * no structure or no such day.
@@ -785,6 +785,45 @@ export class Outliner {
       this.zoomTo(day);
     });
     this.today = { day, date: now.toDateString() };
+  }
+
+  /**
+   * The Inbox button: into the structure's Inbox, made last at the top level
+   * if there is none (not an undo step, as the calendar the app builds). The
+   * caret stays out, as after "Сегодня".
+   */
+  goInbox(): void {
+    let inbox = findInbox(this.doc);
+    if (inbox === null) {
+      if (this.readOnly) return this.notify('Inbox ещё нет');
+      this.scaffold((ctx) => void appendTrees(ctx, this.doc.root, [{ text: 'Inbox', children: [] }]));
+      inbox = findInbox(this.doc);
+      if (inbox === null) return;
+    }
+    const id = inbox;
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      this.zoomTo(id);
+    });
+  }
+
+  /** Where the header's places lead, if the view is there: today's day or the Inbox. Reactive. */
+  placeNow(): 'today' | 'inbox' | null {
+    this.rowsVersion();
+    const z = this.zoom();
+    if (z === null || !this.doc.has(z)) return null;
+    if (z === findInbox(this.doc)) return 'inbox';
+    const p = periodAt(this.doc, z);
+    const t = dayOf(new Date());
+    return p?.kind === 'day' && t.kind === 'day' && p.y === t.y && p.m === t.m && p.d === t.d ? 'today' : null;
+  }
+
+  /** How many bullets wait in the Inbox (its first level); null without one. Reactive. */
+  inboxCount(): number | null {
+    this.rowsVersion();
+    const inbox = findInbox(this.doc);
+    return inbox === null ? null : this.doc.get(inbox).children.length;
   }
 
   /** After a reload in today's day: the next morning still leads on to the new day (`resumed`), as after the logo. */
@@ -1173,7 +1212,7 @@ export class Outliner {
   }
 
   /**
-   * Ctrl+Shift+Space, the tray in the header, "Записать в Inbox" in the
+   * Ctrl+Shift+Space, "Записать в Inbox" in the
    * menu: the quick capture line opens over the outline. Where the caret was
    * is read off the page first (the focus request is where editing began;
    * typing has moved on since), to go back there when the line closes.

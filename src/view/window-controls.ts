@@ -4,7 +4,7 @@
  * WebKit tells the page nothing about them, so the header's left inset is a
  * guess from the geometry: an iPad app that does not fill the screen is in a
  * window. Full screen and every other platform leave the inset at 0, and the
- * logo where it was.
+ * places where they were.
  */
 
 /** Room the controls take from the window's left edge, px (the pill ends ~61 px in). */
