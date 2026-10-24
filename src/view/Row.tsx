@@ -216,7 +216,8 @@ export function Row(props: RowProps) {
     >
       <Show when={hasChildren()}>
         <span class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} aria-hidden="true">
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><path d="M3 1.5 7.5 5 3 8.5z" /></svg>
+          {/* A chevron, Apple's disclosure mark: › closed, turning to ⌄ when open. */}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5 8 6l-3.5 3.5" /></svg>
         </span>
       </Show>
       <span
