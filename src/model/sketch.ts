@@ -84,21 +84,43 @@ export function touches(points: Point[], p: Point, radius: number): boolean {
   return false;
 }
 
-/** SVG path data: a smooth curve through the midpoints, so a line drawn by hand has no corners. */
+/**
+ * SVG path data: a curve through every point Apple Pencil gave (centripetal
+ * Catmull–Rom, as cubic Béziers). It keeps small handwriting in shape, where
+ * a curve between the points' midpoints cut its turns into a broken line,
+ * and makes no loops or cusps at a sharp turn.
+ */
 export function pathData(points: Point[]): string {
   if (!points.length) return '';
-  const f = (n: number) => String(Math.round(n * 10) / 10);
+  const f = (n: number) => String(Math.round(n * 100) / 100);
   const [x0, y0] = points[0];
   // A dot: a zero-length line, which round caps draw as a dot.
   if (points.length === 1) return `M${f(x0)} ${f(y0)}l0 0`;
   let d = `M${f(x0)} ${f(y0)}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const [x, y] = points[i];
-    const [nx, ny] = points[i + 1];
-    d += `Q${f(x)} ${f(y)} ${f((x + nx) / 2)} ${f((y + ny) / 2)}`;
+  const n = points.length;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(n - 1, i + 2)];
+    // Knot spacing: the square root of each step's length (centripetal).
+    const d1 = Math.sqrt(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]));
+    const d2 = Math.sqrt(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]));
+    const d3 = Math.sqrt(Math.hypot(p3[0] - p2[0], p3[1] - p2[1]));
+    const c1 = d1 < 1e-6 ? p1 : control(p0, p1, p2, d1, d2);
+    const c2 = d3 < 1e-6 ? p2 : control(p3, p2, p1, d3, d2);
+    d += `C${f(c1[0])} ${f(c1[1])} ${f(c2[0])} ${f(c2[1])} ${f(p2[0])} ${f(p2[1])}`;
   }
-  const [xl, yl] = points[points.length - 1];
-  return `${d}L${f(xl)} ${f(yl)}`;
+  return d;
+}
+
+/** The Bézier control point next to `b` on the way to `c`, `a` being the point before `b`. */
+function control(a: Point, b: Point, c: Point, da: number, db: number): Point {
+  const a2 = da * da;
+  const b2 = db * db;
+  const m = 2 * a2 + 3 * da * db + b2;
+  const k = 3 * da * (da + db);
+  return [(a2 * c[0] - b2 * a[0] + m * b[0]) / k, (a2 * c[1] - b2 * a[1] + m * b[1]) / k];
 }
 
 /** A new line for a sketch. */

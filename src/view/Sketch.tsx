@@ -5,12 +5,16 @@ import type { Outliner } from './outliner';
 import { narrow } from './screen';
 
 /** Width of a pen line and of a marker band, in sheet units (model/sketch.ts). */
-const PEN = 3.5;
+const PEN = 2.6;
 const MARK = 24;
 /** Points of a line closer than this to the last one are skipped while drawing, units. */
-const MIN_STEP = 0.4;
-/** Points within this of the line through their neighbours are dropped when a line is kept, units. */
-const TOLERANCE = 0.5;
+const MIN_STEP = 0.25;
+/**
+ * Points within this of the line through their neighbours are dropped when a
+ * line is kept, units: little enough to keep small handwriting as it was
+ * drawn (the curve goes through the points that stay).
+ */
+const TOLERANCE = 0.15;
 /** Reach of the eraser around the pen's tip, px. */
 const ERASER = 10;
 
@@ -94,7 +98,10 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     });
   });
 
-  let gesture: { pointer: number; rect: DOMRect; points: Point[]; hit: Set<string> } | null = null;
+  let gesture: { pointer: number; rect: DOMRect; points: Point[]; hit: Set<string>; samples: number; started: number } | null = null;
+  /** `?ink` in the address: how many points a second the pen gave in the last line, and whether they came coalesced. */
+  const debug = new URLSearchParams(location.search).has('ink');
+  const [rate, setRate] = createSignal('');
   const at = (e: PointerEvent, rect: DOMRect): Point => {
     const k = SHEET / rect.width;
     return [(e.clientX - rect.left) * k, (e.clientY - rect.top) * k];
@@ -121,7 +128,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     svg.setPointerCapture(e.pointerId);
     const rect = svg.getBoundingClientRect();
     const p = at(e, rect);
-    gesture = { pointer: e.pointerId, rect, points: [p], hit: new Set() };
+    gesture = { pointer: e.pointerId, rect, points: [p], hit: new Set(), samples: 1, started: e.timeStamp };
     if (tool() === 'eraser') erase(p);
     else {
       live.setAttribute('class', tool() === 'mark' ? 'mark' : 'pen');
@@ -134,6 +141,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     if (!g || e.pointerId !== g.pointer) return;
     // All the samples since the last event: Apple Pencil reports 240 a second, events come at most once a frame.
     const samples = e.getCoalescedEvents?.() ?? [];
+    g.samples += samples.length || 1;
     for (const s of samples.length ? samples : [e]) {
       const p = at(s, g.rect);
       if (tool() === 'eraser') {
@@ -143,13 +151,20 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
       const last = g.points[g.points.length - 1];
       if (Math.hypot(p[0] - last[0], p[1] - last[1]) >= MIN_STEP) g.points.push(p);
     }
-    if (tool() !== 'eraser') live.setAttribute('d', pathData(g.points));
+    if (tool() === 'eraser') return;
+    // Where the pen is about to be, drawn ahead and never kept: the line keeps up with the tip.
+    const ahead = (e.getPredictedEvents?.() ?? []).map((s) => at(s, g.rect));
+    live.setAttribute('d', pathData(ahead.length ? [...g.points, ...ahead] : g.points));
   };
 
   const onPointerUp = (e: PointerEvent) => {
     const g = gesture;
     if (!g || e.pointerId !== g.pointer) return;
     gesture = null;
+    if (debug) {
+      const seconds = (e.timeStamp - g.started) / 1000;
+      setRate(`${e.pointerType}: ${seconds > 0 ? Math.round(g.samples / seconds) : 0} точек/с, coalesced: ${'getCoalescedEvents' in e ? 'есть' : 'нет'}, predicted: ${'getPredictedEvents' in e ? 'есть' : 'нет'}`);
+    }
     const t = tool();
     if (t === 'eraser') {
       if (g.hit.size) o.sketch((ctx) => eraseStrokes(ctx, id, g.hit));
@@ -197,6 +212,9 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
         </svg>
       </div>
       <Show when={drawable()}>
+        <Show when={debug && rate()}>
+          <div class="sketch-rate">{rate()}</div>
+        </Show>
         <div class="sketch-tools" role="toolbar" aria-label="Инструменты скетча">
           {button('pen', 'Перо', PEN_ICON)}
           {button('mark', 'Маркер', MARK_ICON)}

@@ -2858,6 +2858,15 @@ body.is-dragging * {
 /* The zoomed-in bullet's sketch (Sketch.tsx): a sheet left of the list, the
    list keeping the rest; below the list on a phone. The sheet scrolls down
    on its own, with a finger; Apple Pencil draws. */
+/* The list and the sketch (Outline.tsx): side by side on a landscape
+   screen, the sketch on top on an upright one (iPad held upright, phone). */
+.desk {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
 .sketch {
   position: relative;
   flex: none;
@@ -2868,9 +2877,27 @@ body.is-dragging * {
 }
 
 @media (orientation: portrait) {
-  .sketch {
-    width: 57%;
+  .desk {
+    flex-direction: column;
   }
+
+  .sketch {
+    width: auto;
+    height: 60%;
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+}
+
+/* `?ink`: how fast the pen gave points (Sketch.tsx), over the tools. */
+.sketch-rate {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 76px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .sketch-sheet {
@@ -3012,6 +3039,10 @@ body.is-dragging * {
     height: min(42vh, 380px);
     border-right: 0;
     border-bottom: 1px solid var(--hairline);
+  }
+
+  .desk {
+    flex-direction: column;
   }
 
   /* An icon on a phone: the path keeps the room. */

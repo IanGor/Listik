@@ -32,9 +32,14 @@ describe('points', () => {
     expect(touches([[10, 10]], [12, 12], 3)).toBe(true);
   });
 
-  it('a single point draws as a dot', () => {
+  it('the curve goes through every point; a single point draws as a dot', () => {
     expect(pathData([[5, 5]])).toBe('M5 5l0 0');
-    expect(pathData([[0, 0], [10, 0], [10, 10]])).toBe('M0 0Q10 0 10 5L10 10');
+    expect(pathData([[0, 0], [10, 0]])).toBe('M0 0C0 0 10 0 10 0');
+    const d = pathData([[0, 0], [10, 0], [10, 10], [0, 10]]);
+    // Three cubic pieces ending at the points themselves.
+    expect(d.match(/C[^C]+/g)!.map((c) => c.trim().split(' ').slice(-2).join(' '))).toEqual(['10 0', '10 10', '0 10']);
+    // A right-angled turn bulges only a little past the corner (centripetal: no loops).
+    for (const n of d.replace(/[MC]/g, ' ').trim().split(/\s+/).map(Number)) expect(n >= -2 && n <= 12).toBe(true);
   });
 });
 

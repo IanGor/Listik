@@ -407,7 +407,8 @@ export function Outline(props: { o: Outliner }) {
       <QuickCapture o={o} />
       <GoTo o={o} />
       <div class="workspace">
-        {/* The zoomed-in bullet's sketch, left of its list (below it on a phone). */}
+        {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
+        <div class="desk">
         <Show when={o.sketchShown()} keyed>
           {(id) => <Sketch o={o} id={id} />}
         </Show>
@@ -467,6 +468,7 @@ export function Outline(props: { o: Outliner }) {
               </Show>
             </div>
           </div>
+        </div>
         </div>
         {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard, unless that keyboard types into its filter. */}
         <Show when={o.trashOpen() && (!(touch() && keyboard()) || trashTyping())}>
