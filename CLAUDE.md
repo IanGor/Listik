@@ -63,8 +63,8 @@ TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифты — **толь
 - **`src/persist/`**:
   - `db.ts` — схема IndexedDB: `meta`/`snapshot`, `oplog`, `meta`/`backupDir`, `keyslot`, `device`, `sync`, `syncState`;
   - `codec.ts` — записи открытые или шифрованные (`LockedError` без ключа);
-  - `idb.ts` — `Persistence`: загрузка, дописывание журнала, `read` для вкладки только на чтение;
-  - `compact.ts` + `compact.worker.ts` — пересборка снимка в Worker по ключу;
+  - `idb.ts` — `Persistence`: загрузка, дописывание журнала (неудавшаяся пачка — `unsaved`, идёт первой в следующей записи), `read` для вкладки только на чтение;
+  - `compact.ts` + `compact.worker.ts` — пересборка снимка в Worker по ключу; `replay` — применение журнала, в том числе с дырой;
   - `serialize.ts` — снимок v4 (корзина после документа, `parent = -2`);
   - `backup.ts` — автокопия в папку;
   - `lock.ts` — Web Lock, одна пишущая вкладка.

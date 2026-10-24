@@ -51,8 +51,9 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
     if (opened.config && opened.secret && e instanceof DOMException && e.name === 'OperationError') return { damaged: opened };
     throw e;
   }
-  const { doc, persistence, fresh } = stored;
+  const { doc, persistence, fresh, merged } = stored;
   console.info(`loaded ${doc.nodes.size - 2} bullets in ${Math.round(performance.now() - started)} ms`);
+  if (merged) console.warn(`the log skipped a batch: ${merged} ops merged`);
   const outliner = new Outliner(doc);
   outliner.bare = new URLSearchParams(location.search).has('empty');
   outliner.keepFolds(name);
@@ -62,11 +63,13 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   if (fresh) outliner.firstStructure(true);
   outliner.persistence = persistence;
   outliner.opened = opened;
-  persistence.onError = (e) => outliner.notify(`Не удалось сохранить: ${e instanceof Error ? e.message : String(e)}`);
+  // null: what failed is on disk now (idb.ts keeps it and tries again).
+  persistence.onError = (e) => outliner.notify(e === null ? 'Правки сохранены' : `Не удалось сохранить: ${e instanceof Error ? e.message : String(e)}`);
   outliner.backup = await Backup.open(name, doc);
   outliner.syncHandle = await startSync(doc, opened, persistence);
   outliner.watchSync();
   outliner.tagYears();
+  if (merged) outliner.notify('Часть прежних правок не дошла до диска: документ собран из сохранённого');
   return outliner;
 }
 

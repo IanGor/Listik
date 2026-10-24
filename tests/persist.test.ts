@@ -79,6 +79,67 @@ describe('Persistence', () => {
     expect(dump(await reopen(name))).toEqual(['текст', '']);
   });
 
+  it('a write that fails is not lost: the next one carries it, so the log has no gap', async () => {
+    const name = freshName();
+    const { doc, persistence } = await Persistence.open(name);
+    persistence.onError = () => {};
+    const rows = new VisibleRows(doc);
+    const ctx = { doc, rows };
+    const id = rows.ids[0];
+    // The way WebKit drops a transaction after the page was in the background.
+    const db = (persistence as unknown as { db: IDBDatabase }).db;
+    const transaction = db.transaction.bind(db);
+    let failures = 1;
+    db.transaction = ((stores: string[], mode: IDBTransactionMode) => {
+      if (failures-- > 0) throw new DOMException('Connection to Indexed Database server lost', 'UnknownError');
+      return transaction(stores, mode);
+    }) as typeof db.transaction;
+    doc.transact(() => cmd.setText(ctx, id, 'один'));
+    await persistence.flush();
+    expect(persistence.error).not.toBeNull();
+    doc.transact(() => cmd.setText(ctx, id, 'один два'));
+    await persistence.flush();
+    expect(persistence.error).toBeNull();
+    persistence.close();
+    expect(dump(await reopen(name))).toEqual(['один два']);
+  });
+
+  it('a log with a gap still loads: an op after it merges, and the log folds into the snapshot', async () => {
+    const name = freshName();
+    const { doc, persistence } = await Persistence.open(name);
+    const rows = new VisibleRows(doc);
+    const ctx = { doc, rows };
+    const id = rows.ids[0];
+    doc.transact(() => cmd.setText(ctx, id, 'один'));
+    await persistence.flush();
+    doc.transact(() => cmd.setText(ctx, id, 'один два'));
+    doc.transact(() => { cmd.split(ctx, id, 8); });
+    await persistence.flush();
+    persistence.close();
+    // The first batch lost, as a dropped write left it before.
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open(name);
+      r.onsuccess = () => resolve(r.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction('oplog', 'readwrite');
+      const store = tx.objectStore('oplog');
+      store.getAllKeys().onsuccess = (e) => store.delete((e.target as IDBRequest<IDBValidKey[]>).result[0]);
+      tx.oncomplete = () => resolve();
+    });
+    db.close();
+    const again = await Persistence.open(name);
+    expect(again.merged).toBe(1);
+    expect(dump(again.doc)).toEqual(['один два', '']);
+    await again.persistence.compact();
+    again.persistence.close();
+    expect(await logLength(name)).toBe(0);
+    const { doc: last, merged, persistence: p } = await Persistence.open(name);
+    p.close();
+    expect(merged).toBe(0);
+    expect(dump(last)).toEqual(['один два', '']);
+  });
+
   it('folds the log into a snapshot on compaction', async () => {
     const name = freshName();
     const { doc, persistence } = await Persistence.open(name);

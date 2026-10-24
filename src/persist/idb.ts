@@ -1,7 +1,7 @@
 import { Doc, type DocListener } from '../model/doc';
 import type { Op } from '../model/types';
 import { plainCodec, recoding, type Codec } from './codec';
-import { compactLog } from './compact';
+import { compactLog, replay } from './compact';
 import { done, openDb, readAll, writeSnapshot } from './db';
 import { coalesce, deserialize, serialize } from './serialize';
 
@@ -13,6 +13,8 @@ import { coalesce, deserialize, serialize } from './serialize';
 const FLUSH_DELAY = 0;
 /** Ops in the log before it is folded into a new snapshot. */
 const COMPACT_AFTER = 10_000;
+/** A write that failed is tried again after this, ms, if nothing else writes first. */
+const RETRY_DELAY = 2000;
 
 /**
  * A `meta` record written along with a batch of the log; `undefined`
@@ -44,18 +46,19 @@ function workerCompactor(name: string): Compactor {
   });
 }
 
-/** Snapshot plus replayed log; a new single-bullet doc if nothing is stored yet. */
-async function load(db: IDBDatabase, codec: Codec): Promise<{ doc: Doc; logSize: number; stored: boolean }> {
+/** Snapshot plus replayed log; a new single-bullet doc if nothing is stored yet. `merged`: ops of the log not from their state (`replay`). */
+async function load(db: IDBDatabase, codec: Codec): Promise<{ doc: Doc; logSize: number; stored: boolean; merged: number }> {
   const { snapshot, batches } = await readAll(db);
-  if (!snapshot) return { doc: Doc.withEmptyBullet(), logSize: 0, stored: false };
+  if (!snapshot) return { doc: Doc.withEmptyBullet(), logSize: 0, stored: false, merged: 0 };
   const doc = deserialize(await codec.decodeSnapshot(snapshot));
   let logSize = 0;
+  let merged = 0;
   for (const record of batches) {
     const batch = await codec.decodeBatch(record);
-    for (const op of batch) doc.apply(op);
+    merged += replay(doc, batch);
     logSize += batch.length;
   }
-  return { doc, logSize, stored: true };
+  return { doc, logSize, stored: true, merged };
 }
 
 const idle = (fn: () => void) =>
@@ -68,7 +71,11 @@ const idle = (fn: () => void) =>
  * the size of the document. Riders add `meta` records to the same
  * transaction (the sync state, so it never disagrees with the log). Once the log grows past COMPACT_AFTER ops, a worker folds
  * it into a new snapshot (compact.ts), off the main thread. Records go
- * through the codec: plain, or encrypted with the document's key.
+ * through the codec: plain, or encrypted with the document's key. A batch
+ * that fails to be written (WebKit drops IndexedDB transactions, and even
+ * the connection, after the page was in the background) is kept and goes
+ * first in the next write, after reconnecting: dropped, it left a gap in the
+ * log, and the next load stopped at the first op after it.
  */
 export class Persistence implements DocListener {
   /** The last write error; writes keep being attempted. */
@@ -76,6 +83,9 @@ export class Persistence implements DocListener {
   /** Called when `error` changes. */
   onError: ((e: unknown) => void) | null = null;
   private pending: Op[] = [];
+  /** A batch cut but not on disk yet, its riders' records with it: the next write takes it first. */
+  private unsaved: { ops: Op[]; meta: { key: string; value: unknown }[] } | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private riders = new Set<Rider>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Appends run strictly one after another. */
@@ -84,10 +94,12 @@ export class Persistence implements DocListener {
   private compactScheduled = false;
   private logSize: number;
   private db: IDBDatabase;
+  private name: string;
   private compactor: Compactor;
   private codec: Codec;
 
-  private constructor(db: IDBDatabase, doc: Doc, logSize: number, compactor: Compactor, codec: Codec) {
+  private constructor(name: string, db: IDBDatabase, doc: Doc, logSize: number, compactor: Compactor, codec: Codec) {
+    this.name = name;
     this.db = db;
     this.logSize = logSize;
     this.compactor = compactor;
@@ -95,21 +107,26 @@ export class Persistence implements DocListener {
     doc.subscribe(this);
   }
 
-  /** Loads the doc (snapshot + log replay), or starts a new one with a single empty bullet (`fresh`). */
-  static async open(name = 'listik', codec: Codec = plainCodec): Promise<{ doc: Doc; persistence: Persistence; fresh: boolean }> {
+  /**
+   * Loads the doc (snapshot + log replay), or starts a new one with a single
+   * empty bullet (`fresh`). `merged`: ops of the log that had to be merged
+   * (a gap in it, `replay`); the log is then folded into the snapshot at once.
+   */
+  static async open(name = 'listik', codec: Codec = plainCodec): Promise<{ doc: Doc; persistence: Persistence; fresh: boolean; merged: number }> {
     const db = await openDb(name);
-    const { doc, logSize, stored } = await load(db, codec);
+    const { doc, logSize, stored, merged } = await load(db, codec);
     if (!stored) await writeSnapshot(db, await codec.encodeSnapshot(serialize(doc)));
-    const compactor: Compactor = typeof Worker === 'function' ? workerCompactor(name) : (c, force) => compactLog(db, c, force);
-    const persistence = new Persistence(db, doc, logSize, compactor, codec);
-    if (logSize > COMPACT_AFTER) persistence.scheduleCompact();
+    const compactor: Compactor = typeof Worker === 'function' ? workerCompactor(name) : (c, force) => compactLog(persistence.db, c, force);
+    const persistence = new Persistence(name, db, doc, logSize, compactor, codec);
+    if (merged) void persistence.compact();
+    else if (logSize > COMPACT_AFTER) persistence.scheduleCompact();
     if (typeof window !== 'undefined') {
       const flush = () => void persistence.flush();
       window.addEventListener('pagehide', flush);
       document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flush());
       void navigator.storage?.persist?.();
     }
-    return { doc, persistence, fresh: !stored };
+    return { doc, persistence, fresh: !stored, merged };
   }
 
   /** The doc as stored, without saving anything back: for a read-only tab. */
@@ -138,26 +155,41 @@ export class Persistence implements DocListener {
     return () => this.riders.delete(rider);
   }
 
-  /** Writes pending ops, and what riders have, now. Resolves when everything queued so far is on disk. */
+  /** Writes pending ops, and what riders have, now (a batch that failed before, first). Resolves when everything queued so far is on disk. */
   flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     const meta = [...this.riders].flatMap((r) => r());
-    if (!this.pending.length && !meta.length) return this.chain;
+    if (!this.pending.length && !meta.length && !this.unsaved) return this.chain;
     const batch = coalesce(this.pending);
     this.pending = [];
     this.logSize += batch.length;
     const codec = this.codec;
     const written = this.enqueue(async () => {
-      const record = batch.length ? await codec.encodeBatch(batch) : null;
       const records = await Promise.all(meta.map(async ({ key, value }) => ({ key, value: await value })));
+      // What failed before goes in the same record, ahead: the log never skips a batch.
+      const held = this.unsaved;
+      const ops = held ? coalesce([...held.ops, ...batch]) : batch;
+      const all = held ? [...held.meta, ...records] : records;
+      this.unsaved = { ops, meta: all };
+      if (!ops.length && !all.length) return;
+      // WebKit may have closed the connection along with the failed transaction.
+      if (held) await this.reconnect();
+      const record = ops.length ? await codec.encodeBatch(ops) : null;
       const tx = this.db.transaction(['oplog', 'meta'], 'readwrite');
       if (record !== null) tx.objectStore('oplog').add(record);
-      for (const { key, value } of records) {
+      for (const { key, value } of all) {
         if (value === undefined) tx.objectStore('meta').delete(key);
         else tx.objectStore('meta').put(value, key);
       }
       await done(tx);
+      this.unsaved = null;
+      if (this.error !== null) {
+        this.error = null;
+        this.onError?.(null);
+      }
     });
     if (this.logSize > COMPACT_AFTER) this.scheduleCompact();
     return written;
@@ -222,5 +254,18 @@ export class Persistence implements DocListener {
     this.error = e;
     console.error('Saving failed', e);
     this.onError?.(e);
+    if (this.unsaved && !this.retryTimer) {
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = null;
+        void this.flush();
+      }, RETRY_DELAY);
+    }
+  }
+
+  /** A new connection to the database, the old one closed. */
+  private async reconnect(): Promise<void> {
+    const db = await openDb(this.name);
+    this.db.close();
+    this.db = db;
   }
 }
