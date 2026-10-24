@@ -3026,6 +3026,29 @@ body.is-dragging * {
   border-color: transparent;
 }
 
+/* The bullet has a sketch: coral even when the sheet is put away, with a dot. */
+.sketch-toggle.has {
+  position: relative;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.sketch-toggle.has::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 2px var(--canvas);
+}
+
+.sketch-toggle.has.on {
+  border-color: transparent;
+}
+
 /* A bullet with a sketch, in the list: a faint mark after its text. */
 .sketch-mark {
   margin-left: 6px;

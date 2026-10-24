@@ -4,7 +4,8 @@ import { invert } from '../src/model/doc';
 import { History } from '../src/model/history';
 import { checkInvariants } from '../src/model/invariants';
 import { applyMerged } from '../src/model/merge';
-import { decodePoints, drawStroke, encodePoints, eraseStrokes, pathData, simplify, touches, type Point } from '../src/model/sketch';
+import { decodePoints, drawStroke, encodePoints, eraseStrokes, pathData, simplify, smooth, touches, type Point } from '../src/model/sketch';
+import { rng } from './helpers';
 import type { Stroke } from '../src/model/types';
 import { deserialize, serialize } from '../src/persist/serialize';
 import { setup } from './helpers';
@@ -40,6 +41,50 @@ describe('points', () => {
     expect(d.match(/C[^C]+/g)!.map((c) => c.trim().split(' ').slice(-2).join(' '))).toEqual(['10 0', '10 10', '0 10']);
     // A right-angled turn bulges only a little past the corner (centripetal: no loops).
     for (const n of d.replace(/[MC]/g, ' ').trim().split(/\s+/).map(Number)) expect(n >= -2 && n <= 12).toBe(true);
+  });
+});
+
+describe('smooth', () => {
+  const wobble = (seed: number, amp: number) => {
+    const r = rng(seed);
+    return (p: Point): Point => [p[0] + (r() * 2 - 1) * amp, p[1] + (r() * 2 - 1) * amp];
+  };
+  const spread = (pts: Point[]) => Math.sqrt(pts.reduce((a, p) => a + p[1] * p[1], 0) / pts.length);
+
+  it('takes the tremor out of a straight line; the ends stay', () => {
+    const shaky = Array.from({ length: 200 }, (_, i): Point => [i * 0.5, 0]).map(wobble(1, 0.6));
+    const out = smooth(shaky, 2);
+    expect(out[0]).toEqual(shaky[0]);
+    expect(out[199]).toEqual(shaky[199]);
+    expect(spread(out.slice(20, 180))).toBeLessThan(spread(shaky.slice(20, 180)) / 3);
+  });
+
+  it('keeps a sharp corner sharp', () => {
+    const corner: Point[] = [
+      ...Array.from({ length: 41 }, (_, i): Point => [i * 0.5, 0]),
+      ...Array.from({ length: 40 }, (_, i): Point => [20, (i + 1) * 0.5]),
+    ];
+    const out = smooth(corner, 2);
+    expect(out[40]).toEqual([20, 0]);
+    // Both arms stay straight right up to it: no rounding pulls them off their lines.
+    for (let i = 30; i < 40; i++) expect(Math.abs(out[i][1])).toBeLessThan(0.01);
+    for (let i = 41; i < 50; i++) expect(Math.abs(out[i][0] - 20)).toBeLessThan(0.01);
+  });
+
+  it('keeps a small loop round and almost its size', () => {
+    const r = 6;
+    const loop = Array.from({ length: 120 }, (_, i): Point => [Math.cos(i / 15) * r, Math.sin(i / 15) * r]).map(wobble(2, 0.4));
+    const out = smooth(loop, 2);
+    const radii = out.slice(20, 100).map((p) => Math.hypot(p[0], p[1]));
+    const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+    expect(mean).toBeGreaterThan(r * 0.9);
+    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.6);
+  });
+
+  it('leaves the line as it was with nothing to smooth', () => {
+    const pts: Point[] = [[0, 0], [1, 1], [2, 0]];
+    expect(smooth(pts, 0)).toBe(pts);
+    expect(smooth(pts.slice(0, 2), 2)).toEqual(pts.slice(0, 2));
   });
 });
 

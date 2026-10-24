@@ -1410,8 +1410,15 @@ export class Outliner {
   sketchShown(): NodeId | null {
     const z = this.zoom();
     if (!z || !this.doc.has(z)) return null;
+    return (this.sketchToggled().get(z) ?? this.hasSketch()) ? z : null;
+  }
+
+  /** Has the zoomed-in bullet a sketch (lines drawn), shown or not? The "Скетч" button says so. */
+  hasSketch(): boolean {
+    const z = this.zoom();
+    if (!z || !this.doc.has(z)) return false;
     this.nodes.track(z);
-    return (this.sketchToggled().get(z) ?? !!this.doc.content(z).strokes?.length) ? z : null;
+    return !!this.doc.content(z).strokes?.length;
   }
 
   /** Shows or hides the zoomed-in bullet's sketch (the "Скетч" button). */

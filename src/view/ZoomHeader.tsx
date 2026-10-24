@@ -137,14 +137,14 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           )}
         </For>
       </nav>
-      {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away. */}
+      {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away; one with lines says so, a coral dot even when put away. */}
       <Show when={path().length}>
         <button
           type="button"
           class="sketch-toggle"
-          classList={{ on: !!o.sketchShown() }}
+          classList={{ on: !!o.sketchShown(), has: o.hasSketch() }}
           aria-pressed={!!o.sketchShown()}
-          title={o.sketchShown() ? 'Убрать скетч' : 'Скетч: рисовать рядом с пунктом'}
+          title={o.sketchShown() ? 'Убрать скетч' : o.hasSketch() ? 'В пункте есть скетч — показать' : 'Скетч: рисовать рядом с пунктом'}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => o.toggleSketch()}
         >
@@ -152,7 +152,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
             <path d="M3 17c3-6 5-9 7-9s0 8 3 8 4-7 8-9" />
             <path d="M3 21h18" />
           </svg>
-          <span>Скетч</span>
+          <span>{o.hasSketch() ? 'Есть скетч' : 'Скетч'}</span>
         </button>
       </Show>
     </div>

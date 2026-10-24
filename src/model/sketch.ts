@@ -68,6 +68,84 @@ export function simplify(points: Point[], tolerance: number): Point[] {
   return points.filter((_, i) => keep[i]);
 }
 
+/** A turn sharper than this, within a few `sigma` of the line, is a corner the smoothing keeps, degrees. */
+const CORNER = 70;
+
+/**
+ * Takes the tremor out of a line drawn by hand without changing its shape:
+ * each point moves to a Gaussian-weighted average of its neighbours along
+ * the line (by distance drawn, not by point count, so a slow stroke with
+ * many points smooths like a fast one). Sharp corners (к, м, the tip of an
+ * arrow) and the ends stay where they were: the line is smoothed piece by
+ * piece between them, each piece easing in from its fixed ends. `sigma` is
+ * in sheet units; 0 leaves the line as it was.
+ */
+export function smooth(points: Point[], sigma: number): Point[] {
+  const n = points.length;
+  if (n < 3 || sigma <= 0) return points;
+  const s = new Float64Array(n);
+  for (let i = 1; i < n; i++) s[i] = s[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
+  // Corners: where the way in and the way out, each 2σ long, turn more than CORNER.
+  const reach = 2 * sigma;
+  const cos = Math.cos((CORNER * Math.PI) / 180);
+  const breaks = [0];
+  let back = 0;
+  let ahead = 0;
+  // Points near a corner all turn sharply: the sharpest of each such run is the corner.
+  let best = -1;
+  let bestCos = 1;
+  for (let i = 1; i < n - 1; i++) {
+    while (back < i && s[i] - s[back + 1] >= reach) back++;
+    while (ahead < n - 1 && s[ahead] - s[i] < reach) ahead++;
+    const ax = points[i][0] - points[back][0];
+    const ay = points[i][1] - points[back][1];
+    const bx = points[ahead][0] - points[i][0];
+    const by = points[ahead][1] - points[i][1];
+    const la = Math.hypot(ax, ay);
+    const lb = Math.hypot(bx, by);
+    const c = la < sigma || lb < sigma ? 1 : (ax * bx + ay * by) / (la * lb);
+    if (c < cos) {
+      if (c < bestCos) {
+        best = i;
+        bestCos = c;
+      }
+    } else if (best >= 0) {
+      breaks.push(best);
+      best = -1;
+      bestCos = 1;
+    }
+  }
+  if (best >= 0) breaks.push(best);
+  breaks.push(n - 1);
+  const out: Point[] = points.map((p) => [p[0], p[1]]);
+  const window = 3 * sigma;
+  const k = -1 / (2 * sigma * sigma);
+  for (let b = 0; b + 1 < breaks.length; b++) {
+    const from = breaks[b];
+    const to = breaks[b + 1];
+    let lo = from;
+    let hi = from;
+    for (let i = from + 1; i < to; i++) {
+      while (s[i] - s[lo] > window) lo++;
+      while (hi < to && s[hi + 1] - s[i] <= window) hi++;
+      let w = 0;
+      let x = 0;
+      let y = 0;
+      for (let j = lo; j <= hi; j++) {
+        const d = s[j] - s[i];
+        const g = Math.exp(d * d * k);
+        w += g;
+        x += g * points[j][0];
+        y += g * points[j][1];
+      }
+      // Near a fixed end the window is lopsided: ease in so the end does not pull the line short.
+      const t = Math.min(1, (s[i] - s[from]) / window, (s[to] - s[i]) / window);
+      out[i] = [points[i][0] + (x / w - points[i][0]) * t, points[i][1] + (y / w - points[i][1]) * t];
+    }
+  }
+  return out;
+}
+
 /** Distance from `p` to the segment a–b. */
 export function segmentDistance(p: Point, a: Point, b: Point): number {
   const dx = b[0] - a[0];

@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { SHEET, decodePoints, drawStroke, eraseStrokes, newStroke, pathData, simplify, touches, type Point } from '../model/sketch';
+import { SHEET, decodePoints, drawStroke, eraseStrokes, newStroke, pathData, simplify, smooth, touches, type Point } from '../model/sketch';
 import type { NodeId, Stroke } from '../model/types';
 import type { Outliner } from './outliner';
 import { narrow } from './screen';
@@ -15,6 +15,11 @@ const MIN_STEP = 0.25;
  * drawn (the curve goes through the points that stay).
  */
 const TOLERANCE = 0.15;
+/**
+ * How far along the line the tremor of a hand is smoothed out (`smooth`),
+ * units; `?smooth=N` in the address tries another, 0 turns it off.
+ */
+const SMOOTH = 2;
 /** Reach of the eraser around the pen's tip, px. */
 const ERASER = 10;
 
@@ -102,6 +107,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
   /** `?ink` in the address: how many points a second the pen gave in the last line, and whether they came coalesced. */
   const debug = new URLSearchParams(location.search).has('ink');
   const [rate, setRate] = createSignal('');
+  const sigma = Number(new URLSearchParams(location.search).get('smooth') ?? SMOOTH) || 0;
   const at = (e: PointerEvent, rect: DOMRect): Point => {
     const k = SHEET / rect.width;
     return [(e.clientX - rect.left) * k, (e.clientY - rect.top) * k];
@@ -154,7 +160,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     if (tool() === 'eraser') return;
     // Where the pen is about to be, drawn ahead and never kept: the line keeps up with the tip.
     const ahead = (e.getPredictedEvents?.() ?? []).map((s) => at(s, g.rect));
-    live.setAttribute('d', pathData(ahead.length ? [...g.points, ...ahead] : g.points));
+    live.setAttribute('d', pathData(smooth(ahead.length ? [...g.points, ...ahead] : g.points, sigma)));
   };
 
   const onPointerUp = (e: PointerEvent) => {
@@ -163,14 +169,14 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     gesture = null;
     if (debug) {
       const seconds = (e.timeStamp - g.started) / 1000;
-      setRate(`${e.pointerType}: ${seconds > 0 ? Math.round(g.samples / seconds) : 0} точек/с, coalesced: ${'getCoalescedEvents' in e ? 'есть' : 'нет'}, predicted: ${'getPredictedEvents' in e ? 'есть' : 'нет'}`);
+      setRate(`${e.pointerType}: ${seconds > 0 ? Math.round(g.samples / seconds) : 0} точек/с, coalesced: ${'getCoalescedEvents' in e ? 'есть' : 'нет'}, predicted: ${'getPredictedEvents' in e ? 'есть' : 'нет'}, smooth: ${sigma}`);
     }
     const t = tool();
     if (t === 'eraser') {
       if (g.hit.size) o.sketch((ctx) => eraseStrokes(ctx, id, g.hit));
       setErased(new Set<string>());
     } else {
-      o.sketch((ctx) => drawStroke(ctx, id, newStroke(t, simplify(g.points, TOLERANCE))));
+      o.sketch((ctx) => drawStroke(ctx, id, newStroke(t, simplify(smooth(g.points, sigma), TOLERANCE))));
       live.setAttribute('d', '');
     }
   };
