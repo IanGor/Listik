@@ -30,6 +30,16 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('.row')).toHaveCount(DEMO.length);
 });
 
+test('a button lights the instant it is pressed, not on release', async ({ page }) => {
+  const crumb = page.locator('.crumb.current');
+  const box = (await crumb.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // --surface-2 of the light theme, at once: no transition on the way in.
+  await expect(crumb).toHaveCSS('background-color', 'rgb(233, 226, 214)', { timeout: 100 });
+  await page.mouse.up();
+});
+
 test('renders the demo outline', async ({ page }) => {
   expect(await outline(page)).toEqual(DEMO);
 });
