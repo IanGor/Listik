@@ -53,6 +53,9 @@
   /* System monospace only, no web fonts: SF Mono on macOS (ui-monospace),
      otherwise whatever the OS/browser maps `monospace` to. */
   --font-text: ui-monospace, monospace;
+  /* The interface's: the system's own (SF on Apple devices, as Apple's guidelines
+     ask); the bullets' text keeps the monospace one. */
+  --font-ui: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   /* Must stay explicit: a bare `monospace` family otherwise falls back to
      the browser's 13px default. `--font-scale` is the text size picked in
      the menu (view/textsize.ts); it scales the outline, not the chrome. */
@@ -87,6 +90,41 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+
+/* The interface in the system's font: bars, the path, menus, panels,
+   messages, dialogs (the path's bar keeps the text's font itself: its
+   padding in ch lines the path up with the rows). What is the outline's text, read or typed as such,
+   stays monospace: rows and the zoom title (they are not in this list), the
+   trash's bullets, the suggestions completing a bullet, the capture line
+   and the logo. */
+.topbar,
+.search-menu,
+.crumbs,
+.sketch-toggle,
+.menu,
+.editbar,
+.toast,
+.banner,
+.no-results,
+.backlinks,
+.trash,
+.goto,
+.sheet,
+.shortcuts,
+.unlock,
+.message,
+.sketch-rate,
+.suggest-hint,
+.suggest-label,
+.capture {
+  font-family: var(--font-ui);
+}
+
+.brand,
+.trash-text,
+.capture-input {
+  font-family: var(--font-text);
 }
 
 /* The root carries the canvas too: what WebKit paints past the page's edges. */

@@ -32,7 +32,7 @@ npm run bench                      # бенчмарк 67k и 200k bullet'ов �
 
 ## Стек и карта кода
 
-TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифт — **только системный моноширинный** (`ui-monospace, monospace`), веб-шрифтов нет: так решил пользователь.
+TypeScript + SolidJS + Vite 8, Vitest 5, Playwright. Шрифты — **только системные**, веб-шрифтов нет: текст пунктов моноширинный (`--font-text`), интерфейс — системный (`--font-ui`, SF у Apple; список элементов — в начале `index.css`): так решил пользователь (октябрь 2026, сверка с гайдами Apple). Отступы в `ch` считаются от шрифта элемента: полоса крошек держит моноширинный, сами крошки — системный.
 
 - **`src/model/`** — чистая логика без DOM:
   - `doc.ts` — `Doc`, `apply(op)`, `transact`, `invert`, `walkSnapshot`;
