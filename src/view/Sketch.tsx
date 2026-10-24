@@ -19,7 +19,7 @@ const TOLERANCE = 0.15;
  * How far along the line the tremor of a hand is smoothed out (`smooth`),
  * units; `?smooth=N` in the address tries another, 0 turns it off.
  */
-const SMOOTH = 2;
+const SMOOTH = 3;
 /** Reach of the eraser around the pen's tip, px. */
 const ERASER = 10;
 
