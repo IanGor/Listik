@@ -20,6 +20,20 @@ export const narrow = query('(max-width: 640px)');
  */
 export const touch = query('(pointer: coarse)');
 
+/**
+ * Hover effects follow a real mouse or trackpad, not a media query: an
+ * iPad's main pointer is a finger, so `(hover: hover)` never holds there,
+ * even with the Magic Keyboard's trackpad, while a finger's tap must not
+ * leave a hover lit. index.css puts every `:hover` under `:root.mouse`, which
+ * this keeps on while the last pointer was a mouse or trackpad.
+ */
+export function watchPointer(): void {
+  const root = document.documentElement;
+  const seen = (e: PointerEvent) => root.classList.toggle('mouse', e.pointerType === 'mouse');
+  addEventListener('pointermove', seen, { capture: true, passive: true });
+  addEventListener('pointerdown', seen, { capture: true, passive: true });
+}
+
 /** Shrinking the window by more than this is the keyboard, not the address bar, px. */
 const KEYBOARD_MIN = 150;
 

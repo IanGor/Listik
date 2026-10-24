@@ -180,10 +180,8 @@ button {
   transition: background 160ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .brand:hover {
-    background: var(--surface);
-  }
+:root.mouse .brand:hover {
+  background: var(--surface);
 }
 
 .brand:active {
@@ -200,10 +198,8 @@ button {
   transition: transform 200ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .brand:hover::before {
-    transform: rotate(45deg);
-  }
+:root.mouse .brand:hover::before {
+  transform: rotate(45deg);
 }
 
 .searchbar {
@@ -225,10 +221,8 @@ button {
   transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .searchbar:hover {
-    background: var(--surface-2);
-  }
+:root.mouse .searchbar:hover {
+  background: var(--surface-2);
 }
 
 .searchbar:focus-within {
@@ -303,11 +297,9 @@ kbd {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .searchbar .clear:hover {
-    color: var(--text);
-    background: var(--surface-2);
-  }
+:root.mouse .searchbar .clear:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 /* The star: an outline to save what is typed, filled in the coral once saved. */
@@ -326,11 +318,9 @@ kbd {
   transition: color 140ms var(--ease-out), background 140ms var(--ease-out), scale 100ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .searchbar .star:hover {
-    color: var(--text);
-    background: var(--surface-2);
-  }
+:root.mouse .searchbar .star:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 .searchbar .star.saved {
@@ -382,10 +372,8 @@ kbd {
   border-radius: 8px;
 }
 
-@media (hover: hover) {
-  .saved-search:hover {
-    background: var(--surface);
-  }
+:root.mouse .saved-search:hover {
+  background: var(--surface);
 }
 
 .saved-search-run {
@@ -429,11 +417,9 @@ kbd {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .saved-search-remove:hover {
-    color: var(--text);
-    background: var(--surface-2);
-  }
+:root.mouse .saved-search-remove:hover {
+  color: var(--text);
+  background: var(--surface-2);
 }
 
 /* Finger-sized rows on a touch screen. */
@@ -467,11 +453,9 @@ kbd {
   transition: color 160ms var(--ease-out), background 160ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .icon-button:hover {
-    color: var(--text);
-    background: var(--surface);
-  }
+:root.mouse .icon-button:hover {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .icon-button:active {
@@ -570,10 +554,8 @@ kbd {
 }
 
 /* The bullet is the way in (zoom): it answers the pointer by growing. */
-@media (hover: hover) {
-  .bullet:hover::after {
-    transform: translate(-50%, -50%) scale(1.45);
-  }
+:root.mouse .bullet:hover::after {
+  transform: translate(-50%, -50%) scale(1.45);
 }
 
 /* A task: the bullet is a coral checkbox. Checked, it fills with a tick. */
@@ -586,10 +568,8 @@ kbd {
   box-sizing: border-box;
 }
 
-@media (hover: hover) {
-  .bullet.todo:hover::after {
-    transform: translate(-50%, -50%) scale(1.1);
-  }
+:root.mouse .bullet.todo:hover::after {
+  transform: translate(-50%, -50%) scale(1.1);
 }
 
 .bullet.todo.checked::after {
@@ -605,10 +585,8 @@ kbd {
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
-@media (hover: hover) {
-  .bullet.mirror:hover::after {
-    transform: translate(-50%, -50%) rotate(45deg) scale(1.45);
-  }
+:root.mouse .bullet.mirror:hover::after {
+  transform: translate(-50%, -50%) rotate(45deg) scale(1.45);
 }
 
 .bullet.mirror.todo::after {
@@ -618,10 +596,8 @@ kbd {
   transform: translate(-50%, -50%);
 }
 
-@media (hover: hover) {
-  .bullet.mirror.todo:hover::after {
-    transform: translate(-50%, -50%) scale(1.1);
-  }
+:root.mouse .bullet.mirror.todo:hover::after {
+  transform: translate(-50%, -50%) scale(1.1);
 }
 
 .bullet.mirror.todo::before {
@@ -672,23 +648,17 @@ kbd {
   transition: opacity 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .scroller:hover .toggle {
-    opacity: 1;
-  }
+:root.mouse .scroller:hover .toggle {
+  opacity: 1;
 }
 
-@media (hover: hover) {
-  .row:hover .toggle {
-    color: var(--muted);
-  }
+:root.mouse .row:hover .toggle {
+  color: var(--muted);
 }
 
-@media (hover: hover) {
-  .toggle:hover,
-  .row:hover .toggle:hover {
-    color: var(--text);
-  }
+:root.mouse .toggle:hover,
+:root.mouse .row:hover .toggle:hover {
+  color: var(--text);
 }
 
 /* The turn answers at once and settles without overshoot (a tap carries no
@@ -785,10 +755,8 @@ kbd {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .url:hover {
-    text-decoration-color: currentColor;
-  }
+:root.mouse .url:hover {
+  text-decoration-color: currentColor;
 }
 
 /* "Outside the outline": a small arrow, drawn, not in the text (offsets hold). */
@@ -814,10 +782,8 @@ kbd {
   --tag-chip: var(--tag-chip-strong);
 }
 
-@media (hover: hover) {
-  .tag:hover {
-    --tag-chip: var(--tag-chip-strong);
-  }
+:root.mouse .tag:hover {
+  --tag-chip: var(--tag-chip-strong);
 }
 
 mark,
@@ -841,10 +807,8 @@ mark,
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .link:hover {
-    text-decoration-color: currentColor;
-  }
+:root.mouse .link:hover {
+  text-decoration-color: currentColor;
 }
 
 /* Formatting (model/format.ts): markers hidden, what they enclose coloured. */
@@ -956,11 +920,9 @@ mark,
   transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .crumb:hover {
-    color: var(--text);
-    background: var(--surface);
-  }
+:root.mouse .crumb:hover {
+  color: var(--text);
+  background: var(--surface);
 }
 
 /* Where you are: the end of the path. Its whole text is the title just
@@ -1048,11 +1010,9 @@ mark,
   white-space: nowrap;
 }
 
-@media (hover: hover) {
-  .backlink:hover {
-    color: var(--text);
-    border-color: var(--faint);
-  }
+:root.mouse .backlink:hover {
+  color: var(--text);
+  border-color: var(--faint);
 }
 
 /* Where the link just followed came from: the way back, in the accent. */
@@ -1095,12 +1055,10 @@ mark,
   transition: color 160ms var(--ease-out), background 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .add:hover {
-    color: var(--text);
-    background: var(--surface-2);
-    transform: scale(1.08);
-  }
+:root.mouse .add:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  transform: scale(1.08);
 }
 
 .add:active {
@@ -1300,10 +1258,8 @@ mark,
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .menu button:hover {
-    background: var(--surface);
-  }
+:root.mouse .menu button:hover {
+  background: var(--surface);
 }
 
 /* Phones: touch-sized items; long ones wrap rather than widen the menu.
@@ -2051,10 +2007,8 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .button:hover {
-    background: var(--surface-2);
-  }
+:root.mouse .button:hover {
+  background: var(--surface-2);
 }
 
 .button:disabled {
@@ -2069,10 +2023,8 @@ body.is-dragging * {
   background: var(--primary);
 }
 
-@media (hover: hover) {
-  .button.primary:hover:not(:disabled) {
-    filter: brightness(1.06);
-  }
+:root.mouse .button.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
 }
 
 .button.primary:disabled {
@@ -2211,11 +2163,9 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .trash-close:hover {
-    background: var(--surface);
-    color: var(--text);
-  }
+:root.mouse .trash-close:hover {
+  background: var(--surface);
+  color: var(--text);
 }
 
 .trash-filter {
@@ -2268,10 +2218,8 @@ body.is-dragging * {
   border-radius: 8px;
 }
 
-@media (hover: hover) {
-  .trash-item:hover {
-    background: var(--surface);
-  }
+:root.mouse .trash-item:hover {
+  background: var(--surface);
 }
 
 .trash-text {
@@ -2318,11 +2266,9 @@ body.is-dragging * {
   transition: border-color 120ms, color 120ms;
 }
 
-@media (hover: hover) {
-  .trash-restore:hover:not(:disabled) {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
+:root.mouse .trash-restore:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .trash-restore:disabled {
@@ -2714,10 +2660,8 @@ body.is-dragging * {
   transition: background 140ms var(--ease-out);
 }
 
-@media (hover: hover) {
-  .pending-box:hover:not(:disabled) {
-    background: var(--chip);
-  }
+:root.mouse .pending-box:hover:not(:disabled) {
+  background: var(--chip);
 }
 
 .pending-box:disabled {
@@ -2732,12 +2676,10 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .pending-text:hover {
-    text-decoration: underline;
-    text-decoration-color: var(--faint);
-    text-underline-offset: 3px;
-  }
+:root.mouse .pending-text:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 3px;
 }
 
 .pending-more {
@@ -2771,10 +2713,8 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .toast-link:hover {
-    text-decoration-style: solid;
-  }
+:root.mouse .toast-link:hover {
+  text-decoration-style: solid;
 }
 
 /* --- Guide lines that fold (Outline.tsx) --------------------------------- */
@@ -2972,11 +2912,9 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .sketch-tool:hover {
-    color: var(--text);
-    background: var(--surface);
-  }
+:root.mouse .sketch-tool:hover {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .sketch-tool.on {
@@ -3012,10 +2950,8 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .sketch-toggle:hover {
-    background: var(--surface);
-  }
+:root.mouse .sketch-toggle:hover {
+  background: var(--surface);
 }
 
 .sketch-toggle.has {

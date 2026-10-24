@@ -2436,6 +2436,17 @@ test.describe('touch screen', () => {
     await expect(page.locator('.crumb').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   });
 
+  test('hover lights only for a mouse or trackpad: an iPad trackpad does, a finger does not', async ({ page }) => {
+    await page.goto('/?db=hover');
+    // The place's own crumb: the path is scrolled to its end.
+    const crumb = page.locator('.crumb.current');
+    const box = (await crumb.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(crumb).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(page.locator('.crumb.current')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+
   test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
     expect((await page.locator('.brand').boundingBox())!.width).toBeGreaterThanOrEqual(44);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
