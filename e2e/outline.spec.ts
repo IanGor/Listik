@@ -2450,6 +2450,14 @@ test.describe('touch screen', () => {
   test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
     expect((await page.locator('.brand').boundingBox())!.width).toBeGreaterThanOrEqual(44);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
+    // The bullet reaches into the gutter on its left; its dot stays where the row's guide line meets it.
+    const bullet = page.locator('.row .bullet').first();
+    expect((await bullet.boundingBox())!.width).toBeGreaterThanOrEqual(38);
+    const dot = await bullet.evaluate((b) => {
+      const r = b.getBoundingClientRect();
+      return { left: parseFloat(getComputedStyle(b, '::after').left), width: r.width };
+    });
+    expect(dot.left).toBeCloseTo(dot.width / 2 + 9, 0);
     // The "+" is drawn 24px; a tap just beside it still adds a bullet.
     const add = (await page.getByRole('button', { name: 'Новый пункт' }).boundingBox())!;
     expect(add.width).toBe(24);
