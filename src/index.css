@@ -767,7 +767,10 @@ kbd {
 }
 
 /* Selected bullets: one soft band from the bullet on, behind the row. */
-.row.selected::after {
+/* Selected rows, and the row a menu of actions is open for (RowMenu.tsx):
+   what the action will touch stands out before it is chosen. */
+.row.selected::after,
+.row.menu-target::after {
   content: '';
   position: absolute;
   inset: 0 -8px 0 calc(var(--shift) - 8px);

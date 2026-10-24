@@ -40,17 +40,26 @@ test('a button lights the instant it is pressed, not on release', async ({ page 
   await page.mouse.up();
 });
 
-test("a right click on a row opens its menu; in the text being edited the browser's stays", async ({ page }) => {
+test('a right click anywhere on a row opens its menu, never the browser\'s; the row it acts on stands out', async ({ page }) => {
   const menu = page.locator('.row-menu');
-  const bullet = page.locator('.row', { hasText: 'Том второй' }).locator('.bullet');
-  await bullet.hover();
-  await bullet.click({ button: 'right' });
+  const row = page.locator('.row', { hasText: 'Том второй' });
+  await row.locator('.bullet').hover();
+  await row.locator('.bullet').click({ button: 'right' });
   await expect(menu).toBeVisible();
+  await expect(row).toHaveClass(/menu-target/);
+  await expect(page.locator('.row.menu-target')).toHaveCount(1);
   await menu.getByRole('menuitem', { name: 'Удалить' }).click();
   expect(await outline(page)).toEqual(DEMO.slice(0, -1));
   await expect(page.locator('.toast')).toContainText('Удалено');
+  await expect(page.locator('.row.menu-target')).toHaveCount(0);
+  // In the text being edited too: the app's menu, the browser's kept out (the event's default is prevented).
   await edit(page, 'Часть вторая');
+  const prevented = page.evaluate(() => new Promise<boolean>((resolve) => addEventListener('contextmenu', (e) => setTimeout(() => resolve(e.defaultPrevented)), { once: true })));
   await editing(page).click({ button: 'right' });
+  expect(await prevented).toBe(true);
+  await expect(menu).toBeVisible();
+  await expect(page.locator('.row', { hasText: 'Часть вторая' })).toHaveClass(/menu-target/);
+  await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
 });
 
@@ -2374,6 +2383,7 @@ test.describe('touch screen', () => {
     const menu = page.locator('.row-menu');
     await finger(page, 'Часть вторая', { hold: 500 });
     await expect(menu).toBeVisible();
+    await expect(page.locator('.row.menu-target')).toHaveText('Часть вторая');
     await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Заметка', 'Переместить в…', 'Удалить']);
     expect(await outline(page)).toEqual(DEMO);
     await menu.getByRole('menuitem', { name: 'Сделать задачей' }).tap();

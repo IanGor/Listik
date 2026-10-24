@@ -81,13 +81,14 @@ export function Row(props: RowProps) {
     props.grab(e, id, 'row');
   };
   /**
-   * A held finger is a drag, not the browser's menu. A right click with a
-   * mouse or trackpad opens the row's own menu (RowMenu.tsx), as on a Mac;
-   * in the text being edited, the browser's stays (spelling, paste).
+   * A held finger is a drag, not the browser's menu. A right click opens the
+   * row's own menu (RowMenu.tsx) wherever it lands on the row, the text being
+   * edited too: one menu, never the browser's beside it. Only a finger's long
+   * press in the text being edited is left to the browser (it selects words).
    */
   const onContextMenu = (e: MouseEvent) => {
     if (el.classList.contains('holding') || o.dragged().size) return e.preventDefault();
-    if (!document.documentElement.classList.contains('mouse') || (e.target as Element).closest('[contenteditable]')) return;
+    if (!document.documentElement.classList.contains('mouse') && (e.target as Element).closest('[contenteditable]')) return;
     e.preventDefault();
     o.openRowMenu(id, e.clientX, e.clientY);
   };
@@ -217,7 +218,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id) }}
+      classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id), 'menu-target': o.rowMenu()?.key === id }}
       data-id={id}
       data-depth={props.depth}
       onPointerDown={onRowPointerDown}
