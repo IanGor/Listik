@@ -7,6 +7,7 @@ import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCar
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces, pasteLink } from './Row';
+import { plural } from '../util/plural';
 
 /**
  * The path from the root to where you are, the place itself included:
@@ -137,6 +138,11 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           )}
         </For>
       </nav>
+      {/* What a search found: beside the path, the field keeping its room for the query (Apple's search fields
+          carry no count). Nothing found has its own words over the list ("Ничего не найдено"). */}
+      <Show when={o.filter()?.count}>
+        {(n) => <span class="count">{n()} {plural(n(), 'пункт', 'пункта', 'пунктов')}</span>}
+      </Show>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
       <Show when={path().length}>
         <button

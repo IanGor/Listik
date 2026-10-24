@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createSignal, on } from 'solid-js';
 import { normalize } from '../model/search';
-import { plural } from '../util/plural';
 import type { Outliner } from './outliner';
 import { narrow } from './screen';
 
@@ -93,14 +92,6 @@ export function SearchBar(props: { o: Outliner }) {
         }}
         onBlur={() => setFocused(false)}
       />
-      {/* Nothing found has its own words over the list ("Ничего не найдено"): no "0" here too. */}
-      <Show when={o.filter()?.count ? o.filter() : null}>
-        {(f) => {
-          const label = () => `${f().count} ${plural(f().count, 'пункт', 'пункта', 'пунктов')}`;
-          // A phone keeps the field for the query: the number alone, the words in the tooltip.
-          return <span class="count" title={label()}>{narrow() ? f().count : label()}</span>;
-        }}
-      </Show>
       <Show
         when={o.query().trim()}
         fallback={<kbd aria-hidden="true">{IS_MAC ? '⌘ F' : 'Ctrl F'}</kbd>}
@@ -117,9 +108,11 @@ export function SearchBar(props: { o: Outliner }) {
         >
           <Star filled={saved()} size={17} />
         </button>
+        {/* Apple's clear button: a white × in a grey disc. */}
         <button type="button" class="clear" title="Сбросить (Esc)" aria-label="Сбросить поиск" onClick={() => o.setQuery('', true)}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+            <circle cx="9" cy="9" r="8" fill="currentColor" />
+            <path d="M6.2 6.2l5.6 5.6M11.8 6.2l-5.6 5.6" stroke="var(--canvas)" stroke-width="1.6" stroke-linecap="round" />
           </svg>
         </button>
       </Show>

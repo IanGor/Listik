@@ -272,10 +272,11 @@ button {
   background: var(--surface-2);
 }
 
+/* Focused: the field lightens, as Apple's do, with no coloured ring; the
+   coral caret says where typing goes. */
 .searchbar:focus-within {
   background: var(--canvas);
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px var(--ring);
+  border-color: var(--hairline);
 }
 
 .searchbar > svg {
@@ -300,6 +301,8 @@ button {
 
 .count {
   flex: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -337,7 +340,7 @@ kbd {
   width: 26px;
   height: 26px;
   padding: 0;
-  color: var(--muted);
+  color: var(--faint);
   background: none;
   border: none;
   border-radius: 50%;
