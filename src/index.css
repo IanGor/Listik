@@ -2996,57 +2996,30 @@ body.is-dragging * {
   background: var(--hairline);
 }
 
-/* In the path's bar, at its end: opens and puts away the sketch. */
+/* In the path's bar, at its end: opens and puts away the sketch. Only its
+   colour speaks: the text's for none, coral when the bullet has one. */
 .sketch-toggle {
   flex: none;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  height: 30px;
-  padding: 0 12px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--muted);
-  background: var(--canvas);
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-radius: 50%;
   cursor: pointer;
 }
 
 @media (hover: hover) {
   .sketch-toggle:hover {
-    color: var(--text);
     background: var(--surface);
   }
 }
 
-.sketch-toggle.on {
-  color: var(--primary);
-  background: var(--chip);
-  border-color: transparent;
-}
-
-/* The bullet has a sketch: coral even when the sheet is put away, with a dot. */
 .sketch-toggle.has {
-  position: relative;
   color: var(--primary);
-  border-color: var(--primary);
-}
-
-.sketch-toggle.has::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 0 2px var(--canvas);
-}
-
-.sketch-toggle.has.on {
-  border-color: transparent;
 }
 
 /* A bullet with a sketch, in the list: a faint mark after its text. */
@@ -3068,14 +3041,4 @@ body.is-dragging * {
     flex-direction: column;
   }
 
-  /* An icon on a phone: the path keeps the room. */
-  .sketch-toggle span {
-    display: none;
-  }
-
-  .sketch-toggle {
-    width: 36px;
-    padding: 0;
-    justify-content: center;
-  }
 }

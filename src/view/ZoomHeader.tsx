@@ -137,22 +137,22 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           )}
         </For>
       </nav>
-      {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away; one with lines says so, a coral dot even when put away. */}
+      {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
       <Show when={path().length}>
         <button
           type="button"
           class="sketch-toggle"
-          classList={{ on: !!o.sketchShown(), has: o.hasSketch() }}
+          classList={{ has: o.hasSketch() }}
           aria-pressed={!!o.sketchShown()}
+          aria-label={o.hasSketch() ? 'Скетч (есть)' : 'Скетч'}
           title={o.sketchShown() ? 'Убрать скетч' : o.hasSketch() ? 'В пункте есть скетч — показать' : 'Скетч: рисовать рядом с пунктом'}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => o.toggleSketch()}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 17c3-6 5-9 7-9s0 8 3 8 4-7 8-9" />
             <path d="M3 21h18" />
           </svg>
-          <span>{o.hasSketch() ? 'Есть скетч' : 'Скетч'}</span>
         </button>
       </Show>
     </div>
