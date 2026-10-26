@@ -8,8 +8,8 @@ import type { NodeId } from './types';
 /**
  * The structure (PARA after Tiago Forte, with a calendar in four quarters)
  * and its calendar. The menu, the first start and the first sync put six
- * bullets at the top level, with no notes: 📥 Inbox, PARA (Focus, Projects,
- * Areas, Resources, Archive inside), then `@q1`…`@q4`.
+ * bullets at the top level, with no notes: 📥 Inbox, PARA (Projects, Areas,
+ * Resources, Archive inside), then `@q1`…`@q4`.
  *
  * Each quarter holds a bullet per year, and the year its three months:
  * `@q4` → `@y26` → `@m10` → week `@w43` (ISO, from Monday; a week that
@@ -30,7 +30,7 @@ const two = (n: number) => String(n).padStart(2, '0');
 /** The top level the structure puts in, in this order, and the bullets inside each. */
 export const STRUCTURE: readonly { text: string; children: readonly string[] }[] = [
   { text: '📥 Inbox', children: [] },
-  { text: 'PARA', children: ['Focus', 'Projects', 'Areas', 'Resources', 'Archive'] },
+  { text: 'PARA', children: ['Projects', 'Areas', 'Resources', 'Archive'] },
   { text: '@q1', children: [] },
   { text: '@q2', children: [] },
   { text: '@q3', children: [] },

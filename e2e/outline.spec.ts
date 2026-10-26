@@ -960,7 +960,7 @@ test.describe('structure and calendar', () => {
   const today = dayText(now);
   const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
-  const STRUCTURE = ['📥 Inbox', 'PARA', '  Focus', '  Projects', '  Areas', '  Resources', '  Archive', '@q1', '@q2', '@q3', '@q4'];
+  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', '@q1', '@q2', '@q3', '@q4'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
   const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];

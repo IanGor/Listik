@@ -48,7 +48,7 @@ describe('structure', () => {
     const trees = structureTrees(2026);
     expect(trees.map((t) => t.text)).toEqual(['📥 Inbox', 'PARA', '@q1', '@q2', '@q3', '@q4']);
     expect(trees.map((t) => t.text)).toEqual(STRUCTURE.map((s) => s.text));
-    expect(trees[1].children.map((t) => t.text)).toEqual(['Focus', 'Projects', 'Areas', 'Resources', 'Archive']);
+    expect(trees[1].children.map((t) => t.text)).toEqual(['Projects', 'Areas', 'Resources', 'Archive']);
     expect(trees[1].collapsed).toBeFalsy();
     const all = (ts: Tree[]): Tree[] => ts.flatMap((t) => [t, ...all(t.children)]);
     expect(all(trees).some((t) => t.note)).toBe(false);
@@ -66,7 +66,7 @@ describe('structure', () => {
     expect(doc.get(first).text).toBe('📥 Inbox');
     expect(findInbox(doc)).toBe(first);
     expect(dumpRows(rows, doc)).toEqual(
-      ['а', '📥 Inbox', 'PARA', '  Focus', '  Projects', '  Areas', '  Resources', '  Archive', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]'],
+      ['а', '📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]'],
     );
     expect(hasStructure(doc, tags)).toBe(true);
     const q4 = findQuarter(doc, tags, 4)!;
