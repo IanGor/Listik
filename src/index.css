@@ -39,6 +39,9 @@
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
+  /* The star of a bullet in today's todo (model/today.ts): yellow as in Things,
+     a deep amber on cream (3.4:1 there, an icon's 3:1), bright on graphite. */
+  --star: light-dark(#a97a00, #f2c94c);
   /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
   --danger: light-dark(#c0392b, #ff6b5e);
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
@@ -1837,6 +1840,16 @@ mark,
   color: var(--primary);
 }
 
+/* To the right: the star, lit as it will be (out of today: as it is). */
+.swipe-back.right svg {
+  color: var(--star);
+}
+
+.swipe-back.right.armed:not(.starred) svg,
+.swipe-back.right.starred:not(.armed) svg {
+  fill: var(--star);
+}
+
 /* Past the threshold: letting go does it. */
 .swipe-back svg,
 .swipe-back span {
@@ -2871,6 +2884,81 @@ body.is-dragging * {
 
 :where(:root.mouse) .toast-link:hover {
   text-decoration-style: solid;
+}
+
+/* --- The star: today's todo (Row.tsx, model/today.ts) -------------------- */
+
+/* With a mouse, at the row's end, in a column the row keeps free (the text
+   wraps short of it): lit when the bullet is in today's list, else shown
+   while the pointer is over the row. */
+.row:has(> .today-star) .body {
+  padding-right: 26px;
+}
+
+.today-star {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 1lh;
+  padding: 0;
+  font: inherit;
+  color: var(--faint);
+  fill: none;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out), scale 100ms var(--ease-out);
+}
+
+:where(:root.mouse) .row:hover > .today-star,
+.today-star:focus-visible {
+  opacity: 1;
+}
+
+:where(:root.mouse) .today-star:hover {
+  color: var(--star);
+}
+
+.today-star.on {
+  color: var(--star);
+  fill: var(--star);
+  opacity: 1;
+}
+
+.today-star:active {
+  scale: 0.85;
+}
+
+/* On a touch screen: the lit star in the bullet's line; a tap takes it out. */
+.today-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  margin-left: 6px;
+  padding: 0;
+  color: var(--star);
+  fill: var(--star);
+  vertical-align: -2px;
+  background: none;
+  border: none;
+}
+
+/* A finger-sized target around a small star. */
+.today-mark::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .today-star {
+    transition: none;
+  }
 }
 
 /* --- Guide lines that fold (Outline.tsx) --------------------------------- */

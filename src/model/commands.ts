@@ -254,17 +254,6 @@ export function untask({ doc }: Ctx, ids: RowKey[]): void {
 }
 
 /**
- * A row swiped to the right (view/swipe.ts): a checked task, whatever it was
- * before; a checked one is unchecked again, and stays a task.
- */
-export function checkOff({ doc }: Ctx, key: RowKey): void {
-  const n = doc.content(nodeOf(key));
-  if (n.done) return void setDone(doc, n, false);
-  if (!n.todo) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
-  setDone(doc, n, true);
-}
-
-/**
  * Checked-off tasks go last among their siblings, with all they hold, in
  * the order they stand; ones already last there stay. A mirror copy goes
  * last where it lies.

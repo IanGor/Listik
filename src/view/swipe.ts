@@ -1,10 +1,12 @@
-import { nodeOf, type RowKey } from '../model/rows';
+import type { RowKey } from '../model/rows';
 import type { Outliner } from './outliner';
 
 /**
  * A finger swiping a row sideways: to the left the bullet goes to the trash
- * with all it holds (the toast can take it back), to the right it is checked
- * off as a task. One movement: the row's content follows the finger over a
+ * with all it holds (the toast can take it back), to the right it goes into
+ * today's `todo` as a star, or out of it (`Outliner.toggleToday`; a task is
+ * checked from the keyboard or its checkbox). A bullet that cannot be
+ * starred (the calendar, a secret) does not move to the right. One movement: the row's content follows the finger over a
  * backing that says what will happen; let go past THRESHOLD of the row's
  * width (or flicked past FLICK), it happens, back under it nothing does.
  *
@@ -31,9 +33,9 @@ const SETTLE = 150;
 /** A swipe's own tap (compatibility mouse events) is not a click on what is under it. */
 const SWALLOW = 400;
 
-// The editing bar's icons (EditBar.tsx): delete and task.
+// The editing bar's icons (EditBar.tsx): delete and the star.
 const TRASH = ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'];
-const CHECK = ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z', 'M8.5 12.5l2.5 2.5 4.5-5'];
+export const STAR = ['M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9z'];
 
 /** Lets the row be swiped; returns the function that stops it. */
 export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () => boolean): () => void {
@@ -58,6 +60,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
     let back: HTMLElement | null = null;
     let last = { x: x0, t: t0 };
     let speed = 0;
+    const star = o.starOf(key);
 
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
@@ -75,17 +78,24 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
       }
       if (ev.timeStamp > last.t) speed = (ev.clientX - last.x) / (ev.timeStamp - last.t);
       last = { x: ev.clientX, t: ev.timeStamp };
-      dx = Math.max(-width, Math.min(width, mx));
+      dx = Math.max(-width, Math.min(star === null ? 0 : width, mx));
       show();
     };
 
     const show = () => {
+      // Nothing to the right for a bullet that cannot be starred: no backing either.
+      if (dx >= 0 && star === null) {
+        back?.remove();
+        back = null;
+        row.style.setProperty('--swipe', '0px');
+        return;
+      }
       const side = dx < 0 ? 'left' : 'right';
       if (back?.dataset.side !== side) {
         back?.remove();
         armed = false;
-        const done = o.doc.content(nodeOf(key)).done;
-        back = backing(side, side === 'left' ? 'Удалить' : done ? 'Снять отметку' : 'Выполнено', side === 'left' ? TRASH : CHECK);
+        back = backing(side, side === 'left' ? 'Удалить' : star === 'on' ? 'Из «Сегодня»' : 'В «Сегодня»', side === 'left' ? TRASH : STAR);
+        back.classList.toggle('starred', star === 'on');
         row.append(back);
       }
       row.style.setProperty('--swipe', `${dx}px`);
@@ -109,7 +119,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
           clear();
         });
       }
-      if (dx > 0 && (armed || flick)) o.swipeDone(key);
+      if (dx > 0 && (armed || flick)) o.swipeToday(key);
       settle(0, clear);
     };
 

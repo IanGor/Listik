@@ -211,6 +211,8 @@ test('a log with a gap opens, and the server gives back what the gap took; so do
   await a.locator('.row .text').first().click();
   await a.keyboard.press('Control+End');
   await a.keyboard.press('Enter');
+  // The new bullet's batch on disk before its text: the gap below takes the bullet, not its typing too.
+  await a.waitForTimeout(200);
   await a.keyboard.type('раз');
   await a.locator('.row .text').first().click();
   await a.keyboard.press('Control+End');

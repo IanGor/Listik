@@ -197,6 +197,15 @@ export function Outline(props: { o: Outliner }) {
         e.preventDefault();
         return o.openGoTo();
       }
+      // Ctrl+S, the star: a row being edited or a selection star themselves
+      // (keymap.ts); otherwise the place zoomed into. Never the browser's "Save page".
+      if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
+        if (e.defaultPrevented) return;
+        e.preventDefault();
+        if (o.selection()) return o.toggleToday(o.selectionRoots());
+        const z = o.zoom();
+        return z ? o.toggleToday([z]) : undefined;
+      }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
       if (onSelectionKeys(e, o)) return;

@@ -12,7 +12,8 @@ import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setC
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
 import { suggestKey } from './Suggest';
-import { swipe } from './swipe';
+import { touch } from './screen';
+import { STAR, swipe } from './swipe';
 
 interface RowProps {
   o: Outliner;
@@ -49,6 +50,15 @@ export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | nul
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
       }}
     </For>
+  );
+}
+
+/** The star of a bullet in today's list (model/today.ts): filled when lit, by CSS. */
+function StarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+      <path d={STAR[0]} />
+    </svg>
   );
 }
 
@@ -92,7 +102,7 @@ export function Row(props: RowProps) {
     e.preventDefault();
     o.openRowMenu(id, e.clientX, e.clientY);
   };
-  // A finger sideways across the row: left deletes, right checks off (swipe.ts).
+  // A finger sideways across the row: left deletes, right stars (swipe.ts).
   onMount(() => onCleanup(swipe(o, el, id, focused)));
   o.nodes.acquire(nid);
   onCleanup(() => o.nodes.release(nid));
@@ -156,6 +166,14 @@ export function Row(props: RowProps) {
     o.nodes.track(p.task);
     const t = o.doc.nodes.get(p.task);
     return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
+  };
+  /** In today's `todo` or not, or never (Outliner.starOf). */
+  const star = () => o.starOf(id);
+  const onStar = (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    o.toggleToday([id]);
   };
   const query = () => o.highlightFor(nid);
   const terms = () => query()?.terms ?? [];
@@ -251,6 +269,12 @@ export function Row(props: RowProps) {
           fallback={
             <div class="text" onMouseDown={onStaticMouseDown(false)}>
               <Pieces o={o} pieces={pieces()} query={query()} />
+              {/* On a touch screen, no hover: the star of a bullet in today's list shows in its line, a tap takes it out. */}
+              <Show when={touch() && star() === 'on'}>
+                <button type="button" class="today-mark" aria-label="Убрать из «Сегодня»" onMouseDown={onStar}>
+                  <StarIcon />
+                </button>
+              </Show>
               {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
               <Show when={content()?.strokes}>
                 <svg class="sketch-mark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Скетч">
@@ -297,6 +321,20 @@ export function Row(props: RowProps) {
           <NoteEditable o={o} id={id} />
         </Show>
       </div>
+      {/* The star (model/today.ts): with a mouse, at the row's end, lit when the bullet is in today's list, else shown on hover. */}
+      <Show when={!touch() && star() !== null && !o.readOnly}>
+        <button
+          type="button"
+          class="today-star"
+          classList={{ on: star() === 'on' }}
+          aria-pressed={star() === 'on'}
+          aria-label={star() === 'on' ? 'Убрать из «Сегодня»' : 'В «Сегодня»'}
+          title={star() === 'on' ? 'Убрать из «Сегодня» (Ctrl+S)' : 'В «Сегодня» (Ctrl+S)'}
+          onMouseDown={onStar}
+        >
+          <StarIcon />
+        </button>
+      </Show>
     </div>
   );
 }

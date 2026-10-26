@@ -1,8 +1,8 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
+  addYear, createStructure, dayOf, fillDay, findInbox, firstWord, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
-import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror, placeTrees } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -12,6 +12,7 @@ import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
+import { TODO, starrable, starsIn, todoOf, toggleStars } from '../model/today';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
 import type { Backup } from '../persist/backup';
@@ -234,6 +235,11 @@ export class Outliner {
   private retitled: { id: NodeId; before: string } | null = null;
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
+  /** Today's date (`toDateString`), moved on at midnight and on coming back (`resumed`): stars and the marks of days follow it. */
+  readonly date: Accessor<string>;
+  private setDate: Setter<string>;
+  /** Today's `todo`, found by the tags of today's day, while the rows and the date are as they were. */
+  private todoCache: { version: number; date: string; todo: NodeId | null } | null = null;
   /** Bumped to open the sync dialog. */
   readonly syncRequests: Accessor<number>;
   private setSyncRequests: Setter<number>;
@@ -283,6 +289,7 @@ export class Outliner {
     [this.toastAction, this.setToastAction] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.toastLink, this.setToastLink] = createSignal<{ label: string; run: () => void } | null>(null);
     [this.captureOpen, this.setCaptureOpen] = createSignal(false);
+    [this.date, this.setDate] = createSignal(new Date().toDateString());
     [this.sketchToggled, this.setSketchToggled] = createSignal<ReadonlyMap<NodeId, boolean>>(new Map());
     [this.rowMenu, this.setRowMenu] = createSignal<{ key: RowKey; x: number; y: number } | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
@@ -480,8 +487,10 @@ export class Outliner {
    * over the new place, so its results show level after level. A bullet
    * zoomed into opens folded: everything inside it, at any depth (the
    * command `collapseAll`, no undo step), so the place reads as an overview.
-   * It stays folded as left. `keepFolds` (a reload coming back to its place)
-   * shows it as it was.
+   * It stays folded as left; only a day's `todo` stays open, its stars
+   * folded in it (model/today.ts): the day's list is what the day is
+   * entered for. `keepFolds` (a reload coming back to its place) shows it
+   * as it was.
    */
   zoomTo(key: RowKey | null, keepSearch = false, keepFolds = false): void {
     this.settleTitle();
@@ -496,7 +505,13 @@ export class Outliner {
       this.setZoomSignal(target);
       if (this.query() || this.filter()) this.setQuery(keepSearch ? this.query() : '', true);
       // Folded once the rows are the place's: a rebuild of only what is inside it, not of the list left.
-      if (target && !keepFolds) this.scaffold((ctx) => collapseAll(ctx, target));
+      if (target && !keepFolds) {
+        this.scaffold((ctx) => {
+          collapseAll(ctx, target);
+          const todo = periodAt(this.doc, target)?.kind === 'day' ? todoOf(this.doc, target) : null;
+          if (todo !== null && this.doc.get(todo).collapsed) setCollapsed(ctx, todo, false);
+        });
+      }
       this.syncRows();
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
@@ -720,10 +735,15 @@ export class Outliner {
   private enterDay(id: NodeId): void {
     if (this.readOnly || this.doc.get(id).children.length || periodAt(this.doc, id)?.kind !== 'day') return;
     const fill = () => {
-      if (this.zoom() === id && this.doc.has(id)) this.scaffold((ctx) => void fillDay(ctx, id));
+      if (this.zoom() === id && this.doc.has(id)) this.scaffold((ctx) => this.fillDay(ctx, id));
     };
     if (this.syncing() && !this.synced) this.afterSync.push(fill);
     else fill();
+  }
+
+  /** A day's template (`fillDay`). */
+  private fillDay(ctx: Ctx, day: NodeId): void {
+    fillDay(ctx, day);
   }
 
   /**
@@ -826,6 +846,81 @@ export class Outliner {
     return inbox === null ? null : this.doc.get(inbox).children.length;
   }
 
+  /** Today's `todo` list (model/today.ts), where stars are: null while today's day or its list is not there. Reactive. */
+  todayTodo(): NodeId | null {
+    const version = this.rowsVersion();
+    const date = this.date();
+    const c = this.todoCache;
+    if (c && c.version === version && c.date === date && (c.todo === null || this.doc.has(c.todo))) return c.todo;
+    const day = findPeriod(this.doc, this.tags, dayOf(new Date()));
+    const todo = day === null ? null : todoOf(this.doc, day);
+    this.todoCache = { version, date, todo };
+    return todo;
+  }
+
+  /**
+   * The row's star: 'on' when its bullet is in today's `todo` (a star row
+   * there is its own), 'off' when it can be put there, null when it cannot
+   * (the calendar, a secret, …). Reactive.
+   */
+  starOf(key: RowKey): 'on' | 'off' | null {
+    const todo = this.todayTodo();
+    const id = nodeOf(key);
+    if (!this.doc.has(id) || !this.doc.inOutline(id)) return null;
+    if (todo !== null && starsIn(this.doc, todo, id).length) return 'on';
+    return starrable(this.doc, id, todo) ? 'off' : null;
+  }
+
+  /** What the rows Ctrl+S and the star act on: the selection, else the row being edited. */
+  private starKeys(): RowKey[] {
+    if (this.selection()) return this.selectionRoots();
+    const f = this.focus();
+    return f ? [f.id] : [];
+  }
+
+  /**
+   * The star (Ctrl+S, the row's star, a swipe to the right, the row menu,
+   * "Ещё" in the editing bar): the bullets go into today's `todo` as
+   * mirrors, or out of it when all are there (model/today.ts `toggleStars`),
+   * one undo step; the caret stays. Today's day comes first if it is not
+   * there yet: its year and template as the calendar makes them (no undo
+   * step). The toast leads to today
+   * and can take it back.
+   */
+  toggleToday(keys: RowKey[] = this.starKeys()): void {
+    if (this.readOnly || !keys.length) return;
+    if (!keys.some((k) => this.starOf(k) !== null)) return this.notify('Этот пункт в «Сегодня» не добавить');
+    if (!this.structure()) return this.notify('Структуры ещё нет: меню «⋯» → «Создать структуру»');
+    const today = dayOf(new Date());
+    const waiting = () => this.notify('Сегодняшний день ещё не пришёл с сервера: попробуйте через минуту');
+    const day = this.periodBullet(today);
+    if (day === null) return this.syncing() && !this.synced ? waiting() : this.notify(`В календаре нет дня ${periodName(today)}`);
+    if (!this.doc.get(day).children.length) {
+      if (this.syncing() && !this.synced) return waiting();
+      this.scaffold((ctx) => this.fillDay(ctx, day));
+    }
+    const keep = this.keepFocus();
+    let did: 'on' | 'off' | null = null;
+    const ops = this.run((ctx) => {
+      let todo = todoOf(this.doc, day);
+      if (todo === null) {
+        // Gone or renamed: a new one, after the notes if they lead the day.
+        const first = this.doc.get(day).children[0];
+        placeTrees(ctx, day, first !== undefined && firstWord(this.doc.get(first).text) === 'notes' ? 1 : 0, [{ text: TODO, children: [] }]);
+        todo = todoOf(this.doc, day)!;
+      }
+      did = toggleStars(ctx, keys, todo);
+      return keep;
+    }, keep);
+    if (!ops.length || !did) return;
+    const back = { label: 'Отменить', run: () => this.takeBack(ops, did === 'on' ? 'Убрано из «Сегодня»' : 'Возвращено в «Сегодня»') };
+    const n = keys.length;
+    if (did === 'off') return this.notify(n > 1 ? 'Убраны из «Сегодня»' : 'Убрано из «Сегодня»', back);
+    const added = n > 1 ? 'Добавлены в' : 'Добавлено в';
+    if (this.placeNow() === 'today') return this.notify(`${added} «Сегодня»`, back);
+    this.notify(added, back, { label: 'Сегодня', run: () => { this.hideToast(); this.goToday(); } });
+  }
+
   /** After a reload in today's day: the next morning still leads on to the new day (`resumed`), as after the logo. */
   stayedToday(): void {
     const z = this.zoom();
@@ -837,6 +932,8 @@ export class Outliner {
 
   /** The app comes back into view: still in yesterday's day, it goes on to today's. */
   resumed(): void {
+    const now = new Date().toDateString();
+    if (this.date() !== now) this.setDate(now);
     const t = this.today;
     if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
   }
@@ -1104,11 +1201,10 @@ export class Outliner {
     this.notify('Удалено', { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') });
   }
 
-  /** A row swiped to the right (swipe.ts): checked off, a task if it was not one; checked, unchecked. */
-  swipeDone(key: RowKey): void {
+  /** A row swiped to the right (swipe.ts): into today's `todo`, or out of it (`toggleToday`). */
+  swipeToday(key: RowKey): void {
     if (this.rows.indexOf(key) < 0) return;
-    const cur = this.focus();
-    this.changeTasks((ctx) => checkOff(ctx, key), [key], cur && 'caret' in cur ? cur : undefined);
+    this.toggleToday([key]);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Symbol } from './Menu';
 import type { Outliner } from './outliner';
+import { STAR } from './swipe';
 
 /** Room kept between the menu and the window's edges, and between it and the finger, px. */
 const MARGIN = 8;
@@ -10,8 +11,8 @@ const MARGIN = 8;
  * and lifted without moving it (drag.ts), as a long press works on an iPhone
  * or iPad, or a right click with a mouse or trackpad (Row.tsx). Actions a
  * phone's edit bar keeps two presses away are one here: open the bullet,
- * make it a task or a plain bullet again, write its note, move it, delete
- * it (last, in red, as Apple sets a destructive action apart). A tap
+ * make it a task or a plain bullet again, star it into today's todo or
+ * out of it, write its note, move it, delete it (last, in red, as Apple sets a destructive action apart). A tap
  * anywhere else closes the menu and does nothing more.
  */
 export function RowMenu(props: { o: Outliner }) {
@@ -98,6 +99,14 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
               Убрать чекбокс
               <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></Symbol>
             </button>
+          </Show>
+          <Show when={o.starOf(key)}>
+            {(star) => (
+              <button type="button" role="menuitem" onClick={act(() => o.toggleToday([key]))}>
+                {star() === 'on' ? 'Убрать из «Сегодня»' : 'В «Сегодня»'}
+                <Symbol><path d={STAR[0]} fill={star() === 'on' ? 'currentColor' : 'none'} /></Symbol>
+              </button>
+            )}
           </Show>
           <button type="button" role="menuitem" onClick={act(() => o.setFocus({ id: key, caret: n().note.length, note: true }))}>
             Заметка
