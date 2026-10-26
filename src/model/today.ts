@@ -1,0 +1,196 @@
+import { firstWord, periodAt } from './calendar';
+import { clock } from './clock';
+import { TRASH, newId, trashKey, type Doc } from './doc';
+import type { Ctx } from './commands';
+import { contextOf, nodeOf, type RowKey } from './rows';
+import { searchable } from './tags';
+import type { NodeId, OutlineNode } from './types';
+
+/**
+ * Today's focus (October 2026): the star of a bullet is a mirror of it
+ * right in today's `todo` list, nothing kept on the bullet itself. Starring
+ * puts one there, folded; unstarring takes the mirrors there away. So the
+ * star syncs, undoes and stays in each day's list as a record of what was
+ * in focus, and taking the mirror out of `todo` by hand puts the star out.
+ *
+ * What a starred bullet's day came to is read from the tasks inside it,
+ * never from a check on the bullet itself (that would strike the project
+ * through everywhere and send it last in its list): see `standing`.
+ */
+
+/** The title of a day's list of things to do (`dayTemplate`). */
+export const TODO = 'todo';
+
+/** The day's `todo`: the first bullet right in it whose first word is "todo". Null if it has none. */
+export function todoOf(doc: Doc, day: NodeId): NodeId | null {
+  return doc.get(day).children.find((c) => !doc.get(c).mirrorOf && firstWord(doc.get(c).text) === TODO) ?? null;
+}
+
+/** Is the bullet a day's `todo` list? */
+export function isTodo(doc: Doc, id: NodeId): boolean {
+  const parent = doc.get(id).parent;
+  return parent !== null && parent !== TRASH && periodAt(doc, parent)?.kind === 'day' && todoOf(doc, parent) === id;
+}
+
+/** The mirrors of the bullet (of any copy of it) lying right in the list `todo`: its stars there. */
+export function starsIn(doc: Doc, todo: NodeId, id: NodeId): NodeId[] {
+  const origin = doc.origin(id);
+  return doc.copies(origin).filter((c) => c !== origin && doc.get(c).parent === todo);
+}
+
+/**
+ * Can the bullet be starred: a bullet of the outline that search sees (not
+ * `#secret`, which no mirror shows), and not the calendar's own bullets
+ * (a quarter, a year, …, a day), nor a day's `todo`, nor one written right
+ * in today's list, which is there already.
+ */
+export function starrable(doc: Doc, id: NodeId, todo: NodeId | null): boolean {
+  if (!doc.has(id)) return false;
+  const origin = doc.origin(id);
+  if (origin === doc.root || !doc.has(origin) || doc.get(origin).mirrorOf) return false;
+  if (!doc.inOutline(origin) || !searchable(doc, origin)) return false;
+  const n = doc.get(origin);
+  if (periodAt(doc, origin) || (n.parent === doc.root && /^@q\d$/.test(n.text.trim()))) return false;
+  if (isTodo(doc, origin)) return false;
+  return todo === null || n.parent !== todo;
+}
+
+/** Where a new star goes in the list: last, but above the empty bullets at its end (the template's one to write in). */
+function starIndex(doc: Doc, todo: NodeId): number {
+  const kids = doc.get(todo).children;
+  let i = kids.length;
+  while (i > 0) {
+    const n = doc.get(kids[i - 1]);
+    if (n.mirrorOf || n.text || n.note || n.todo || n.children.length) break;
+    i--;
+  }
+  return i;
+}
+
+/** Mirrors of `origins` into the list at `index`, folded: a project shows its next task under it (`PendingTasks`), not its whole tree. */
+function putStars(doc: Doc, todo: NodeId, index: number, origins: NodeId[]): NodeId[] {
+  if (!origins.length) return [];
+  const orders = doc.ordersAt(todo, index, origins.length);
+  const now = clock.now();
+  return origins.map((origin, i) => {
+    const id = newId();
+    doc.apply({
+      t: 'insert', parent: todo,
+      node: { id, order: orders[i], text: '', note: '', collapsed: true, todo: false, done: false, created: now, updated: now, children: [], mirrorOf: origin },
+    });
+    return id;
+  });
+}
+
+/** Takes a star away: the mirror goes to the trash out of its list (it holds nothing of its own to bring back). */
+function dropStar(doc: Doc, id: NodeId): void {
+  const n = doc.get(id);
+  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: trashKey(clock.now()) } });
+}
+
+/**
+ * The star pressed on rows (its button, Ctrl+S, a swipe to the right, the
+ * row menu): stars them in `todo`, or, when every one is starred already,
+ * takes their stars away (as Ctrl+L checks a selection all one way). A row
+ * of the list itself that is a star unstars its bullet. Rows that cannot be
+ * starred are left out. Returns what it did: 'on', 'off', or null for
+ * nothing.
+ */
+export function toggleStars({ doc }: Ctx, keys: RowKey[], todo: NodeId): 'on' | 'off' | null {
+  const origins: NodeId[] = [];
+  for (const key of keys) {
+    const id = nodeOf(key);
+    if (!doc.has(id)) continue;
+    const n = doc.get(id);
+    const star = !!n.mirrorOf && n.parent === todo && !contextOf(key);
+    const origin = doc.origin(id);
+    if (!origins.includes(origin) && (star || starrable(doc, id, todo))) origins.push(origin);
+  }
+  if (!origins.length) return null;
+  if (origins.every((o) => starsIn(doc, todo, o).length > 0)) {
+    for (const o of origins) for (const s of starsIn(doc, todo, o)) dropStar(doc, s);
+    return 'off';
+  }
+  putStars(doc, todo, starIndex(doc, todo), origins.filter((o) => !starsIn(doc, todo, o).length));
+  return 'on';
+}
+
+/** The tasks of a bullet: itself if it is one, and every one inside; a mirror inside counts as its original, its tree not walked again. */
+function tasksOf(doc: Doc, id: NodeId): OutlineNode[] {
+  const out: OutlineNode[] = [];
+  const seen = new Set<NodeId>();
+  const stack = [doc.origin(id)];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    const n = doc.content(cur);
+    if (seen.has(n.id)) continue;
+    seen.add(n.id);
+    if (n.todo) out.push(n);
+    if (!doc.get(cur).mirrorOf) for (const c of doc.get(cur).children) stack.push(c);
+  }
+  return out;
+}
+
+/** Was the task done by `end`: checked before it, or checked before the app kept when (no `doneAt`). */
+const doneBy = (t: OutlineNode, end: number) => t.done && (t.doneAt === undefined || t.doneAt < end);
+
+/**
+ * How a starred bullet stood at the end of a day (`end`, the stamp of the
+ * next midnight; Infinity for now): 'done' if it is a task done by then, or
+ * holds tasks and all there by then were done by then; 'open' if something
+ * was left to do; null for a bullet with no tasks, nothing to finish.
+ */
+export function standing(doc: Doc, id: NodeId, end = Infinity): 'done' | 'open' | null {
+  const own = doc.content(doc.origin(id));
+  if (own.todo) return doneBy(own, end) ? 'done' : 'open';
+  const tasks = tasksOf(doc, id).filter((t) => t.created < end);
+  if (!tasks.length) return null;
+  return tasks.every((t) => doneBy(t, end)) ? 'done' : 'open';
+}
+
+/** The tasks of a starred bullet checked within [start, end): what was done on its day, in the order of the outline. */
+export function doneWithin(doc: Doc, id: NodeId, start: number, end: number): NodeId[] {
+  const hits = new Set(tasksOf(doc, id).filter((t) => t.done && t.doneAt !== undefined && t.doneAt >= start && t.doneAt < end).map((t) => t.id));
+  if (!hits.size) return [];
+  const out: NodeId[] = [];
+  const stack = [doc.origin(id)];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (hits.delete(cur)) out.push(cur);
+    const kids = doc.get(cur).children;
+    for (let k = kids.length - 1; k >= 0; k--) stack.push(kids[k]);
+  }
+  // Tasks reached only through a mirror inside are not on the walk: last.
+  return [...out, ...hits];
+}
+
+/** The stamps a calendar day begins and ends at, on the device's clock. */
+export function dayBounds(y: number, m: number, d: number): { start: number; end: number } {
+  return { start: new Date(y, m - 1, d).getTime(), end: new Date(y, m - 1, d + 1).getTime() };
+}
+
+/**
+ * Carries the stars on into a new day's list `todo`: those of the last day
+ * before it whose list was made by that day's end (made later, the day was
+ * only looked into afterwards and never was "today"), each whose bullet
+ * still has something to do or nothing to finish (`standing` not 'done').
+ * They go first in the list, in their order there, folded; the day before
+ * keeps its own as they were. `before(n)` gives the list of the day n days
+ * back and when that day ended, or null. Returns how many came.
+ */
+export function carryStars({ doc }: Ctx, todo: NodeId, before: (back: number) => { todo: NodeId; end: number } | null, limit = 366): number {
+  for (let back = 1; back <= limit; back++) {
+    const day = before(back);
+    if (!day || doc.get(day.todo).created >= day.end) continue;
+    const origins: NodeId[] = [];
+    for (const c of doc.get(day.todo).children) {
+      if (!doc.get(c).mirrorOf) continue;
+      const origin = doc.origin(c);
+      if (origins.includes(origin) || !starrable(doc, origin, todo) || starsIn(doc, todo, origin).length) continue;
+      if (standing(doc, origin) !== 'done') origins.push(origin);
+    }
+    putStars(doc, todo, 0, origins);
+    return origins.length;
+  }
+  return 0;
+}
