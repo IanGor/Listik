@@ -9,6 +9,7 @@
       "bold": { "role": "secondary", "displayName": "Синие чернила", "canonical": "#2f6497" },
       "italic": { "role": "secondary", "displayName": "Оливковые чернила", "canonical": "#55702f" },
       "tag": { "role": "secondary", "displayName": "Бирюзовые чернила", "canonical": "#28706a" },
+      "star": { "role": "secondary", "displayName": "Жёлтая звезда", "canonical": "#a97a00" },
       "canvas": { "role": "neutral", "displayName": "Кремовая бумага", "canonical": "#faf9f5" },
       "canvas-dark": { "role": "neutral", "displayName": "Графит", "canonical": "#262624" },
       "surface": { "role": "neutral", "displayName": "Подложка", "canonical": "#f2ede4" },
@@ -87,6 +88,14 @@
       "description": "Мысль в Inbox поверх листа, по Ctrl+Shift+Space.",
       "html": "<div class=\"ds-capture\"><input placeholder=\"Мысль → Inbox\"/><span>Enter — записать · Esc</span></div>",
       "css": ".ds-capture { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 14px; background: #faf9f5; border: 1px solid #c96442; border-radius: 12px; box-shadow: 0 0 0 4px rgb(217 119 87 / 0.22), 0 12px 32px rgb(31 30 28 / 0.12); font-family: ui-monospace, monospace; } .ds-capture input { flex: 1; border: 0; outline: none; background: none; font: inherit; font-size: 16px; color: #1f1e1c; } .ds-capture span { font-size: 12px; color: #8e8b82; }"
+    },
+    {
+      "name": "Звезда «Сегодня»",
+      "kind": "button",
+      "refersTo": "today-star",
+      "description": "В конце строки: контур при наведении, залитая жёлтая — пункт в сегодняшнем todo (зеркалом).",
+      "html": "<button class=\"ds-today-star on\" aria-pressed=\"true\" aria-label=\"Убрать из «Сегодня»\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linejoin=\"round\"><path d=\"M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.7l5.9-.9z\"/></svg></button>",
+      "css": ".ds-today-star { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: #8e8b82; fill: none; background: none; border: none; border-radius: 6px; cursor: pointer; } .ds-today-star.on { color: #a97a00; fill: #a97a00; }"
     }
   ],
   "narrative": {

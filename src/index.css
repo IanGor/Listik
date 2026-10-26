@@ -2955,6 +2955,78 @@ body.is-dragging * {
   inset: -12px;
 }
 
+/* A star in a day's list, how its day went: done, or left to go on. */
+.day-mark {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: 1px;
+  background: var(--surface);
+  border-radius: 9px;
+}
+
+.day-mark.done {
+  color: var(--tag);
+  background: var(--tag-chip);
+}
+
+.day-mark.done::before {
+  content: '✓ ';
+}
+
+.day-mark.open::before {
+  content: '→ ';
+}
+
+/* Nothing left to do: quieter, never struck through (the bullet is not a task). */
+.row.finished > .body > .text {
+  color: var(--muted);
+}
+
+/* What was checked inside on that day: one line, under the open task. */
+.day-done {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: calc(14px * var(--text-scale));
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.day-done-mark {
+  flex: none;
+  color: var(--tag);
+}
+
+.day-done-sep {
+  flex: none;
+  color: var(--faint);
+}
+
+.day-done-task {
+  overflow: hidden;
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.day-done-task:last-child {
+  flex: 1 1 auto;
+}
+
+:where(:root.mouse) .day-done-task:hover {
+  color: var(--text);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .today-star {
     transition: none;
