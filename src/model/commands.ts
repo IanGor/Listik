@@ -6,7 +6,7 @@ import { normalize, type TextIndex } from './search';
 import { countTrees, type Tree } from './outline-text';
 import { deletedKey } from './trash';
 import { contextOf, keyIn, nodeOf, type RowKey, type VisibleRows } from './rows';
-import type { Focus, NodeId, NodeSnapshot } from './types';
+import type { Focus, NodeId, NodeSnapshot, OutlineNode } from './types';
 
 /**
  * User-level editing actions. Each applies ops to the doc (the caller wraps
@@ -116,7 +116,7 @@ function handOver(doc: Doc, id: NodeId): void {
     if (to.text !== from.text) doc.apply({ t: 'setText', id: heir, from: to.text, to: from.text, at: now });
     if (to.note !== from.note) doc.apply({ t: 'setNote', id: heir, from: to.note, to: from.note, at: now });
     if (to.todo !== from.todo) doc.apply({ t: 'setTodo', id: heir, from: to.todo, to: from.todo });
-    if (to.done !== from.done) doc.apply({ t: 'setDone', id: heir, from: to.done, to: from.done });
+    if (to.done !== from.done) doc.apply({ t: 'setDone', id: heir, from: to.done, to: from.done, ...stamp(from.done ? from.doneAt : to.doneAt) });
     if (to.strokes) doc.apply({ t: 'removeStrokes', id: heir, strokes: to.strokes });
     if (from.strokes) doc.apply({ t: 'addStrokes', id: heir, strokes: from.strokes });
     for (const c of [...from.children]) {
@@ -206,6 +206,16 @@ export function makeMirror(ctx: Ctx, key: RowKey, target: NodeId, start: number,
   return { id: mirror, caret: doc.content(mirror).text.length };
 }
 
+const stamp = (at: number | undefined) => (at !== undefined ? { at } : {});
+
+/**
+ * Checks or unchecks a task, with when it was checked (`doneAt`): the op
+ * carries the new stamp, or the one the task loses, to invert either way.
+ */
+export function setDone(doc: Doc, n: OutlineNode, to: boolean): void {
+  doc.apply({ t: 'setDone', id: n.id, from: n.done, to, ...stamp(to ? clock.now() : n.doneAt) });
+}
+
 /**
  * Ctrl+L: completes the bullets, or un-completes them if all are done
  * already (for a selection: one press sets them all the same way).
@@ -214,7 +224,7 @@ export function toggleDone({ doc }: Ctx, ids: RowKey[]): void {
   const value = !ids.every((id) => doc.content(nodeOf(id)).done);
   for (const id of ids) {
     const n = doc.content(nodeOf(id));
-    if (n.done !== value) doc.apply({ t: 'setDone', id: n.id, from: !value, to: value });
+    if (n.done !== value) setDone(doc, n, value);
   }
 }
 
@@ -231,14 +241,14 @@ export function cycleTask(ctx: Ctx, ids: RowKey[]): void {
   const plain = nodes.filter((n) => !n.todo);
   const open = nodes.filter((n) => n.todo && !n.done);
   if (plain.length) for (const n of plain) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
-  else if (open.length) for (const n of open) doc.apply({ t: 'setDone', id: n.id, from: false, to: true });
+  else if (open.length) for (const n of open) setDone(doc, n, true);
   else untask(ctx, ids);
 }
 
 /** Ctrl+Shift+L: tasks become plain bullets again (and so not done). */
 export function untask({ doc }: Ctx, ids: RowKey[]): void {
   for (const n of new Set(ids.map((id) => doc.content(nodeOf(id))))) {
-    if (n.done) doc.apply({ t: 'setDone', id: n.id, from: true, to: false });
+    if (n.done) setDone(doc, n, false);
     if (n.todo) doc.apply({ t: 'setTodo', id: n.id, from: true, to: false });
   }
 }
@@ -249,9 +259,9 @@ export function untask({ doc }: Ctx, ids: RowKey[]): void {
  */
 export function checkOff({ doc }: Ctx, key: RowKey): void {
   const n = doc.content(nodeOf(key));
-  if (n.done) return void doc.apply({ t: 'setDone', id: n.id, from: true, to: false });
+  if (n.done) return void setDone(doc, n, false);
   if (!n.todo) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
-  doc.apply({ t: 'setDone', id: n.id, from: false, to: true });
+  setDone(doc, n, true);
 }
 
 /**

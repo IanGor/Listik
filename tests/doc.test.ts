@@ -95,4 +95,23 @@ describe('done and notes', () => {
     const snap = doc.snapshot('a');
     expect(snap).toMatchObject({ done: false, note: '' });
   });
+
+  it('keeps when a task was checked (doneAt), and gives it back when an uncheck is undone', () => {
+    const doc = build(['a']);
+    const check: Op = { t: 'setDone', id: 'a', from: false, to: true, at: 7 };
+    doc.apply(check);
+    expect(doc.get('a').doneAt).toBe(7);
+    const uncheck: Op = { t: 'setDone', id: 'a', from: true, to: false, at: 7 };
+    doc.apply(uncheck);
+    expect(doc.get('a').doneAt).toBeUndefined();
+    doc.apply(invert(uncheck));
+    expect(doc.get('a')).toMatchObject({ done: true, doneAt: 7 });
+    expect(doc.snapshot('a').doneAt).toBe(7);
+    doc.apply(invert(check));
+    expect(doc.get('a').doneAt).toBeUndefined();
+    // An op from before doneAt checks the task with no stamp.
+    doc.apply({ t: 'setDone', id: 'a', from: false, to: true });
+    expect(doc.get('a')).toMatchObject({ done: true });
+    expect(doc.get('a').doneAt).toBeUndefined();
+  });
 });

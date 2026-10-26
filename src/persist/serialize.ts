@@ -8,16 +8,18 @@ import { own } from '../util/own';
  * `done` and `note`; version 3 adds `todo` (in v2, anything done was in
  * effect a task); version 4 adds the trash's rows after the outline's;
  * version 5 adds `mirror`, the id a mirror bullet points at ('' for none);
- * version 6 adds `strokes`, the bullet's sketch, only on rows that have one.
+ * version 6 adds `strokes`, the bullet's sketch, only on rows that have one;
+ * version 7 adds `doneAt`, when a done task was checked, only on rows that
+ * have one (`strokes` is then null on a row without a sketch).
  */
 export type SnapshotRow = [
   id: NodeId, parent: number, order: string, text: string, collapsed: 0 | 1, created: number, updated: number,
-  done?: 0 | 1, note?: string, todo?: 0 | 1, mirror?: string, strokes?: Stroke[],
+  done?: 0 | 1, note?: string, todo?: 0 | 1, mirror?: string, strokes?: Stroke[] | null, doneAt?: number,
 ];
 
 /** Rows in pre-order, so children arrive already sorted. */
 export interface Snapshot {
-  v: 1 | 2 | 3 | 4 | 5 | 6;
+  v: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   root: NodeId;
   rows: SnapshotRow[];
 }
@@ -40,11 +42,12 @@ export function serialize(doc: Doc): string {
     const parent = stackParents.pop()!;
     const index = rows.length;
     const row: SnapshotRow = [n.id, parent, n.order, n.text, n.collapsed ? 1 : 0, n.created, n.updated, n.done ? 1 : 0, n.note, n.todo ? 1 : 0, n.mirrorOf ?? ''];
-    if (n.strokes) row.push(n.strokes);
+    if (n.strokes || n.doneAt !== undefined) row.push(n.strokes ?? null);
+    if (n.doneAt !== undefined) row.push(n.doneAt);
     rows.push(row);
     pushChildren(n.children, index);
   }
-  const snapshot: Snapshot = { v: 6, root: doc.root, rows };
+  const snapshot: Snapshot = { v: 7, root: doc.root, rows };
   return JSON.stringify(snapshot);
 }
 
@@ -56,10 +59,10 @@ export function serialize(doc: Doc): string {
  */
 export function deserialize(json: string): Doc {
   const s = JSON.parse(json) as Snapshot;
-  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5 && s.v !== 6) throw new Error(`Unsupported snapshot version ${s.v}`);
+  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5 && s.v !== 6 && s.v !== 7) throw new Error(`Unsupported snapshot version ${s.v}`);
   const doc = new Doc(s.root);
   const ids = new Array<NodeId>(s.rows.length);
-  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo, mirror, strokes], i) => {
+  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo, mirror, strokes, doneAt], i) => {
     const parent = p === -1 ? s.root : p === -2 ? TRASH : ids[p];
     const id = own(rawId);
     ids[i] = id;
@@ -67,6 +70,7 @@ export function deserialize(json: string): Doc {
       id, parent, children: [], order: own(order), text: own(text), note: note ? own(note) : '',
       collapsed: collapsed === 1, todo: todo === 1 || done === 1, done: done === 1, created, updated,
       mirrorOf: mirror ? own(mirror) : null,
+      ...(done === 1 && doneAt !== undefined ? { doneAt } : {}),
       ...(strokes?.length ? { strokes: strokes.map((t) => ({ id: own(t.id), tool: t.tool, d: own(t.d) })) } : {}),
     });
     doc.get(parent).children.push(id);

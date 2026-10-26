@@ -55,7 +55,7 @@ export function invert(op: Op): Op {
     case 'setTodo':
       return { t: 'setTodo', id: op.id, from: op.to, to: op.from };
     case 'setDone':
-      return { t: 'setDone', id: op.id, from: op.to, to: op.from };
+      return { t: 'setDone', id: op.id, from: op.to, to: op.from, ...(op.at !== undefined ? { at: op.at } : {}) };
     case 'setNote':
       return { t: 'setNote', id: op.id, from: op.to, to: op.from, at: op.at };
     case 'setMirror':
@@ -239,6 +239,7 @@ export class Doc {
     const n = this.get(id);
     return {
       id: n.id, order: n.order, text: n.text, note: n.note, collapsed: n.collapsed, todo: n.todo, done: n.done,
+      ...(n.doneAt !== undefined ? { doneAt: n.doneAt } : {}),
       created: n.created, updated: n.updated, ...(n.mirrorOf ? { mirrorOf: n.mirrorOf } : {}),
       ...(n.strokes ? { strokes: n.strokes } : {}),
       children: n.children.map((c) => this.snapshot(c)),
@@ -318,6 +319,8 @@ export class Doc {
         const n = this.get(op.id);
         if (n.done !== op.from) throw new Error(`setDone: stale state for ${op.id}`);
         n.done = op.to;
+        if (op.to && op.at !== undefined) n.doneAt = op.at;
+        else delete n.doneAt;
         break;
       }
       case 'setNote': {
@@ -371,6 +374,7 @@ export class Doc {
         mirrorOf: s.mirrorOf && s.mirrorOf !== s.id ? s.mirrorOf : null,
       };
       if (s.strokes?.length) n.strokes = s.strokes;
+      if (s.done && s.doneAt !== undefined) n.doneAt = s.doneAt;
       this.nodes.set(n.id, n);
       this.attach(n);
       this.linkMirror(n);

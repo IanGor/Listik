@@ -27,6 +27,8 @@ export interface OutlineNode {
   todo: boolean;
   /** A completed task: checked and struck through. Only tasks are ever done. */
   done: boolean;
+  /** When a done task was checked (clock stamp); absent if not done, or checked before the app kept it. */
+  doneAt?: number;
   created: number;
   updated: number;
   /**
@@ -48,6 +50,7 @@ export interface NodeSnapshot {
   collapsed: boolean;
   todo: boolean;
   done: boolean;
+  doneAt?: number;
   created: number;
   updated: number;
   mirrorOf?: NodeId;
@@ -72,7 +75,11 @@ export type Op =
   | { t: 'move'; id: NodeId; from: Position; to: Position }
   | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean }
   | { t: 'setTodo'; id: NodeId; from: boolean; to: boolean }
-  | { t: 'setDone'; id: NodeId; from: boolean; to: boolean }
+  /**
+   * `at`: when the task was checked — the new stamp when it is checked, the
+   * one it loses when unchecked — so the op inverts either way round.
+   */
+  | { t: 'setDone'; id: NodeId; from: boolean; to: boolean; at?: number }
   /** `at`: edit time, as for setText. */
   | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number }
   /** Makes the bullet a mirror of `to` (or a plain bullet again with null). */

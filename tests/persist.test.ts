@@ -211,6 +211,17 @@ describe('snapshot versions', () => {
     expect(deserialize(v2).get('y')).toMatchObject({ todo: true, done: true });
     expect(deserialize(serialize(deserialize(v2))).get('y')).toMatchObject({ todo: true, done: true });
 
+    // v7: when a task was checked, on rows with a sketch and without.
+    doc.apply({ t: 'setDone', id: 'b', from: true, to: false });
+    doc.apply({ t: 'setTodo', id: 'a', from: false, to: true });
+    doc.apply({ t: 'setDone', id: 'a', from: false, to: true, at: 42 });
+    doc.apply({ t: 'setDone', id: 'b', from: false, to: true, at: 43 });
+    doc.apply({ t: 'addStrokes', id: 'b', strokes: [{ id: 's', tool: 'pen', d: '0 0' }] });
+    const v7 = deserialize(serialize(doc));
+    expect(v7.get('a')).toMatchObject({ done: true, doneAt: 42 });
+    expect(v7.get('a').strokes).toBeUndefined();
+    expect(v7.get('b')).toMatchObject({ done: true, doneAt: 43, strokes: [{ id: 's' }] });
+
     const v1 = JSON.stringify({ v: 1, root: 'root', rows: [['x', -1, 'a0', 'старый', 0, 1, 2]] });
     expect(deserialize(v1).get('x')).toMatchObject({ text: 'старый', done: false, note: '', created: 1, updated: 2 });
   });

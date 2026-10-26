@@ -166,7 +166,7 @@ describe('snapshot', () => {
     const { doc, ctx, run } = setup(['a', 'b']);
     run(() => drawStroke(ctx, 'a', line('s1', 'mark')));
     const json = serialize(doc);
-    expect(JSON.parse(json).v).toBe(6);
+    expect(JSON.parse(json).v).toBeGreaterThanOrEqual(6);
     const copy = deserialize(json);
     checkInvariants(copy);
     expect(copy.get('a').strokes).toEqual([line('s1', 'mark')]);

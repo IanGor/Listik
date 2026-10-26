@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
 } from '../model/calendar';
-import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, checkOff, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -1056,7 +1056,7 @@ export class Outliner {
   completeTask(task: NodeId): void {
     const n = this.doc.nodes.get(task);
     if (!n || !n.todo || n.done) return;
-    this.changeTasks(({ doc }) => doc.apply({ t: 'setDone', id: task, from: false, to: true }), [task], this.keepFocus());
+    this.changeTasks(({ doc }) => setDone(doc, doc.get(task), true), [task], this.keepFocus());
   }
 
   /** The text of the task shown under a row (or the "Inbox" of a capture's toast): to where it is, the caret at its end. */
