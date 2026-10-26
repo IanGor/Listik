@@ -960,7 +960,7 @@ test.describe('structure and calendar', () => {
   const today = dayText(now);
   const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
-  const STRUCTURE = ['Inbox', '@q1', '@q2', '@q3', '@q4', 'Projects', 'Hubs', 'Reference', 'Archive'];
+  const STRUCTURE = ['📥 Inbox', 'PARA', '  Focus', '  Projects', '  Areas', '  Resources', '  Archive', '@q1', '@q2', '@q3', '@q4'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
   const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
@@ -1050,6 +1050,9 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
     const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
     await home.click();
+    // PARA comes open: folded, nothing at the top is open, and "Главная" opens every one.
+    await page.locator('.row', { hasText: 'PARA' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(STRUCTURE.filter((t) => !t.startsWith(' ')));
     await home.click();
     const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : [t]));
     expect(await outline(page)).toEqual(QUARTERS);

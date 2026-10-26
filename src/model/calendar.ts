@@ -7,9 +7,9 @@ import type { NodeId } from './types';
 
 /**
  * The structure (PARA after Tiago Forte, with a calendar in four quarters)
- * and its calendar. The menu, the first start and the first sync put nine
- * bullets at the top level: Inbox, `@q1`…`@q4`, Projects, Hubs, Reference,
- * Archive, each with a note on what goes there.
+ * and its calendar. The menu, the first start and the first sync put six
+ * bullets at the top level, with no notes: 📥 Inbox, PARA (Focus, Projects,
+ * Areas, Resources, Archive inside), then `@q1`…`@q4`.
  *
  * Each quarter holds a bullet per year, and the year its three months:
  * `@q4` → `@y26` → `@m10` → week `@w43` (ISO, from Monday; a week that
@@ -27,17 +27,14 @@ import type { NodeId } from './types';
 
 const two = (n: number) => String(n).padStart(2, '0');
 
-/** The top level the structure puts in, in this order. */
-export const STRUCTURE: readonly { text: string; note: string }[] = [
-  { text: 'Inbox', note: 'Сюда попадают все вновь созданные ссылки (их позже перемещаю в нужную папку системы PARA)' },
-  { text: '@q1', note: 'Первый квартал' },
-  { text: '@q2', note: 'Второй квартал' },
-  { text: '@q3', note: 'Третий квартал' },
-  { text: '@q4', note: 'Четвёртый квартал' },
-  { text: 'Projects', note: 'Тут будет то, что закончится в определённый срок' },
-  { text: 'Hubs', note: 'Здесь бесконечные активности, например планирование релизов или регулярные активности' },
-  { text: 'Reference', note: 'Набор ссылок и материалов без явной темы или пользы в моменте. Аналог read it later' },
-  { text: 'Archive', note: 'Переношу всё, что может быть полезно в будущем, но уже не актуально' },
+/** The top level the structure puts in, in this order, and the bullets inside each. */
+export const STRUCTURE: readonly { text: string; children: readonly string[] }[] = [
+  { text: '📥 Inbox', children: [] },
+  { text: 'PARA', children: ['Focus', 'Projects', 'Areas', 'Resources', 'Archive'] },
+  { text: '@q1', children: [] },
+  { text: '@q2', children: [] },
+  { text: '@q3', children: [] },
+  { text: '@q4', children: [] },
 ];
 
 /** `@имя` of each weekday, from Sunday (Date.getDay). */
@@ -164,9 +161,11 @@ export function openPeriods(doc: Doc): NodeId[] {
 
 /** The whole structure, with this year in its quarters, folded. */
 export function structureTrees(y: number): Tree[] {
-  return STRUCTURE.map(({ text, note }) => {
+  return STRUCTURE.map(({ text, children }) => {
     const q = labelOf(text);
-    return q?.kind === 'quarter' ? { text, note, collapsed: true, children: [yearTree(y, q.q)] } : { text, note, children: [] };
+    return q?.kind === 'quarter'
+      ? { text, collapsed: true, children: [yearTree(y, q.q)] }
+      : { text, children: children.map((c) => ({ text: c, children: [] })) };
   });
 }
 
