@@ -169,11 +169,18 @@ export function structureTrees(y: number): Tree[] {
   });
 }
 
-/** What a day gets when it is first entered: notes, a todo list, each with an empty bullet to write in, then the hours. */
+/** The caption (note) of a day's `todo`: its contexts, ready to filter the tasks by work or by home. */
+export const TODO_NOTE = '@work @home';
+
+/**
+ * What a day gets when it is first entered: notes, a todo list (its caption
+ * the two contexts, `TODO_NOTE`), each with an empty bullet to write in, then
+ * the hours.
+ */
 export function dayTemplate(): Tree[] {
   return [
     { text: '#notes', children: [{ text: '', children: [] }] },
-    { text: 'todo', children: [{ text: '', children: [] }] },
+    { text: 'todo', note: TODO_NOTE, children: [{ text: '', children: [] }] },
     ...SLOTS.map((text) => ({ text, children: [] })),
   ];
 }

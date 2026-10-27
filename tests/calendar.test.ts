@@ -276,6 +276,9 @@ describe('fillDay', () => {
     expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
     // Plain, like the one under the notes: no checkbox until it is made a task.
     expect(doc.get(doc.get(todo).children[0]).todo).toBe(false);
+    // The todo's caption holds the two contexts; the notes have none.
+    expect(doc.get(todo).note).toBe('@work @home');
+    expect(doc.get(notes).note).toBe('');
     expect(SLOTS[0]).toBe('09:00');
     expect(SLOTS.at(-1)).toBe('18:00');
     expect(SLOTS.length).toBe(19);
