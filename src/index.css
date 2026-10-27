@@ -944,6 +944,44 @@ mark,
   min-width: 0;
 }
 
+/* In a day: the day before and after, at the path's end (ZoomHeader.tsx). */
+.day-steps {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin: -4px -6px -4px 0;
+}
+
+.day-step {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 140ms var(--ease-out), background 140ms var(--ease-out);
+}
+
+:where(:root.mouse) .day-step:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.day-step:active {
+  background: var(--surface-2);
+}
+
+@media (pointer: coarse) {
+  .day-step {
+    width: 40px;
+    height: 32px;
+  }
+}
+
 .crumbbar.scrolled {
   box-shadow: 0 1px 0 var(--hairline);
 }

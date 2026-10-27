@@ -139,6 +139,27 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           )}
         </For>
       </nav>
+      {/* In a day of the calendar: the day before and the day after, by dates (not by weeks, months, quarters). */}
+      <Show when={o.zoomDay()}>
+        <div class="day-steps">
+          <For each={[-1, 1] as const}>
+            {(step) => (
+              <button
+                type="button"
+                class="day-step"
+                title={step < 0 ? 'Предыдущий день' : 'Следующий день'}
+                aria-label={step < 0 ? 'Предыдущий день' : 'Следующий день'}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => o.stepDay(step)}
+              >
+                <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d={step < 0 ? 'M6 1.5 1.5 6 6 10.5' : 'M2 1.5 6.5 6 2 10.5'} />
+                </svg>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
       {/* What a search found: beside the path, the field keeping its room for the query (Apple's search fields
           carry no count). Nothing found has its own words over the list ("Ничего не найдено"). */}
       <Show when={o.filter()?.count}>

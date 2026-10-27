@@ -12,7 +12,7 @@ import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
-import { TODO, carryStars, compareDates, dayBounds, planLabel, planStars, plannable, plansOf, sameDate, todoOf, type PlanDate } from '../model/today';
+import { TODO, addDays, carryStars, compareDates, dayBounds, planLabel, planStars, plannable, plansOf, sameDate, todoOf, type PlanDate } from '../model/today';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
 import type { Backup } from '../persist/backup';
@@ -964,6 +964,24 @@ export class Outliner {
     if (!this.doc.get(day).children.length) this.scaffold((ctx) => fillDay(ctx, day));
     this.carryOn(day);
     return day;
+  }
+
+  /** The day of the calendar the zoom is in (the day itself, not a week or a month); null elsewhere. Reactive. */
+  zoomDay(): PlanDate | null {
+    this.rowsVersion();
+    const z = this.zoom();
+    const p = z && this.doc.has(z) ? periodAt(this.doc, z) : null;
+    return p?.kind === 'day' ? { y: p.y, m: p.m, d: p.d } : null;
+  }
+
+  /**
+   * ‹ › in a day: the day before (-1) or after (+1) by the calendar, across
+   * weeks, months and years. The day comes first if it is not there: its year
+   * and template as planning makes them (`dayFor`, no undo step).
+   */
+  stepDay(step: -1 | 1): void {
+    const date = this.zoomDay();
+    if (date) this.goToDate(addDays(date, step));
   }
 
   /** The view into the day of a date, as «Сегодня» leads into today. */

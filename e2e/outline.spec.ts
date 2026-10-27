@@ -1144,6 +1144,25 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.row', { hasText: '@q1' }).locator('.plan-button')).toHaveCount(0);
   });
 
+  test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
+    await create(page);
+    // Creating the structure leaves in today's day.
+    await expect(title(page)).toHaveText(today);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(page.locator('.day-step')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Сегодня' }).first().click();
+    await expect(title(page)).toHaveText(today);
+    await page.getByRole('button', { name: 'Следующий день' }).click();
+    await expect(title(page)).toHaveText(dayText(shifted(1)));
+    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
+    await page.getByRole('button', { name: 'Предыдущий день' }).click();
+    await page.getByRole('button', { name: 'Предыдущий день' }).click();
+    await expect(title(page)).toHaveText(dayText(shifted(-1)));
+    // Up to the week: no steps there.
+    await page.locator('.crumbs .crumb').nth(-2).click();
+    await expect(page.locator('.day-step')).toHaveCount(0);
+  });
+
   test('the bullet zoomed into is planned from its title too: a button, then its date beside the title; the calendar cancels it', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
