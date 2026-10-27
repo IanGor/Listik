@@ -668,9 +668,9 @@ kbd {
 }
 
 .bullet.mirror.todo::after {
-  width: 13px;
-  height: 13px;
-  border-radius: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
   transform: translate(-50%, -50%);
 }
 
