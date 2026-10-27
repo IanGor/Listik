@@ -68,6 +68,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.bare = new URLSearchParams(location.search).has('empty');
   outliner.keepFolds(name);
   outliner.keepRecent(name);
+  outliner.docName = name;
   outliner.foldCalendar(name);
   // A new document starts with the structure (model/calendar.ts).
   if (fresh) outliner.firstStructure(true);

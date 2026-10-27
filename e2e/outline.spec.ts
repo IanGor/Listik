@@ -1161,32 +1161,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
   });
 
-  test('a starred project with every task inside checked reads "готово" in today\'s list, with what was done that day under it', async ({ page }) => {
-    await create(page);
-    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
-    await edit(page, 'Часть вторая');
-    await page.keyboard.press('Control+l');
-    await edit(page, 'Том первый');
-    await page.keyboard.press('Control+s');
-    await page.locator('.planner-day.today').click();
-    await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Сегодня' }).first().click();
-    const star = page.locator('.row.mirror', { hasText: 'Том первый' });
-    // Folded, its open task under it; nothing done yet.
-    await expect(star.locator('.pending-text')).toHaveText('Часть вторая');
-    await expect(star.locator('.day-mark')).toHaveCount(0);
-    await expect(star.locator('.day-done')).toHaveCount(0);
-    await star.locator('.pending-box').click();
-    await expect(star.locator('.day-mark.done')).toHaveText('готово');
-    await expect(star).toHaveClass(/finished/);
-    await expect(star.locator('.day-done-task')).toHaveText(['Часть вторая']);
-    await expect(star.locator('.text')).not.toHaveCSS('text-decoration-line', 'line-through');
-    // A click on what was done goes to it.
-    await star.locator('.day-done-task').click();
-    await expect(editing(page)).toHaveText('Часть вторая');
-  });
-
-  test('past midnight the unfinished star goes on to the new day, the done one stays behind; the day before keeps both, marked', async ({ page }) => {
+  test('past midnight the project with an open task goes on to the new day, the done one stays behind; the day before keeps both mirrors, no marks', async ({ page }) => {
     await page.clock.install({ time: new Date(2026, 9, 21, 23, 50, 0) });
     await page.goto('/?db=e2e-carry');
     await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 21)));
@@ -1225,9 +1200,39 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Alt+ArrowLeft');
     await page.locator('.row', { hasText: dayText(new Date(2026, 9, 21)) }).locator('.bullet').click();
     await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 21)));
-    await expect(page.locator('.row.mirror', { hasText: 'Проект' }).locator('.day-mark.open')).toHaveText('дальше');
-    await expect(page.locator('.row.mirror', { hasText: 'Готовое' }).locator('.day-mark.done')).toHaveText('готово');
-    await expect(page.locator('.row.mirror', { hasText: 'Готовое' }).locator('.day-done-task')).toHaveText(['сделано']);
+    await expect(page.locator('.row.mirror', { hasText: 'Проект' })).toHaveCount(1);
+    await expect(page.locator('.row.mirror', { hasText: 'Готовое' })).toHaveCount(1);
+    await expect(page.locator('.day-mark, .day-done')).toHaveCount(0);
+  });
+
+  test('a day made ahead by planning still gets the unfinished when its day comes', async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 9, 21, 23, 50, 0) });
+    await page.goto('/?db=e2e-carry-ahead');
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 21)));
+    await page.locator('.row .text').nth(1).click();
+    await page.keyboard.type('Проект');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('шаг');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.type('Другое');
+    await edit(page, 'шаг');
+    await page.keyboard.press('Control+l');
+    await edit(page, 'Проект');
+    await page.keyboard.press('Control+s');
+    await page.locator('.planner-day.today').click();
+    // Another one planned for tomorrow: its day is made now, with its list.
+    await edit(page, 'Другое');
+    await page.keyboard.press('Control+s');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.clock.runFor(12 * 60_000);
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 22)));
+    expect(await outline(page)).toEqual(['#notes', 'todo', '  Проект', '  Другое', '  ', ...SLOTS]);
+    await expect(page.locator('.row.mirror', { hasText: 'Проект' }).locator('.plan-date')).toHaveText('сегодня');
   });
 
   test('left open in view past midnight, it goes on to the new day by itself; not while a bullet is being edited', async ({ page }) => {

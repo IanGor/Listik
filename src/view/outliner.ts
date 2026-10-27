@@ -12,7 +12,7 @@ import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
-import { TODO, carryStars, compareDates, dayBounds, doneWithin, isTodo, planLabel, planStars, plannable, plansOf, sameDate, standing, todoOf, type PlanDate } from '../model/today';
+import { TODO, carryStars, compareDates, dayBounds, planLabel, planStars, plannable, plansOf, sameDate, todoOf, type PlanDate } from '../model/today';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
 import type { Backup } from '../persist/backup';
@@ -243,6 +243,8 @@ export class Outliner {
   private retitled: { id: NodeId; before: string } | null = null;
   /** The day `goToday` went into, and on what date: the next morning it leads on to the new day. */
   private today: { day: NodeId; date: string } | null = null;
+  /** The document's name on this device (App.tsx): keys what is done once a day here. */
+  docName = '';
   /** Today's date (`toDateString`), moved on at midnight and on coming back (`resumed`): stars and the marks of days follow it. */
   readonly date: Accessor<string>;
   private setDate: Setter<string>;
@@ -748,28 +750,46 @@ export class Outliner {
   private enterDay(id: NodeId): void {
     if (this.readOnly || this.doc.get(id).children.length || periodAt(this.doc, id)?.kind !== 'day') return;
     const fill = () => {
-      if (this.zoom() === id && this.doc.has(id)) this.scaffold((ctx) => this.fillDay(ctx, id));
+      if (this.zoom() !== id || !this.doc.has(id)) return;
+      this.scaffold((ctx) => fillDay(ctx, id));
+      this.carryOn(id);
     };
     if (this.syncing() && !this.synced) this.afterSync.push(fill);
     else fill();
   }
 
   /**
-   * A day's template (`fillDay`); today's, made now, gets the stars carried
-   * on from the last day before it (model/today.ts `carryStars`).
+   * Carries the unfinished on into today's `todo` (model/today.ts
+   * `carryStars`): the mirrors of the last day before it that hold an
+   * unchecked task come first in the list, the day before keeping its own.
+   * Once a day on this device, the first time today's day is entered with its
+   * list there (a new day, or one made ahead by planning, which is most of
+   * them): the mirrors are added, never taken back, so one put out of the list
+   * by hand stays out for the day. With sync, only once the server has been
+   * heard from. No undo step.
    */
-  private fillDay(ctx: Ctx, day: NodeId): void {
-    if (!fillDay(ctx, day)) return;
+  private carryOn(day: NodeId): void {
+    if (this.readOnly || !this.doc.has(day)) return;
     const p = periodAt(this.doc, day);
-    const t = dayOf(new Date());
+    const t = this.todayDate();
     const todo = todoOf(this.doc, day);
-    if (p?.kind !== 'day' || t.kind !== 'day' || p.y !== t.y || p.m !== t.m || p.d !== t.d || todo === null) return;
-    carryStars(ctx, todo, (back) => {
-      const date = new Date(t.y, t.m - 1, t.d - back);
-      const before = findPeriod(this.doc, this.tags, dayOf(date));
-      const list = before === null ? null : todoOf(this.doc, before);
-      return list === null ? null : { todo: list, end: dayBounds(date.getFullYear(), date.getMonth() + 1, date.getDate()).end };
+    if (p?.kind !== 'day' || p.y !== t.y || p.m !== t.m || p.d !== t.d || todo === null) return;
+    const key = `listik-carried:${this.docName}`;
+    const stamp = new Date().toDateString();
+    if (readSetting(key) === stamp) return;
+    if (this.syncing() && !this.synced) {
+      this.afterSync.push(() => this.carryOn(day));
+      return;
+    }
+    this.scaffold((ctx) => {
+      carryStars(ctx, todo, (back) => {
+        const date = new Date(t.y, t.m - 1, t.d - back);
+        const before = findPeriod(this.doc, this.tags, dayOf(date));
+        const list = before === null ? null : todoOf(this.doc, before);
+        return list === null ? null : { todo: list, end: dayBounds(date.getFullYear(), date.getMonth() + 1, date.getDate()).end };
+      });
     });
+    writeSetting(key, stamp);
   }
 
   /**
@@ -825,6 +845,7 @@ export class Outliner {
       }
       return quiet ? undefined : this.notify(`В календаре нет дня ${periodName(today)}`);
     }
+    this.carryOn(day);
     batch(() => {
       this.setQuery('', true);
       this.setFocus(null);
@@ -940,7 +961,8 @@ export class Outliner {
       this.notify(waiting ? 'День ещё не пришёл с сервера: попробуйте через минуту' : `В календаре нет дня ${periodName(p)}`);
       return null;
     }
-    if (!this.doc.get(day).children.length) this.scaffold((ctx) => this.fillDay(ctx, day));
+    if (!this.doc.get(day).children.length) this.scaffold((ctx) => fillDay(ctx, day));
+    this.carryOn(day);
     return day;
   }
 
@@ -996,31 +1018,6 @@ export class Outliner {
     this.notify(said, back, { label: 'Открыть', run: () => { this.hideToast(); this.goToDate(date); } });
   }
 
-  /**
-   * A star in a day's `todo` and how its bullet's day went (model/today.ts
-   * `standing`, `doneWithin`): `mark` — 'done' when nothing was left to do
-   * by the day's end (today: by now), 'open' for a day gone by with work left
-   * (it went on to the next day); `done` — the tasks inside checked that day.
-   * Null for any other row. Reactive.
-   */
-  dayOfStar(key: RowKey): { mark: 'done' | 'open' | null; done: NodeId[]; today: boolean } | null {
-    this.rowsVersion();
-    this.tasksVersion();
-    const date = this.date();
-    if (contextOf(key)) return null;
-    const id = nodeOf(key);
-    const n = this.doc.nodes.get(id);
-    if (!n?.mirrorOf || n.parent === null || !this.doc.has(n.parent) || !isTodo(this.doc, n.parent)) return null;
-    const p = periodAt(this.doc, this.doc.get(n.parent).parent!);
-    if (p?.kind !== 'day') return null;
-    const { start, end } = dayBounds(p.y, p.m, p.d);
-    const now = new Date(date).getTime();
-    if (start > now) return null;
-    const today = now >= start && now < end;
-    const state = standing(this.doc, id, today ? Infinity : end);
-    return { mark: today ? (state === 'done' ? 'done' : null) : state, done: doneWithin(this.doc, id, start, end), today };
-  }
-
   /** After a reload in today's day: the next morning still leads on to the new day (`resumed`), as after the logo. */
   stayedToday(): void {
     const z = this.zoom();
@@ -1033,7 +1030,12 @@ export class Outliner {
   /** The app comes back into view: still in yesterday's day, it goes on to today's. */
   resumed(): void {
     const now = new Date().toDateString();
-    if (this.date() !== now) this.setDate(now);
+    if (this.date() !== now) {
+      this.setDate(now);
+      // A new day with the app left elsewhere: its unfinished still come to its list.
+      const day = this.structure() ? findPeriod(this.doc, this.tags, dayOf(new Date())) : null;
+      if (day !== null) this.carryOn(day);
+    }
     const t = this.today;
     if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
   }

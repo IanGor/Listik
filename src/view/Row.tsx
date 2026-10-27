@@ -170,16 +170,6 @@ export function Row(props: RowProps) {
   /** The bullet's plan: null if it cannot be planned, else the date it is planned for, if any (Outliner.planOf). */
   const plan = createMemo(() => o.planOf(id), undefined, { equals: (a, b) => a === b || (!!a && !!b && a.date?.y === b.date?.y && a.date?.m === b.date?.m && a.date?.d === b.date?.d) });
   const planned = () => plan()?.date ?? null;
-  /** A star in a day's `todo`: how its day went and what was done in it (Outliner.dayOfStar). */
-  const day = createMemo(() => (content() ? o.dayOfStar(id) : null), undefined, {
-    equals: (a, b) => a?.mark === b?.mark && a?.today === b?.today && a?.done.join() === b?.done.join(),
-  });
-  const doneTitles = () => {
-    const d = day();
-    if (!d) return [];
-    for (const t of d.done) o.nodes.track(t);
-    return d.done.map((t) => ({ id: t, text: (o.doc.nodes.has(t) && plainText(o.doc.get(t).text).trim()) || 'Задача без текста' }));
-  };
   /** The calendar button or the date beside the text: the calendar opens beside the row. */
   const onPlan = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -248,7 +238,7 @@ export function Row(props: RowProps) {
     <div
       ref={el}
       class="row"
-      classList={{ done: !!content()?.done, finished: day()?.mark === 'done', mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id), 'menu-target': o.rowMenu()?.key === id }}
+      classList={{ done: !!content()?.done, mirror: mirror(), orphan: orphan(), selected: o.selectedSet().has(id), dragged: o.dragged().has(id), 'menu-target': o.rowMenu()?.key === id }}
       data-id={id}
       data-depth={props.depth}
       onPointerDown={onRowPointerDown}
@@ -299,14 +289,6 @@ export function Row(props: RowProps) {
           fallback={
             <div class="text" onMouseDown={onStaticMouseDown(false)}>
               <Pieces o={o} pieces={pieces()} query={query()} />
-              {/* A star in a day's list: nothing left to do by its end (today: by now), or work left that went on. */}
-              <Show when={day()?.mark}>
-                {(mark) => (
-                  <span class={`day-mark ${mark()}`} title={mark() === 'done' ? 'Готово: всё внутри выполнено' : 'Не закончено в этот день'}>
-                    {mark() === 'done' ? 'готово' : 'дальше'}
-                  </span>
-                )}
-              </Show>
               {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
               <Show when={content()?.strokes}>
                 <svg class="sketch-mark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Скетч">
@@ -338,21 +320,6 @@ export function Row(props: RowProps) {
               </Show>
             </div>
           )}
-        </Show>
-        <Show when={doneTitles().length}>
-          <div class="day-done" title={day()?.today ? 'Сделано сегодня' : 'Сделано в этот день'}>
-            <span class="day-done-mark" aria-hidden="true">✓</span>
-            <For each={doneTitles()}>
-              {(t, i) => (
-                <>
-                  <Show when={i() > 0}>
-                    <span class="day-done-sep" aria-hidden="true">·</span>
-                  </Show>
-                  <span class="day-done-task" onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); o.goToTask(t.id); }}>{t.text}</span>
-                </>
-              )}
-            </For>
-          </div>
         </Show>
         <Show
           when={editingNote()}

@@ -240,22 +240,6 @@ export function standing(doc: Doc, id: NodeId, end = Infinity): 'done' | 'open' 
   return tasks.every((t) => doneBy(t, end)) ? 'done' : 'open';
 }
 
-/** The tasks of a starred bullet checked within [start, end): what was done on its day, in the order of the outline. */
-export function doneWithin(doc: Doc, id: NodeId, start: number, end: number): NodeId[] {
-  const hits = new Set(tasksOf(doc, id).filter((t) => t.done && t.doneAt !== undefined && t.doneAt >= start && t.doneAt < end).map((t) => t.id));
-  if (!hits.size) return [];
-  const out: NodeId[] = [];
-  const stack = [doc.origin(id)];
-  while (stack.length) {
-    const cur = stack.pop()!;
-    if (hits.delete(cur)) out.push(cur);
-    const kids = doc.get(cur).children;
-    for (let k = kids.length - 1; k >= 0; k--) stack.push(kids[k]);
-  }
-  // Tasks reached only through a mirror inside are not on the walk: last.
-  return [...out, ...hits];
-}
-
 /** The stamps a calendar day begins and ends at, on the device's clock. */
 export function dayBounds(y: number, m: number, d: number): { start: number; end: number } {
   return { start: new Date(y, m - 1, d).getTime(), end: new Date(y, m - 1, d + 1).getTime() };
@@ -265,7 +249,8 @@ export function dayBounds(y: number, m: number, d: number): { start: number; end
  * Carries the stars on into a new day's list `todo`: those of the last day
  * before it whose list was made by that day's end (made later, the day was
  * only looked into afterwards and never was "today"), each whose bullet
- * still has something to do or nothing to finish (`standing` not 'done').
+ * still has an unchecked task, itself or inside (`standing` 'open'): a
+ * bullet with nothing to check, or with all of it done, stays behind.
  * They go first in the list, in their order there, folded; the day before
  * keeps its own as they were. `before(n)` gives the list of the day n days
  * back and when that day ended, or null. Returns how many came.
@@ -279,7 +264,7 @@ export function carryStars({ doc }: Ctx, todo: NodeId, before: (back: number) =>
       if (!doc.get(c).mirrorOf) continue;
       const origin = doc.origin(c);
       if (origins.includes(origin) || !starrable(doc, origin, todo) || starsIn(doc, todo, origin).length) continue;
-      if (standing(doc, origin) !== 'done') origins.push(origin);
+      if (standing(doc, origin) === 'open') origins.push(origin);
     }
     putStars(doc, todo, 0, origins);
     return origins.length;
