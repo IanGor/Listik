@@ -6,9 +6,6 @@ import type { Outliner, PlannerRect } from './outliner';
 
 /** Room kept between the calendar and the window's edges, and between it and what it opened beside, px. */
 const MARGIN = 8;
-/** Of the style (index.css `.planner`): the width it is placed by before it is measured. */
-const WIDTH = 296;
-
 const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
 const monthName = (m: number) => new Date(2000, m - 1, 1).toLocaleString('ru', { month: 'long' });
@@ -45,6 +42,8 @@ function Calendar(props: { o: Outliner; keys: RowKey[]; rect: PlannerRect }) {
   const start = plans[0] ?? today;
   const [cursor, setCursor] = createSignal<PlanDate>(start);
   const [view, setView] = createSignal({ y: start.y, m: start.m });
+  /** The keys moved the cursor: only then is it drawn (the planned day is the cursor's start, no ring on it). */
+  const [keyed, setKeyed] = createSignal(false);
   const [place, setPlace] = createSignal({ left: MARGIN, top: MARGIN });
 
   const close = () => o.closePlanner();
@@ -69,6 +68,7 @@ function Calendar(props: { o: Outliner; keys: RowKey[]; rect: PlannerRect }) {
 
   /** The cursor to a day within the offered ones; the month follows it. */
   const move = (d: PlanDate) => {
+    setKeyed(true);
     const to = compareDates(d, today) < 0 ? today : compareDates(d, last) > 0 ? last : d;
     setCursor(to);
     setView({ y: to.y, m: to.m });
@@ -145,19 +145,19 @@ function Calendar(props: { o: Outliner; keys: RowKey[]; rect: PlannerRect }) {
         class="menu planner"
         role="dialog"
         aria-label="Запланировать на день"
-        style={{ left: `${place().left}px`, top: `${place().top}px`, width: `${WIDTH}px` }}
+        style={{ left: `${place().left}px`, top: `${place().top}px` }}
         // DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
       >
         <div class="planner-head">
-          <button type="button" class="planner-nav" aria-label="Предыдущий месяц" disabled={atStart()} onClick={() => shift(-1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
-          </button>
           <span class="planner-month" aria-live="polite">
             {monthName(view().m)} {view().y}
           </span>
+          <button type="button" class="planner-nav" aria-label="Предыдущий месяц" disabled={atStart()} onClick={() => shift(-1)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
           <button type="button" class="planner-nav" aria-label="Следующий месяц" disabled={atEnd()} onClick={() => shift(1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
         <div class="planner-grid" role="grid">
@@ -174,7 +174,7 @@ function Calendar(props: { o: Outliner; keys: RowKey[]; rect: PlannerRect }) {
                   classList={{
                     today: sameDate(date(), today),
                     planned: plans.some((p) => sameDate(p, date())),
-                    cursor: sameDate(date(), cursor()),
+                    cursor: keyed() && sameDate(date(), cursor()),
                   }}
                   disabled={out(date())}
                   aria-label={new Date(view().y, view().m - 1, d).toLocaleDateString('ru', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -188,7 +188,7 @@ function Calendar(props: { o: Outliner; keys: RowKey[]; rect: PlannerRect }) {
           </For>
         </div>
         <Show when={plans.length}>
-          <div class="menu-sep" role="separator" />
+          <div class="planner-rule" role="separator" />
           <button type="button" class="planner-cancel destructive" onClick={cancel}>
             Отменить планирование
           </button>

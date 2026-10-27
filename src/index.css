@@ -1542,102 +1542,138 @@ mark,
   z-index: 40;
 }
 
-/* The calendar that plans a bullet for a day (Planner.tsx): the menu's look,
-   a month's grid in it, beside the row that asked. */
+/* The calendar that plans a bullet for a day (Planner.tsx), after Things'
+   date picker: small and quiet. The month at the left, its steps at the
+   right, the weekdays in small muted type, the days in a plain grid; no
+   fills but today's colour and the day planned. */
 .planner {
   position: fixed;
   right: auto;
   z-index: 41;
+  width: 248px;
   min-width: 0;
+  padding: 10px 8px 6px;
+  font-size: 13px;
   user-select: none;
 }
 
 .planner-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
+  padding: 0 2px 0 6px;
+  margin-bottom: 6px;
 }
 
 .planner-month {
+  flex: 1;
   font-weight: 600;
   text-transform: capitalize;
 }
 
 .planner .planner-nav {
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   min-height: 0;
   padding: 0;
   color: var(--muted);
+  border-radius: 6px;
 }
 
 .planner .planner-nav:disabled {
   color: var(--faint);
   cursor: default;
   background: none;
+  opacity: 0.5;
 }
 
 .planner-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  row-gap: 1px;
 }
 
 .planner-weekday {
-  padding-block: 4px;
-  font-size: 12px;
-  color: var(--muted);
+  padding-bottom: 4px;
+  font-size: 11px;
+  color: var(--faint);
   text-align: center;
 }
 
 .planner .planner-day {
   justify-content: center;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   min-height: 0;
+  margin: 0 auto;
   padding: 0;
   font-variant-numeric: tabular-nums;
-  border-radius: 18px;
+  border-radius: 50%;
 }
 
 .planner .planner-day.today {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--primary);
 }
 
 .planner .planner-day.planned {
+  font-weight: 600;
   color: var(--canvas);
   background: var(--primary);
 }
 
-.planner .planner-day.cursor {
-  box-shadow: 0 0 0 2px var(--ring), inset 0 0 0 1.5px var(--primary);
+.planner .planner-day.cursor:not(.planned) {
+  box-shadow: inset 0 0 0 1.5px var(--primary);
+}
+
+.planner .planner-day.planned.cursor {
+  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--primary);
 }
 
 .planner .planner-day:disabled {
   color: var(--faint);
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 :where(:root.mouse) .planner .planner-day:not(:disabled):not(.planned):hover {
   background: var(--surface);
 }
 
+/* Cancelling: one quiet line under a hairline, red only for what it does. */
 .planner .planner-cancel {
-  min-height: 38px;
+  min-height: 32px;
+  height: 32px;
+  margin-top: 6px;
+  padding: 0 6px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.planner-rule {
+  height: 1px;
+  margin: 6px -2px 0;
+  background: var(--hairline);
 }
 
 @media (pointer: coarse) {
-  .planner .planner-day,
-  .planner .planner-nav {
-    height: 44px;
-    min-height: 44px;
+  .planner {
+    width: 296px;
+    font-size: 14px;
+  }
+
+  .planner .planner-day {
+    width: 38px;
+    height: 38px;
   }
 
   .planner .planner-nav {
-    width: 44px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .planner .planner-cancel {
+    height: 44px;
   }
 }
 
