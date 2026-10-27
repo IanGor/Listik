@@ -1144,6 +1144,26 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.row', { hasText: '@q1' }).locator('.plan-button')).toHaveCount(0);
   });
 
+  test('the bullet zoomed into is planned from its title too: a button, then its date beside the title; the calendar cancels it', async ({ page }) => {
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'Том первый' }).first().locator('.bullet').click();
+    await expect(title(page)).toHaveText('Том первый');
+    const head = page.locator('.zoomhead');
+    const button = head.locator('.plan-title-button');
+    await expect(button).toHaveCSS('opacity', '0');
+    await head.hover();
+    await expect(button).toHaveCSS('opacity', '1');
+    await button.click();
+    await page.locator('.planner-day.today').click();
+    await expect(head.locator('.plan-date')).toHaveText('сегодня');
+    await expect(button).toHaveCount(0);
+    await head.locator('.plan-date').click();
+    await page.locator('.planner-cancel').click();
+    await expect(head.locator('.plan-date')).toHaveCount(0);
+    await expect(button).toHaveCount(1);
+  });
+
   test('a new date moves the plan; today\'s list loses it', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();

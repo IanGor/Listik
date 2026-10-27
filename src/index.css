@@ -1037,6 +1037,48 @@ mark,
   outline: none;
 }
 
+/* The plan of the bullet zoomed into, beside its title (ZoomHeader.tsx): the
+   row's date, centred on the title's first line, or a button to plan it:
+   with a mouse while the pointer is over the header, on a touch screen always. */
+.zoomhead .plan-date {
+  margin-top: calc((34px * var(--text-scale) * 1.2 - 18px) / 2);
+}
+
+.plan-title-button {
+  display: grid;
+  float: right;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: calc((34px * var(--text-scale) * 1.2 - 32px) / 2) 0 0 8px;
+  padding: 0;
+  color: var(--faint);
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+
+:where(:root.mouse) .zoomhead:hover .plan-title-button,
+.plan-title-button:focus-visible {
+  opacity: 1;
+}
+
+:where(:root.mouse) .plan-title-button:hover {
+  color: var(--star);
+}
+
+@media (pointer: coarse) {
+  .plan-title-button {
+    width: 44px;
+    height: 44px;
+    margin-block: calc((34px * var(--text-scale) * 1.2 - 44px) / 2) 0;
+    opacity: 1;
+  }
+}
+
 /* The zoomed-in bullet's note: whole, under the title. */
 .zoom-note {
   margin-top: 6px;
@@ -1221,6 +1263,14 @@ mark,
 
   .zoom-title {
     font-size: calc(28px * var(--text-scale));
+  }
+
+  .zoomhead .plan-date {
+    margin-top: calc((28px * var(--text-scale) * 1.2 - 18px) / 2);
+  }
+
+  .plan-title-button {
+    margin-block: calc((28px * var(--text-scale) * 1.2 - 44px) / 2) 0;
   }
 
   .shortcuts-body,
