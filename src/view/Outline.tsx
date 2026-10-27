@@ -198,6 +198,11 @@ export function Outline(props: { o: Outliner }) {
         e.preventDefault();
         return o.openGoTo();
       }
+      // Ctrl+Alt+←/→ in a day: the day before / after, wherever the caret is.
+      if ((e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !o.planner()) {
+        if (o.stepDay(e.key === 'ArrowLeft' ? -1 : 1)) e.preventDefault();
+        return;
+      }
       // Ctrl+S, the calendar: a row being edited or a selection is planned from it
       // (keymap.ts); otherwise the place zoomed into. Never the browser's "Save page".
       if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {

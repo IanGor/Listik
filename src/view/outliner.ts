@@ -977,11 +977,14 @@ export class Outliner {
   /**
    * ‹ › in a day: the day before (-1) or after (+1) by the calendar, across
    * weeks, months and years. The day comes first if it is not there: its year
-   * and template as planning makes them (`dayFor`, no undo step).
+   * and template as planning makes them (`dayFor`, no undo step). Also
+   * Ctrl+Alt+←/→ (Outline.tsx). Returns whether the zoom is in a day.
    */
-  stepDay(step: -1 | 1): void {
+  stepDay(step: -1 | 1): boolean {
     const date = this.zoomDay();
-    if (date) this.goToDate(addDays(date, step));
+    if (!date) return false;
+    this.goToDate(addDays(date, step));
+    return true;
   }
 
   /** The view into the day of a date, as «Сегодня» leads into today. */

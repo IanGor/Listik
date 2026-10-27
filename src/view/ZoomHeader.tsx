@@ -147,7 +147,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
               <button
                 type="button"
                 class="day-step"
-                title={step < 0 ? 'Предыдущий день' : 'Следующий день'}
+                title={step < 0 ? 'Предыдущий день (Ctrl+Alt+←)' : 'Следующий день (Ctrl+Alt+→)'}
                 aria-label={step < 0 ? 'Предыдущий день' : 'Следующий день'}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => o.stepDay(step)}

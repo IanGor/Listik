@@ -1158,6 +1158,12 @@ test.describe('structure and calendar', () => {
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(-1)));
+    // The keys do it from the text too.
+    await edit(page, '09:00');
+    await page.keyboard.press('Control+Alt+ArrowRight');
+    await expect(title(page)).toHaveText(today);
+    await page.keyboard.press('Control+Alt+ArrowLeft');
+    await expect(title(page)).toHaveText(dayText(shifted(-1)));
     // Up to the week: no steps there.
     await page.locator('.crumbs .crumb').nth(-2).click();
     await expect(page.locator('.day-step')).toHaveCount(0);
