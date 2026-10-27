@@ -1,17 +1,20 @@
-import { firstWord, periodAt } from './calendar';
+import { daysIn, firstWord, periodAt } from './calendar';
 import { clock } from './clock';
 import { TRASH, newId, trashKey, type Doc } from './doc';
 import type { Ctx } from './commands';
-import { contextOf, nodeOf, type RowKey } from './rows';
+import { nodeOf, type RowKey } from './rows';
 import { searchable } from './tags';
 import type { NodeId, OutlineNode } from './types';
 
 /**
- * Today's focus (October 2026): the star of a bullet is a mirror of it
- * right in today's `todo` list, nothing kept on the bullet itself. Starring
- * puts one there, folded; unstarring takes the mirrors there away. So the
- * star syncs, undoes and stays in each day's list as a record of what was
- * in focus, and taking the mirror out of `todo` by hand puts the star out.
+ * Planning a bullet for a day (October 2026): its plan is a mirror of it
+ * right in that day's `todo` list, nothing kept on the bullet itself.
+ * Planning puts one there, folded; cancelling takes the mirrors from the
+ * days to come away. So the plan syncs, undoes and stays in each day's list
+ * as a record of what was in focus, and taking the mirror out of `todo` by
+ * hand cancels the plan. A bullet is planned for one day at a time: a new
+ * date moves it. (First it was a star into today's list only: `starsIn`,
+ * `carryStars` are from then, and today is a date like any other.)
  *
  * What a starred bullet's day came to is read from the tasks inside it,
  * never from a check on the bullet itself (that would strike the project
@@ -88,31 +91,120 @@ function dropStar(doc: Doc, id: NodeId): void {
   doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: trashKey(clock.now()) } });
 }
 
+/** A date of the calendar. */
+export interface PlanDate {
+  y: number;
+  m: number;
+  d: number;
+}
+
+/** A plan: the mirror in the list `todo` of the day `date`. */
+export interface Plan {
+  star: NodeId;
+  todo: NodeId;
+  date: PlanDate;
+}
+
+const stamp = (p: PlanDate) => p.y * 10_000 + p.m * 100 + p.d;
+
+export const sameDate = (a: PlanDate, b: PlanDate) => stamp(a) === stamp(b);
+
+/** Dates in order: negative when `a` comes first. */
+export const compareDates = (a: PlanDate, b: PlanDate) => stamp(a) - stamp(b);
+
+/** The date `n` days after (before, if negative). */
+export function addDays(p: PlanDate, n: number): PlanDate {
+  const date = new Date(p.y, p.m - 1, p.d + n);
+  return { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate() };
+}
+
+/** The date of the day whose list `todo` is; null for any other bullet. */
+export function dateOfList(doc: Doc, list: NodeId): PlanDate | null {
+  if (!doc.has(list) || !isTodo(doc, list)) return null;
+  const p = periodAt(doc, doc.get(list).parent!);
+  return p?.kind === 'day' ? { y: p.y, m: p.m, d: p.d } : null;
+}
+
 /**
- * The star pressed on rows (its button, Ctrl+S, a swipe to the right, the
- * row menu): stars them in `todo`, or, when every one is starred already,
- * takes their stars away (as Ctrl+L checks a selection all one way). A row
- * of the list itself that is a star unstars its bullet. Rows that cannot be
- * starred are left out. Returns what it did: 'on', 'off', or null for
- * nothing.
+ * The plans of a bullet (of any copy of it) for `from` and the days after:
+ * its mirrors right in the `todo` of such a day, the earliest day first.
+ * Mirrors in the lists of days gone by are history, not plans.
  */
-export function toggleStars({ doc }: Ctx, keys: RowKey[], todo: NodeId): 'on' | 'off' | null {
+export function plansOf(doc: Doc, id: NodeId, from: PlanDate): Plan[] {
+  const origin = doc.origin(id);
+  const out: Plan[] = [];
+  for (const star of doc.copies(origin)) {
+    if (star === origin) continue;
+    const todo = doc.get(star).parent;
+    if (todo === null || todo === TRASH || !doc.has(todo)) continue;
+    const date = dateOfList(doc, todo);
+    if (date && compareDates(date, from) >= 0) out.push({ star, todo, date });
+  }
+  return out.sort((a, b) => compareDates(a.date, b.date));
+}
+
+/**
+ * Can the bullet be planned: one that can be starred anywhere, and not one
+ * written right in a day's `todo`, which is on that day already.
+ */
+export function plannable(doc: Doc, id: NodeId): boolean {
+  if (!starrable(doc, id, null)) return false;
+  const parent = doc.get(doc.origin(id)).parent;
+  return parent === null || firstWord(doc.get(parent).text) !== TODO || !isTodo(doc, parent);
+}
+
+/**
+ * The plan chosen on rows (the calendar's day, Outliner.planFor): the
+ * bullets' mirrors in the lists of days to come go to the trash, and, with a
+ * `todo`, one goes in it: last, but above the empty bullets at its end. A
+ * bullet planned for that day already stays. With `todo` null the plans are
+ * only taken away. Rows that cannot be planned are left out (a row of the
+ * list that is a mirror stands for its bullet). Returns what it did: 'on'
+ * for planned, 'off' for cancelled, null for nothing changed.
+ */
+export function planStars({ doc }: Ctx, keys: RowKey[], todo: NodeId | null, from: PlanDate): 'on' | 'off' | null {
   const origins: NodeId[] = [];
   for (const key of keys) {
     const id = nodeOf(key);
-    if (!doc.has(id)) continue;
-    const n = doc.get(id);
-    const star = !!n.mirrorOf && n.parent === todo && !contextOf(key);
+    if (!doc.has(id) || !plannable(doc, id)) continue;
     const origin = doc.origin(id);
-    if (!origins.includes(origin) && (star || starrable(doc, id, todo))) origins.push(origin);
+    if (!origins.includes(origin)) origins.push(origin);
   }
-  if (!origins.length) return null;
-  if (origins.every((o) => starsIn(doc, todo, o).length > 0)) {
-    for (const o of origins) for (const s of starsIn(doc, todo, o)) dropStar(doc, s);
-    return 'off';
+  const fresh: NodeId[] = [];
+  let dropped = 0;
+  for (const origin of origins) {
+    let there = false;
+    for (const plan of plansOf(doc, origin, from)) {
+      if (plan.todo === todo && !there) {
+        there = true;
+        continue;
+      }
+      dropStar(doc, plan.star);
+      dropped++;
+    }
+    if (todo !== null && !there) fresh.push(origin);
   }
-  putStars(doc, todo, starIndex(doc, todo), origins.filter((o) => !starsIn(doc, todo, o).length));
-  return 'on';
+  if (todo === null) return dropped ? 'off' : null;
+  putStars(doc, todo, starIndex(doc, todo), fresh);
+  return fresh.length || dropped ? 'on' : null;
+}
+
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
+/** A plan's date for people: «сегодня», «завтра», else «30 окт» (with the year, if it is not this one). */
+export function planLabel(date: PlanDate, today: PlanDate): string {
+  const days = Math.round((Date.UTC(date.y, date.m - 1, date.d) - Date.UTC(today.y, today.m - 1, today.d)) / 86_400_000);
+  if (days === 0) return 'сегодня';
+  if (days === 1) return 'завтра';
+  return `${date.d} ${MONTHS[date.m - 1]}${date.y === today.y ? '' : ` ${date.y}`}`;
+}
+
+/** The cells of a month's grid, weeks from Monday: the day of the month, null for the blanks around. */
+export function monthCells(y: number, m: number): (number | null)[] {
+  const cells: (number | null)[] = Array((new Date(y, m - 1, 1).getDay() + 6) % 7).fill(null);
+  for (let d = 1; d <= daysIn(y, m); d++) cells.push(d);
+  while (cells.length % 7) cells.push(null);
+  return cells;
 }
 
 /** The tasks of a bullet: itself if it is one, and every one inside; a mirror inside counts as its original, its tree not walked again. */

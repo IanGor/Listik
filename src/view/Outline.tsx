@@ -11,6 +11,7 @@ import { keepSpot, reloaded, takeSpot } from './reload';
 import { onGlobalKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
+import { Planner } from './Planner';
 import { RowMenu } from './RowMenu';
 import { Shortcuts } from './Shortcuts';
 import { Sketch } from './Sketch';
@@ -197,14 +198,14 @@ export function Outline(props: { o: Outliner }) {
         e.preventDefault();
         return o.openGoTo();
       }
-      // Ctrl+S, the star: a row being edited or a selection star themselves
+      // Ctrl+S, the calendar: a row being edited or a selection is planned from it
       // (keymap.ts); otherwise the place zoomed into. Never the browser's "Save page".
       if (e.code === 'KeyS' && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey) {
         if (e.defaultPrevented) return;
         e.preventDefault();
-        if (o.selection()) return o.toggleToday(o.selectionRoots());
+        if (o.selection()) return o.openPlanner(o.selectionRoots());
         const z = o.zoom();
-        return z ? o.toggleToday([z]) : undefined;
+        return z ? o.openPlanner([z]) : undefined;
       }
       const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT') return;
@@ -492,6 +493,7 @@ export function Outline(props: { o: Outliner }) {
       </Show>
       <Suggest o={o} />
       <RowMenu o={o} />
+      <Planner o={o} />
     </div>
   );
 }

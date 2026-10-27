@@ -4,7 +4,11 @@ import { expect, test, type Page } from '@playwright/test';
 /** Rendered rows in the `build` format of the unit tests: 2 spaces per level. */
 const outline = (page: Page) =>
   page.locator('.row').evaluateAll((rows) =>
-    rows.map((r) => '  '.repeat(Number((r as HTMLElement).dataset.depth)) + r.querySelector('.text')!.textContent),
+    rows.map((r) => {
+      // Not the date of a plan, which stands in the text's line.
+      const text = Array.from(r.querySelector('.text')!.childNodes).filter((n) => !(n instanceof Element && n.matches('.plan-date')));
+      return '  '.repeat(Number((r as HTMLElement).dataset.depth)) + text.map((n) => n.textContent).join('');
+    }),
   );
 
 const editing = (page: Page) => page.locator('.text[contenteditable]');
@@ -1068,54 +1072,93 @@ test.describe('structure and calendar', () => {
     await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
-  test('Ctrl+S puts the edited bullet into today\'s todo as a folded mirror, the caret staying; the star lights; Ctrl+S again takes it out', async ({ page }) => {
+  test('Ctrl+S opens the calendar; the day picked puts the edited bullet into that day\'s todo as a folded mirror, the caret staying; its date shows in its line; the calendar takes it out', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await edit(page, 'Часть вторая');
     await page.keyboard.press('Control+s');
-    await expect(page.locator('.toast')).toContainText('Добавлено в');
+    await expect(page.locator('.planner')).toBeVisible();
+    await expect(page.locator('.planner-cancel')).toHaveCount(0);
+    await page.locator('.planner-day.today').click();
+    await expect(page.locator('.planner')).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('Запланировано на сегодня');
     await expect(editing(page)).toBeFocused();
     const row = page.locator('.row', { hasText: 'Часть вторая' }).first();
-    await expect(row.locator('.today-star')).toHaveClass(/on/);
-    await expect(row.locator('.today-star')).toHaveAttribute('aria-pressed', 'true');
-    // The toast leads to today: the mirror is in its todo, above the bullet to write in.
-    await page.locator('.toast').getByRole('button', { name: 'Сегодня' }).click();
+    await expect(row.locator('.plan-date')).toHaveText('сегодня');
+    // The toast leads to the day: the mirror is in its todo, above the bullet to write in.
+    await page.locator('.toast').getByRole('button', { name: 'Открыть' }).click();
     await expect(title(page)).toHaveText(today);
     // The day opens folded, but for its list.
     expect(await outline(page)).toEqual(['#notes', 'todo', '  Часть вторая', '  ', ...SLOTS]);
-    await expect(page.locator('.row.mirror', { hasText: 'Часть вторая' }).locator('.today-star')).toHaveClass(/on/);
-    // The star of the row in the list takes it out of the list.
-    await page.locator('.row.mirror', { hasText: 'Часть вторая' }).hover();
-    await page.locator('.row.mirror', { hasText: 'Часть вторая' }).locator('.today-star').click();
-    await expect(page.locator('.toast')).toContainText('Убрано из «Сегодня»');
+    const mirror = page.locator('.row.mirror', { hasText: 'Часть вторая' });
+    await expect(mirror.locator('.plan-date')).toHaveText('сегодня');
+    // The date in the line opens the calendar with the day marked, and a cancel item: it takes the plan out of the list.
+    await mirror.locator('.plan-date').click();
+    await expect(page.locator('.planner-day.planned')).toHaveCount(1);
+    await page.locator('.planner-cancel').click();
+    await expect(page.locator('.toast')).toContainText('Планирование отменено');
     expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
     // One undo step each.
     await page.keyboard.press('Control+z');
     expect(await outline(page)).toEqual(['#notes', 'todo', '  Часть вторая', '  ', ...SLOTS]);
   });
 
-  test('the star shows on hover, lights when clicked; Ctrl+S with nothing edited stars the place zoomed into; not on the calendar', async ({ page }) => {
+  test('the calendar button shows on hover; a day picked by the keys plans for tomorrow, «завтра» in the line, the day made with its todo; Ctrl+S with nothing edited plans the place zoomed into; not on the calendar', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     const row = page.locator('.row', { hasText: 'Том второй' }).first();
-    const star = row.locator('.today-star');
-    await expect(star).toHaveCSS('opacity', '0');
+    const button = row.locator('.plan-button');
+    await expect(button).toHaveCSS('opacity', '0');
     await row.hover();
-    await expect(star).toHaveCSS('opacity', '1');
-    await star.click();
-    await expect(star).toHaveClass(/on/);
+    await expect(button).toHaveCSS('opacity', '1');
+    await button.click();
+    await expect(page.locator('.planner')).toBeVisible();
+    // Days gone by are not offered; today is, and so is every day after it.
+    await expect(page.locator('.planner-day.today')).toBeEnabled();
+    await expect(page.locator('.planner-day:disabled')).not.toHaveCount(31);
+    // The cursor starts on today; one day on, Enter.
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.planner')).toHaveCount(0);
+    await expect(row.locator('.plan-date')).toHaveText('завтра');
     await expect(editing(page)).toHaveCount(0);
-    // Into "Том первый": Ctrl+S stars it.
+    // Escape closes without planning.
     await page.locator('.row', { hasText: 'Том первый' }).first().locator('.bullet').click();
     await expect(title(page)).toHaveText('Том первый');
     await page.keyboard.press('Control+s');
-    await expect(page.locator('.toast')).toContainText('Добавлено в');
-    await page.getByRole('button', { name: 'Сегодня' }).first().click();
+    await expect(page.locator('.planner')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.planner')).toHaveCount(0);
+    // Into "Том первый": Ctrl+S plans it, the first press and the day picked.
+    await page.keyboard.press('Control+s');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.toast')).toContainText('Запланировано на завтра');
+    // Tomorrow's day: made with its template, the two in its list.
+    await page.locator('.toast').getByRole('button', { name: 'Открыть' }).click();
     expect((await outline(page)).slice(1, 5)).toEqual(['todo', '  Том второй', '  Том первый', '  ']);
-    // The calendar's own bullets have no star.
-    await expect(page.locator('.row', { hasText: 'todo' }).first().locator('.today-star')).toHaveCount(0);
+    await expect(page.locator('.row.mirror', { hasText: 'Том второй' }).locator('.plan-date')).toHaveText('завтра');
+    // The calendar's own bullets have no calendar button.
+    await expect(page.locator('.row', { hasText: 'todo' }).first().locator('.plan-button')).toHaveCount(0);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
-    await expect(page.locator('.row', { hasText: '@q1' }).locator('.today-star')).toHaveCount(0);
+    await expect(page.locator('.row', { hasText: '@q1' }).locator('.plan-button')).toHaveCount(0);
+  });
+
+  test('a new date moves the plan; today\'s list loses it', async ({ page }) => {
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('Control+s');
+    await page.locator('.planner-day.today').click();
+    await page.keyboard.press('Control+s');
+    // The calendar opens on the day it is planned for; the next one, and Enter.
+    await expect(page.locator('.planner-day.planned')).toHaveCount(1);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.toast')).toContainText('Запланировано на завтра');
+    await expect(page.locator('.row', { hasText: 'Часть вторая' }).first().locator('.plan-date')).toHaveText('завтра');
+    await page.getByRole('button', { name: 'Сегодня' }).first().click();
+    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
   });
 
   test('a starred project with every task inside checked reads "готово" in today\'s list, with what was done that day under it', async ({ page }) => {
@@ -1125,6 +1168,7 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Control+l');
     await edit(page, 'Том первый');
     await page.keyboard.press('Control+s');
+    await page.locator('.planner-day.today').click();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Сегодня' }).first().click();
     const star = page.locator('.row.mirror', { hasText: 'Том первый' });
@@ -1165,16 +1209,18 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Control+l');
     await edit(page, 'Проект');
     await page.keyboard.press('Control+s');
+    await page.locator('.planner-day.today').click();
     await edit(page, 'Готовое');
     await page.keyboard.press('Control+s');
+    await page.locator('.planner-day.today').click();
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
-    // Each project lit where it is written and in the list.
-    await expect(page.locator('.today-star.on')).toHaveCount(4);
+    // Each project dated where it is written and in the list.
+    await expect(page.locator('.plan-date')).toHaveCount(4);
     await page.clock.runFor(12 * 60_000);
     await expect(title(page)).toHaveText(dayText(new Date(2026, 9, 22)));
     expect(await outline(page)).toEqual(['#notes', '  ', 'todo', '  Проект', '  ', ...SLOTS]);
-    await expect(page.locator('.row.mirror', { hasText: 'Проект' }).locator('.today-star')).toHaveClass(/on/);
+    await expect(page.locator('.row.mirror', { hasText: 'Проект' }).locator('.plan-date')).toHaveText('сегодня');
     // The day before, from its week: both stars there, how each one's day ended.
     await page.keyboard.press('Alt+ArrowLeft');
     await page.locator('.row', { hasText: dayText(new Date(2026, 9, 21)) }).locator('.bullet').click();
@@ -2652,7 +2698,7 @@ test.describe('touch screen', () => {
     await finger(page, 'Часть вторая', { hold: 500 });
     await expect(menu).toBeVisible();
     await expect(page.locator('.row.menu-target')).toHaveText('Часть вторая');
-    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'В «Сегодня»', 'Заметка', 'Переместить в…', 'Удалить']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Запланировать…', 'Заметка', 'Переместить в…', 'Удалить']);
     expect(await outline(page)).toEqual(DEMO);
     await menu.getByRole('menuitem', { name: 'Сделать задачей' }).tap();
     await expect(menu).toHaveCount(0);
@@ -2736,27 +2782,33 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toHaveCount(0);
   });
 
-  test('a swipe to the right puts the bullet into today\'s todo, its star in its line; again, takes it out; a task is not checked', async ({ page }) => {
+  test('a swipe to the right opens the calendar; the day picked plans the bullet, its date in its line; again, the calendar cancels it; a task is not checked', async ({ page }) => {
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await page.getByRole('menuitem', { name: /Создать структуру/ }).tap();
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).tap();
     const row = page.locator('.row', { hasText: 'Часть вторая' });
     const finger = await swipeRow(page, 'Часть вторая', 0.3, 0.85, { lift: false });
-    await expect(page.locator('.swipe-back')).toHaveText('В «Сегодня»');
+    await expect(page.locator('.swipe-back')).toHaveText('Запланировать');
     await finger.lift();
-    await expect(page.locator('.toast')).toContainText('Добавлено в');
-    await expect(row.locator('.today-mark')).toHaveCount(1);
+    await expect(page.locator('.planner')).toBeVisible();
+    // The swipe's own tap, on what is under the finger, is swallowed for a moment (swipe.ts): the calendar opens under it.
+    await page.waitForTimeout(500);
+    await page.locator('.planner-day.today').tap();
+    await expect(page.locator('.toast')).toContainText('Запланировано на сегодня');
+    await expect(row.locator('.plan-date')).toHaveText('сегодня');
     await expect(row.locator('.bullet')).not.toHaveClass(/todo/);
     // The row is back in place before the next finger.
     await expect(row).not.toHaveClass(/settling/);
     const again = await swipeRow(page, 'Часть вторая', 0.3, 0.85, { lift: false });
-    await expect(page.locator('.swipe-back')).toHaveText('Из «Сегодня»');
     await again.lift();
-    await expect(page.locator('.toast')).toContainText('Убрано из «Сегодня»');
-    await expect(row.locator('.today-mark')).toHaveCount(0);
+    await expect(page.locator('.planner-day.planned')).toHaveCount(1);
+    await page.waitForTimeout(500);
+    await page.locator('.planner-cancel').tap();
+    await expect(page.locator('.toast')).toContainText('Планирование отменено');
+    await expect(row.locator('.plan-date')).toHaveCount(0);
     // The calendar does not move to the right.
     await swipeRow(page, '@q1', 0.3, 0.85);
-    await expect(page.locator('.toast')).not.toContainText('Добавлено');
+    await expect(page.locator('.planner')).toHaveCount(0);
   });
 
   test('no swipe when the finger goes up or down, starts at the screen edge, or is in the edited row', async ({ page }) => {

@@ -39,7 +39,7 @@
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
-  /* The star of a bullet in today's todo (model/today.ts): yellow as in Things,
+  /* The calendar of a bullet's plan (model/today.ts): yellow as in Things,
      a deep amber on cream (3.4:1 there, an icon's 3:1), bright on graphite. */
   --star: light-dark(#a97a00, #f2c94c);
   /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
@@ -1454,6 +1454,105 @@ mark,
   z-index: 40;
 }
 
+/* The calendar that plans a bullet for a day (Planner.tsx): the menu's look,
+   a month's grid in it, beside the row that asked. */
+.planner {
+  position: fixed;
+  right: auto;
+  z-index: 41;
+  min-width: 0;
+  user-select: none;
+}
+
+.planner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.planner-month {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.planner .planner-nav {
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  color: var(--muted);
+}
+
+.planner .planner-nav:disabled {
+  color: var(--faint);
+  cursor: default;
+  background: none;
+}
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.planner-weekday {
+  padding-block: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.planner .planner-day {
+  justify-content: center;
+  height: 36px;
+  min-height: 0;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+  border-radius: 18px;
+}
+
+.planner .planner-day.today {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.planner .planner-day.planned {
+  color: var(--canvas);
+  background: var(--primary);
+}
+
+.planner .planner-day.cursor {
+  box-shadow: 0 0 0 2px var(--ring), inset 0 0 0 1.5px var(--primary);
+}
+
+.planner .planner-day:disabled {
+  color: var(--faint);
+  cursor: default;
+  opacity: 0.6;
+}
+
+:where(:root.mouse) .planner .planner-day:not(:disabled):not(.planned):hover {
+  background: var(--surface);
+}
+
+.planner .planner-cancel {
+  min-height: 38px;
+}
+
+@media (pointer: coarse) {
+  .planner .planner-day,
+  .planner .planner-nav {
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .planner .planner-nav {
+    width: 44px;
+  }
+}
+
 /* Deleting: red, last, apart from the rest (Apple's destructive action). */
 .menu button.destructive {
   color: var(--danger);
@@ -1840,14 +1939,9 @@ mark,
   color: var(--primary);
 }
 
-/* To the right: the star, lit as it will be (out of today: as it is). */
+/* To the right: the calendar that plans the bullet. */
 .swipe-back.right svg {
   color: var(--star);
-}
-
-.swipe-back.right.armed:not(.starred) svg,
-.swipe-back.right.starred:not(.armed) svg {
-  fill: var(--star);
 }
 
 /* Past the threshold: letting go does it. */
@@ -2886,16 +2980,17 @@ body.is-dragging * {
   text-decoration-style: solid;
 }
 
-/* --- The star: today's todo (Row.tsx, model/today.ts) -------------------- */
+/* --- Planning: the calendar button and the date (Row.tsx, model/today.ts) - */
 
-/* With a mouse, at the row's end, in a column the row keeps free (the text
-   wraps short of it): lit when the bullet is in today's list, else shown
-   while the pointer is over the row. */
-.row:has(> .today-star) .body {
+/* With a mouse, the button is at the row's end, in a column the row keeps
+   free (the text wraps short of it): shown while the pointer is over the
+   row. Once the bullet is planned, the date in its line takes its place (no
+   button, no column). */
+.row:has(> .plan-button) .body {
   padding-right: 26px;
 }
 
-.today-star {
+.plan-button {
   position: absolute;
   top: 2px;
   right: 0;
@@ -2906,7 +3001,6 @@ body.is-dragging * {
   padding: 0;
   font: inherit;
   color: var(--faint);
-  fill: none;
   background: none;
   border: none;
   border-radius: 6px;
@@ -2915,44 +3009,64 @@ body.is-dragging * {
   transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out), scale 100ms var(--ease-out);
 }
 
-:where(:root.mouse) .row:hover > .today-star,
-.today-star:focus-visible {
+:where(:root.mouse) .row:hover > .plan-button,
+.plan-button:focus-visible {
   opacity: 1;
 }
 
-:where(:root.mouse) .today-star:hover {
+:where(:root.mouse) .plan-button:hover {
   color: var(--star);
 }
 
-.today-star.on {
-  color: var(--star);
-  fill: var(--star);
-  opacity: 1;
-}
-
-.today-star:active {
+.plan-button:active {
   scale: 0.85;
 }
 
-/* On a touch screen: the lit star in the bullet's line; a tap takes it out. */
-.today-mark {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  margin-left: 6px;
-  padding: 0;
-  color: var(--star);
-  fill: var(--star);
-  vertical-align: -2px;
-  background: none;
+/* The day a bullet is planned for, at the end of its first line (floated: the
+   text goes round it, edited or not): a press opens the calendar. */
+.plan-date {
+  display: flex;
+  float: right;
+  gap: 4px;
+  align-items: center;
+  margin: calc((var(--font-size) * var(--line-height) - 18px) / 2) 0 0 8px;
+  padding: 0 7px 0 5px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: nowrap;
+  background: var(--surface);
   border: none;
+  border-radius: 9px;
+  cursor: pointer;
 }
 
-/* A finger-sized target around a small star. */
-.today-mark::before {
-  content: '';
-  position: absolute;
-  inset: -12px;
+.plan-date svg {
+  flex: none;
+  color: var(--star);
+}
+
+/* Today: the one to look at first. */
+.plan-date.today {
+  color: var(--text);
+}
+
+:where(:root.mouse) .plan-date:hover {
+  background: var(--surface-2);
+}
+
+/* A finger-sized target around the small date. */
+@media (pointer: coarse) {
+  .plan-date {
+    position: relative;
+  }
+
+  .plan-date::before {
+    content: '';
+    position: absolute;
+    inset: -13px -6px;
+  }
 }
 
 /* A star in a day's list, how its day went: done, or left to go on. */
@@ -3028,7 +3142,7 @@ body.is-dragging * {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .today-star {
+  .plan-button {
     transition: none;
   }
 }

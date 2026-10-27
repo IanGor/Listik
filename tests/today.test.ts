@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { invert } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
-import { carryStars, dayBounds, doneWithin, isTodo, standing, starrable, starsIn, todoOf, toggleStars } from '../src/model/today';
+import { addDays, carryStars, compareDates, dateOfList, dayBounds, doneWithin, isTodo, monthCells, planLabel, planStars, plannable, plansOf, standing, starrable, starsIn, todoOf, type PlanDate } from '../src/model/today';
 import type { NodeId } from '../src/model/types';
 import { setup } from './helpers';
 
 const FRI = '@d23 @m10 @y26 @пятница';
 const MON = '@d26 @m10 @y26 @понедельник';
 const FRI_TODO = 'todo';
+const FRI_D: PlanDate = { y: 2026, m: 10, d: 23 };
+const MON_D: PlanDate = { y: 2026, m: 10, d: 26 };
 const MON_TODO = 'todo на понедельник';
 
 function calendar() {
@@ -40,45 +42,113 @@ describe('the star: a mirror in today\'s todo', () => {
     expect(isTodo(doc, 'Проект А')).toBe(false);
   });
 
-  it('starring puts a folded mirror last in the list, above the empty bullet; pressed again it goes', () => {
+  it('planning puts a folded mirror last in the day\'s list, above the empty bullet; planning for that day again changes nothing; cancelling takes it away', () => {
     const { doc, ctx, run } = calendar();
-    expect(run(() => toggleStars(ctx, ['Проект А'], MON_TODO))).toBe('on');
+    expect(run(() => planStars(ctx, ['Проект А'], MON_TODO, MON_D))).toBe('on');
     expect(titles(doc, MON_TODO)).toEqual(['записано', '★ Проект А', '']);
-    const [star] = starsIn(doc, MON_TODO, 'Проект А');
-    expect(doc.get(star)).toMatchObject({ mirrorOf: 'Проект А', collapsed: true });
-    // The star itself, as a row of the list, is the same bullet's star.
-    expect(starsIn(doc, MON_TODO, star)).toEqual([star]);
-    expect(run(() => toggleStars(ctx, [star], MON_TODO))).toBe('off');
+    const [plan] = plansOf(doc, 'Проект А', MON_D);
+    expect(plan).toMatchObject({ todo: MON_TODO, date: MON_D });
+    expect(doc.get(plan.star)).toMatchObject({ mirrorOf: 'Проект А', collapsed: true });
+    // The mirror itself, as a row of the list, is the same bullet's plan.
+    expect(plansOf(doc, plan.star, MON_D).map((p) => p.star)).toEqual([plan.star]);
+    expect(run(() => planStars(ctx, ['Проект А'], MON_TODO, MON_D))).toBeNull();
+    expect(titles(doc, MON_TODO)).toEqual(['записано', '★ Проект А', '']);
+    expect(run(() => planStars(ctx, [plan.star], null, MON_D))).toBe('off');
     expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
-    expect(starsIn(doc, MON_TODO, 'Проект А')).toEqual([]);
+    expect(plansOf(doc, 'Проект А', MON_D)).toEqual([]);
+    expect(run(() => planStars(ctx, ['Проект А'], null, MON_D))).toBeNull();
     checkInvariants(doc);
   });
 
-  it('a selection stars the ones not starred yet, and unstars only when all are', () => {
+  it('a bullet is planned for one day: a new date moves it', () => {
     const { doc, ctx, run } = calendar();
-    run(() => toggleStars(ctx, ['Проект Б'], MON_TODO));
-    expect(run(() => toggleStars(ctx, ['Проект А', 'Проект Б'], MON_TODO))).toBe('on');
-    expect(titles(doc, MON_TODO)).toEqual(['записано', '★ Проект Б', '★ Проект А', '']);
-    expect(run(() => toggleStars(ctx, ['Проект А', 'Проект Б'], MON_TODO))).toBe('off');
+    run(() => planStars(ctx, ['Проект А'], MON_TODO, FRI_D));
+    expect(run(() => planStars(ctx, ['Проект А'], FRI_TODO, FRI_D))).toBe('on');
+    expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
+    expect(titles(doc, FRI_TODO)).toEqual(['★ Проект А']);
+    expect(plansOf(doc, 'Проект А', FRI_D).map((p) => p.date)).toEqual([FRI_D]);
+    checkInvariants(doc);
+  });
+
+  it('a mirror in the list of a day gone by is history, not a plan: planning leaves it, cancelling too', () => {
+    const { doc, ctx, run } = calendar();
+    run(() => planStars(ctx, ['Проект А'], FRI_TODO, FRI_D));
+    expect(plansOf(doc, 'Проект А', MON_D)).toEqual([]);
+    expect(run(() => planStars(ctx, ['Проект А'], MON_TODO, MON_D))).toBe('on');
+    expect(titles(doc, FRI_TODO)).toEqual(['★ Проект А']);
+    expect(plansOf(doc, 'Проект А', MON_D).map((p) => p.date)).toEqual([MON_D]);
+    expect(run(() => planStars(ctx, ['Проект А'], null, MON_D))).toBe('off');
+    expect(titles(doc, FRI_TODO)).toEqual(['★ Проект А']);
+    expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
+  });
+
+  it('a selection plans all of them for the day, those planned elsewhere moved; cancelling takes all', () => {
+    const { doc, ctx, run } = calendar();
+    run(() => planStars(ctx, ['Проект Б'], FRI_TODO, FRI_D));
+    expect(run(() => planStars(ctx, ['Проект А', 'Проект Б'], MON_TODO, FRI_D))).toBe('on');
+    expect(titles(doc, MON_TODO)).toEqual(['записано', '★ Проект А', '★ Проект Б', '']);
+    expect(titles(doc, FRI_TODO)).toEqual([]);
+    expect(run(() => planStars(ctx, ['Проект А', 'Проект Б'], null, FRI_D))).toBe('off');
     expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
   });
 
   it('is one step to undo', () => {
     const { doc, ctx } = calendar();
-    const ops = doc.transact(() => toggleStars(ctx, ['Проект А'], MON_TODO));
+    const ops = doc.transact(() => planStars(ctx, ['Проект А'], MON_TODO, MON_D));
     doc.transact(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
     expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
     checkInvariants(doc);
   });
 
-  it('is not for the calendar, a todo list, a secret, or what is written in the list already', () => {
+  it('is not for the calendar, a todo list, a secret, or what is written in a list already', () => {
     const { doc, ctx, run } = calendar();
     for (const id of ['@q4', '@y26', '@m10', '@w44', MON, MON_TODO, 'тайное #secret', 'внутри', 'записано']) {
-      expect(starrable(doc, id, MON_TODO), id).toBe(false);
+      expect(plannable(doc, id), id).toBe(false);
     }
+    expect(plannable(doc, 'PARA')).toBe(true);
     expect(starrable(doc, 'PARA', MON_TODO)).toBe(true);
-    expect(run(() => toggleStars(ctx, ['внутри', MON], MON_TODO))).toBeNull();
+    expect(run(() => planStars(ctx, ['внутри', MON], MON_TODO, MON_D))).toBeNull();
     expect(titles(doc, MON_TODO)).toEqual(['записано', '']);
+  });
+
+  it('knows the date of a day\'s list', () => {
+    const { doc } = calendar();
+    expect(dateOfList(doc, MON_TODO)).toEqual(MON_D);
+    expect(dateOfList(doc, FRI_TODO)).toEqual(FRI_D);
+    expect(dateOfList(doc, 'Проект А')).toBeNull();
+  });
+});
+
+describe('dates of plans', () => {
+  const today: PlanDate = { y: 2026, m: 10, d: 27 };
+
+  it('says «сегодня» and «завтра», else the date, with the year when it is not this one', () => {
+    expect(planLabel(today, today)).toBe('сегодня');
+    expect(planLabel({ y: 2026, m: 10, d: 28 }, today)).toBe('завтра');
+    expect(planLabel({ y: 2026, m: 10, d: 30 }, today)).toBe('30 окт');
+    expect(planLabel({ y: 2026, m: 5, d: 9 }, today)).toBe('9 мая');
+    expect(planLabel({ y: 2027, m: 1, d: 2 }, today)).toBe('2 янв 2027');
+    // Tomorrow across a month's and a year's end.
+    expect(planLabel({ y: 2026, m: 11, d: 1 }, { y: 2026, m: 10, d: 31 })).toBe('завтра');
+    expect(planLabel({ y: 2027, m: 1, d: 1 }, { y: 2026, m: 12, d: 31 })).toBe('завтра');
+  });
+
+  it('adds days across months and years, and orders dates', () => {
+    expect(addDays({ y: 2026, m: 12, d: 31 }, 1)).toEqual({ y: 2027, m: 1, d: 1 });
+    expect(addDays({ y: 2026, m: 3, d: 1 }, -1)).toEqual({ y: 2026, m: 2, d: 28 });
+    expect(compareDates(today, { y: 2026, m: 11, d: 1 })).toBeLessThan(0);
+  });
+
+  it('lays a month out in weeks from Monday', () => {
+    // October 2026 begins on a Thursday and ends on a Saturday.
+    const cells = monthCells(2026, 10);
+    expect(cells.length % 7).toBe(0);
+    expect(cells.slice(0, 5)).toEqual([null, null, null, 1, 2]);
+    expect(cells.filter((c) => c !== null)).toHaveLength(31);
+    expect(cells[cells.length - 1]).toBeNull();
+    expect(cells[cells.length - 2]).toBe(31);
+    // A month beginning on a Monday has no blanks before it.
+    expect(monthCells(2026, 6)[0]).toBe(1);
   });
 });
 
@@ -134,7 +204,7 @@ describe('carrying stars on to a new day', () => {
 
   it('the unfinished and the ones with nothing to finish come first, folded; the done stay behind; the day before keeps its own', () => {
     const { doc, ctx, run } = calendar();
-    run(() => toggleStars(ctx, ['Проект А', 'Проект Б', 'Готовый', 'Задача В'], FRI_TODO));
+    run(() => planStars(ctx, ['Проект А', 'Проект Б', 'Готовый', 'Задача В'], FRI_TODO, FRI_D));
     doc.apply({ t: 'setDone', id: 'Задача В', from: false, to: true, at: 10 });
     const before = (back: number) => (back === 3 ? { todo: FRI_TODO, end: fridayEnd } : null);
     expect(run(() => carryStars(ctx, MON_TODO, before))).toBe(2);
@@ -148,7 +218,7 @@ describe('carrying stars on to a new day', () => {
 
   it('skips a day whose list was made after it (looked into later), and stops at the first real one', () => {
     const { doc, ctx, run } = calendar();
-    run(() => toggleStars(ctx, ['Проект А'], FRI_TODO));
+    run(() => planStars(ctx, ['Проект А'], FRI_TODO, FRI_D));
     const seen: number[] = [];
     const before = (back: number) => {
       seen.push(back);

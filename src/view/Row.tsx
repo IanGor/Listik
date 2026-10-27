@@ -13,7 +13,7 @@ import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
 import { suggestKey } from './Suggest';
 import { touch } from './screen';
-import { STAR, swipe } from './swipe';
+import { CALENDAR, swipe } from './swipe';
 
 interface RowProps {
   o: Outliner;
@@ -53,11 +53,11 @@ export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | nul
   );
 }
 
-/** The star of a bullet in today's list (model/today.ts): filled when lit, by CSS. */
-function StarIcon() {
+/** The calendar that plans a bullet for a day (Planner.tsx, model/today.ts). */
+function CalendarIcon(props: { size: number }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
-      <path d={STAR[0]} />
+    <svg width={props.size} height={props.size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      {CALENDAR.map((d) => <path d={d} />)}
     </svg>
   );
 }
@@ -167,8 +167,9 @@ export function Row(props: RowProps) {
     const t = o.doc.nodes.get(p.task);
     return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
   };
-  /** In today's `todo` or not, or never (Outliner.starOf). */
-  const star = () => o.starOf(id);
+  /** The bullet's plan: null if it cannot be planned, else the date it is planned for, if any (Outliner.planOf). */
+  const plan = createMemo(() => o.planOf(id), undefined, { equals: (a, b) => a === b || (!!a && !!b && a.date?.y === b.date?.y && a.date?.m === b.date?.m && a.date?.d === b.date?.d) });
+  const planned = () => plan()?.date ?? null;
   /** A star in a day's `todo`: how its day went and what was done in it (Outliner.dayOfStar). */
   const day = createMemo(() => (content() ? o.dayOfStar(id) : null), undefined, {
     equals: (a, b) => a?.mark === b?.mark && a?.today === b?.today && a?.done.join() === b?.done.join(),
@@ -179,11 +180,12 @@ export function Row(props: RowProps) {
     for (const t of d.done) o.nodes.track(t);
     return d.done.map((t) => ({ id: t, text: (o.doc.nodes.has(t) && plainText(o.doc.get(t).text).trim()) || 'Задача без текста' }));
   };
-  const onStar = (e: MouseEvent) => {
+  /** The calendar button or the date beside the text: the calendar opens beside the row. */
+  const onPlan = (e: MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    o.toggleToday([id]);
+    o.openPlanner([id], (e.currentTarget as HTMLElement).getBoundingClientRect());
   };
   const query = () => o.highlightFor(nid);
   const terms = () => query()?.terms ?? [];
@@ -274,6 +276,24 @@ export function Row(props: RowProps) {
         onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !content()?.todo && o.zoomTo(id)}
       />
       <div class="body">
+        {/* The day it is planned for (model/today.ts): «сегодня», «завтра», else the date, at the end of the first line (floated, so
+            the text goes round it, edited or not); a press opens the calendar. */}
+        <Show when={planned()}>
+          {(date) => (
+            <button
+              type="button"
+              class="plan-date"
+              classList={{ today: o.planLabel(date()) === 'сегодня' }}
+              aria-label={`Запланировано на ${o.planLabel(date())}: изменить`}
+              title="Запланировано (Ctrl+S): изменить или отменить"
+              disabled={o.readOnly}
+              onMouseDown={onPlan}
+            >
+              <CalendarIcon size={13} />
+              {o.planLabel(date())}
+            </button>
+          )}
+        </Show>
         <Show
           when={editingText()}
           fallback={
@@ -286,12 +306,6 @@ export function Row(props: RowProps) {
                     {mark() === 'done' ? 'готово' : 'дальше'}
                   </span>
                 )}
-              </Show>
-              {/* On a touch screen, no hover: the star of a bullet in today's list shows in its line, a tap takes it out. */}
-              <Show when={touch() && star() === 'on' && !day()}>
-                <button type="button" class="today-mark" aria-label="Убрать из «Сегодня»" onMouseDown={onStar}>
-                  <StarIcon />
-                </button>
               </Show>
               {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
               <Show when={content()?.strokes}>
@@ -354,18 +368,16 @@ export function Row(props: RowProps) {
           <NoteEditable o={o} id={id} />
         </Show>
       </div>
-      {/* The star (model/today.ts): with a mouse, at the row's end, lit when the bullet is in today's list, else shown on hover. */}
-      <Show when={!touch() && star() !== null && !o.readOnly}>
+      {/* The calendar button (model/today.ts): with a mouse, at the row's end, shown while the pointer is over the row; once planned, the date in the line takes its place. */}
+      <Show when={!touch() && plan() !== null && planned() === null && !o.readOnly}>
         <button
           type="button"
-          class="today-star"
-          classList={{ on: star() === 'on' }}
-          aria-pressed={star() === 'on'}
-          aria-label={star() === 'on' ? 'Убрать из «Сегодня»' : 'В «Сегодня»'}
-          title={star() === 'on' ? 'Убрать из «Сегодня» (Ctrl+S)' : 'В «Сегодня» (Ctrl+S)'}
-          onMouseDown={onStar}
+          class="plan-button"
+          aria-label="Запланировать"
+          title="Запланировать на день (Ctrl+S)"
+          onMouseDown={onPlan}
         >
-          <StarIcon />
+          <CalendarIcon size={16} />
         </button>
       </Show>
     </div>
