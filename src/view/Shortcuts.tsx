@@ -1,6 +1,6 @@
 import { For, Show, createEffect, on } from 'solid-js';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { phone } from './screen';
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 const MOD = MAC ? '⌘' : 'Ctrl';
@@ -90,7 +90,7 @@ const GROUPS: [title: string, rows: [keys: string | Said, action: string][]][] =
  */
 export function Shortcuts(props: { o: Outliner }) {
   let dialog!: HTMLDialogElement;
-  const title = () => (touch() ? 'Жесты и клавиши' : 'Горячие клавиши');
+  const title = () => (phone() ? 'Жесты и клавиши' : 'Горячие клавиши');
   createEffect(on(props.o.helpRequests, () => {
     if (!dialog.open) dialog.showModal();
   }, { defer: true }));
@@ -114,7 +114,7 @@ export function Shortcuts(props: { o: Outliner }) {
           </button>
         </div>
         <div class="shortcuts-groups">
-          <Show when={touch()}>
+          <Show when={phone()}>
             <section>
               <h3>Касания</h3>
               <dl>

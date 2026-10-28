@@ -1,5 +1,6 @@
 import type { RowKey } from '../model/rows';
 import type { Outliner } from './outliner';
+import { tablet } from './screen';
 
 /**
  * A finger swiping a row sideways: to the left the bullet goes to the trash
@@ -37,10 +38,10 @@ const SWALLOW = 400;
 const TRASH = ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'];
 export const CALENDAR = ['M4 8.5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3V18a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z', 'M4 10h16', 'M8 3v3.5', 'M16 3v3.5'];
 
-/** Lets the row be swiped; returns the function that stops it. */
+/** Lets the row be swiped (not on a tablet: it has the computer's controls); returns the function that stops it. */
 export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () => boolean): () => void {
   const down = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch' || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
+    if (e.pointerType !== 'touch' || tablet() || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
     if (row.classList.contains('settling') || (e.target as Element).closest('.bullet')) return;
     if (e.clientX < EDGE || e.clientX > innerWidth - EDGE) return;
     track(e);

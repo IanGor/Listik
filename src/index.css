@@ -1320,22 +1320,22 @@ mark,
 /* Touch screens have no Ctrl+F to hint at, and no hover: the fold arrows
    show at all times, with a finger-sized target that stops short of the bullet. */
 @media (pointer: coarse) {
-  .searchbar kbd {
+  :where(:root:not(.tablet)) .searchbar kbd {
     display: none;
   }
 
   /* At the end of the row, in a column of its own (--fold) that every row
      keeps free: the arrows stand in one line at any depth, the text wraps
      short of them, and the bullet on the left is left to zoom with a tap. */
-  .row {
+  :where(:root:not(.tablet)) .row {
     --fold: 32px;
   }
 
-  .row .body {
+  :where(:root:not(.tablet)) .row .body {
     padding-right: var(--fold);
   }
 
-  .toggle {
+  :where(:root:not(.tablet)) .toggle {
     left: auto;
     right: 0;
     width: var(--fold);
@@ -1343,7 +1343,7 @@ mark,
   }
 
   /* A finger-sized target, and a soft disc under the arrow while pressed. */
-  .toggle::before {
+  :where(:root:not(.tablet)) .toggle::before {
     content: '';
     position: absolute;
     inset: -6px -4px;
@@ -1351,11 +1351,11 @@ mark,
     transition: background 100ms var(--ease-out);
   }
 
-  .toggle:active::before {
+  :where(:root:not(.tablet)) .toggle:active::before {
     background: var(--surface-2);
   }
 
-  .toggle svg {
+  :where(:root:not(.tablet)) .toggle svg {
     position: relative;
   }
 }
@@ -2018,7 +2018,7 @@ mark,
 /* Up and down scrolls the list; sideways is the row's own (left deletes, right
    checks off). */
 @media (pointer: coarse) {
-  .row {
+  :where(:root:not(.tablet)) .row {
     touch-action: pan-y pinch-zoom;
   }
 }
@@ -3484,4 +3484,15 @@ body.is-dragging * {
 :where(button:not(:disabled, .toggle, .toast button)):active:hover {
   background-color: var(--surface-2);
   transition: none;
+}
+
+/* --- Tablet (screen.ts: tablet) -------------------------------------------- */
+
+/* The computer's layout, a finger at the controls: what a computer shows
+   under the pointer (the fold arrows, the calendar buttons) a finger has no
+   hover to bring up, so it stays in view, quiet. */
+:root.tablet .toggle,
+:root.tablet .plan-button,
+:root.tablet .plan-title-button {
+  opacity: 1;
 }

@@ -4027,3 +4027,22 @@ test.describe('#secret', () => {
     await expect(page.locator('.row .text', { hasText: 'Eh bien' })).toBeVisible();
   });
 });
+
+test.describe('tablet (an iPad: a finger on a wide screen)', () => {
+  test.use({ viewport: { width: 834, height: 1194 }, isMobile: true, hasTouch: true });
+
+  test('it has the computer\'s layout: arrows by the bullets, the calendar button at the row\'s end, the full menu', async ({ page }) => {
+    await expect(page.locator('html')).toHaveClass(/\btablet\b/);
+    // The fold arrow stands left of its bullet, in view without a hover.
+    const row = page.locator('.row', { has: page.locator('.toggle') }).first();
+    const toggle = row.locator('.toggle');
+    await expect(toggle).toHaveCSS('opacity', '1');
+    expect((await toggle.boundingBox())!.x).toBeLessThan((await row.locator('.bullet').boundingBox())!.x);
+    // The calendar button is shown, not waiting for a pointer.
+    await expect(row.locator('.plan-button')).toHaveCSS('opacity', '1');
+    // The computer's menu: places by name, with the shortcut shown.
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    await expect(page.getByRole('menuitem', { name: /Перейти к пункту/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Горячие клавиши/ })).toBeVisible();
+  });
+});

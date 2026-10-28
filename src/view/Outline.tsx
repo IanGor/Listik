@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { keyboard, touch } from './screen';
+import { keyboard, phone, touch } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -147,7 +147,7 @@ export function Outline(props: { o: Outliner }) {
     const indent = indentation(indentProbe);
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
-      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (touch() ? FOLD_COLUMN : 0)) / ch));
+      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (phone() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.

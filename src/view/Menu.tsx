@@ -6,7 +6,7 @@ import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import { KINDS, KIND_TITLES, availableFonts, fontStack, setFont } from './fonts';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { phone } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
@@ -126,8 +126,8 @@ export function DocumentMenu(props: { o: Outliner }) {
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
-          {/* Going to a place by its name is a computer's: a phone has its search. */}
-          <Show when={!touch()}>
+          {/* Going to a place by its name is a computer's (a tablet too): a phone has its search. */}
+          <Show when={!phone()}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
               Перейти к пункту… <span class="hint">Ctrl+K</span>
               <GO />
@@ -136,7 +136,7 @@ export function DocumentMenu(props: { o: Outliner }) {
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
-              <Show when={!touch()}><span class="hint">Ctrl+Shift+Space</span></Show>
+              <Show when={!phone()}><span class="hint">Ctrl+Shift+Space</span></Show>
               <WRITE />
             </button>
             <div class="menu-sep" role="separator" />
@@ -150,7 +150,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <SAVE />
           </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
-            <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
+            <Show when={phone()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
             <KEYS />
           </button>
           {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}

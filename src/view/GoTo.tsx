@@ -3,7 +3,7 @@ import { dayOf, periodName } from '../model/calendar';
 import { findPlaces, meansToday, placeOf, type Place } from '../model/places';
 import { searchable } from '../model/tags';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { phone } from './screen';
 
 /** Places listed for what is typed, and recent ones before anything is. */
 const PLACES = 8;
@@ -182,7 +182,7 @@ function Line(props: { o: Outliner }) {
             onKeyDown={onKeyDown}
             onBlur={() => o.closePlaceLine()}
           />
-          <Show when={touch()} fallback={<span class="goto-hint" aria-hidden="true">{moving() ? 'Enter — переместить · Esc' : 'Enter — перейти · Esc'}</span>}>
+          <Show when={phone()} fallback={<span class="goto-hint" aria-hidden="true">{moving() ? 'Enter — переместить · Esc' : 'Enter — перейти · Esc'}</span>}>
             <button type="button" class="goto-close" aria-label="Закрыть" onClick={() => o.closePlaceLine()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
                 <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />

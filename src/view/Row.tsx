@@ -12,7 +12,7 @@ import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setC
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
 import { suggestKey } from './Suggest';
-import { touch } from './screen';
+import { phone } from './screen';
 import { CALENDAR, swipe } from './swipe';
 
 interface RowProps {
@@ -335,8 +335,8 @@ export function Row(props: RowProps) {
           <NoteEditable o={o} id={id} />
         </Show>
       </div>
-      {/* The calendar button (model/today.ts): with a mouse, at the row's end, shown while the pointer is over the row; once planned, the date in the line takes its place. */}
-      <Show when={!touch() && plan() !== null && planned() === null && !o.readOnly}>
+      {/* The calendar button (model/today.ts): with a mouse, at the row's end, shown while the pointer is over the row (always on a tablet); once planned, the date in the line takes its place. */}
+      <Show when={!phone() && plan() !== null && planned() === null && !o.readOnly}>
         <button
           type="button"
           class="plan-button"

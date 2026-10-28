@@ -20,6 +20,32 @@ export const narrow = query('(max-width: 640px)');
  */
 export const touch = query('(pointer: coarse)');
 
+/** The shorter side of the device's screen at least this is a tablet, px (iPad mini: 744). */
+const TABLET_MIN = 700;
+
+/**
+ * A tablet (iPad): a finger as the main pointer on a wide screen. It gets the
+ * computer's layout (arrows by the bullets, the calendar button at the row's
+ * end, the full menu), with a finger's target sizes. The window's width counts
+ * too, so Slide Over (a phone-wide strip of an iPad) is a phone. The device is
+ * judged by `screen`, not the window: the keyboard shrinks the window.
+ */
+const bigScreen = typeof screen !== 'undefined' && Math.min(screen.width, screen.height) >= TABLET_MIN;
+const wide = query('(min-width: 641px)');
+export const tablet: Accessor<boolean> = () => bigScreen && touch() && wide();
+
+/** The phone's touch layout: a finger on a screen too small for the computer's. */
+export const phone: Accessor<boolean> = () => touch() && !tablet();
+
+/** Keeps `tablet` on <html> (index.css has no media query for it). */
+export function watchTablet(): void {
+  const root = document.documentElement;
+  const media = [matchMedia('(pointer: coarse)'), matchMedia('(min-width: 641px)')];
+  const update = () => root.classList.toggle('tablet', bigScreen && media.every((m) => m.matches));
+  for (const m of media) m.addEventListener('change', update);
+  update();
+}
+
 /**
  * Hover effects follow a real mouse or trackpad, not a media query: an
  * iPad's main pointer is a finger, so `(hover: hover)` never holds there,
