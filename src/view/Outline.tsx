@@ -22,6 +22,7 @@ import { SyncDialog } from './SyncDialog';
 import { TopBar } from './TopBar';
 import { Crumbs, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
+import { fontStack } from './fonts';
 import { textScale } from './textsize';
 import { Virtualizer } from './virtualizer';
 
@@ -268,7 +269,7 @@ export function Outline(props: { o: Outliner }) {
   const tail = () => Math.max(PAD, Math.round(viewport() / 2));
 
   // A new text size (menu) changes characters per line and line height.
-  createEffect(on(textScale, () => updateMetrics(), { defer: true }));
+  createEffect(on([textScale, fontStack], () => updateMetrics(), { defer: true }));
 
   // Zooming starts at the top of the new level (zooming out then scrolls to the
   // bullet we left, through the focus effect below).

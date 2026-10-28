@@ -2230,6 +2230,33 @@ test.describe('text size', () => {
   });
 });
 
+test.describe('font', () => {
+  const family = (page: Page) => page.locator('.row .text').first().evaluate((el) => getComputedStyle(el).fontFamily);
+
+  test('the menu picks the outline font from the system ones, keeps the menu open, and the pick survives a reload', async ({ page }) => {
+    expect(await family(page)).toContain('monospace');
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /^Шрифт/ }).click();
+    // The system's own of each kind is always there; the monospace one is the checked default.
+    const fonts = page.getByRole('menuitemradio');
+    await expect(page.getByRole('menuitemradio', { name: /^Системный/ }).first()).toHaveAttribute('aria-checked', 'true');
+    expect(await fonts.count()).toBeGreaterThanOrEqual(3);
+    expect(await fonts.count()).toBeLessThanOrEqual(9);
+    await page.getByRole('menuitemradio', { name: /^Системный$|^Системный с засечками$/ }).first().click();
+    await expect(page.locator('.menu')).toBeVisible();
+    expect(await family(page)).toContain('system-ui');
+    // The chrome keeps its font.
+    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontFamily)).not.toContain('monospace');
+
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+    expect(await family(page)).toContain('system-ui');
+    // Rows are measured again for the other font: none overlaps the next.
+    const boxes = await page.locator('.row').evaluateAll((rows) => rows.map((r) => r.getBoundingClientRect()).map((b) => [b.top, b.bottom]));
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i][0]).toBeGreaterThanOrEqual(boxes[i - 1][1] - 0.5);
+  });
+});
+
 test.describe('phone screen', () => {
   const rightmost = (page: Page) =>
     page.locator('.topbar > *, .topbar-actions > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));

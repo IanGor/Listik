@@ -1520,6 +1520,12 @@ mark,
   }
 }
 
+.menu-fonts-title {
+  padding: 6px 12px 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .step-value {
   min-width: 5ch;
   color: var(--muted);

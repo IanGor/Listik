@@ -23,6 +23,9 @@
         // And the text size (src/view/textsize.ts), so the outline does not jump.
         const scale = localStorage.getItem('listik-text-scale');
         if (scale) document.documentElement.style.setProperty('--font-scale', scale);
+        // And the font (src/view/fonts.ts).
+        const font = localStorage.getItem('listik-font');
+        if (font) document.documentElement.style.setProperty('--font-text', font);
       } catch {}
       }
     </script>

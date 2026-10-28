@@ -1,9 +1,10 @@
-import { Match, Show, Switch, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Match, Show, Switch, createSignal, onCleanup, type JSX } from 'solid-js';
 import { appendTrees } from '../model/commands';
 import { countTrees, looksLikeOpml, parseIndented, parseOpml, toMarkdown, toOpml } from '../model/outline-text';
 import type { BackupStatus } from '../persist/backup';
 import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
+import { KINDS, KIND_TITLES, availableFonts, fontStack, setFont } from './fonts';
 import type { Outliner } from './outliner';
 import { touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
@@ -33,6 +34,7 @@ const CHECK = () => <Symbol><path d="M5 12.5l4.5 4.5L19 7.5" /></Symbol>;
 const TRASH = () => <Symbol><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Symbol>;
 const CALENDAR = () => <Symbol><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></Symbol>;
 const CLOUD = () => <Symbol><path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.78A6 6 0 0 0 4.6 12.6 3.5 3.5 0 0 0 6.5 19z" /></Symbol>;
+const CHEVRON = () => <Symbol><path d="M6 9l6 6 6-6" /></Symbol>;
 const FOLDER = () => <Symbol><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></Symbol>;
 
 const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -45,11 +47,15 @@ const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour
 export function DocumentMenu(props: { o: Outliner }) {
   const o = props.o;
   const [open, setOpen] = createSignal(false);
+  const [fontsOpen, setFontsOpen] = createSignal(false);
   const [backup, setBackup] = createSignal<BackupStatus | null>(o.backup?.status ?? null);
   if (o.backup) onCleanup(o.backup.subscribe(setBackup));
   let root!: HTMLDivElement;
 
-  const close = () => setOpen(false);
+  const close = () => {
+    setOpen(false);
+    setFontsOpen(false);
+  };
   const onPointerDown = (e: PointerEvent) => {
     if (!root.contains(e.target as Node)) close();
   };
@@ -189,6 +195,37 @@ export function DocumentMenu(props: { o: Outliner }) {
             </button>
           </div>
           <div class="menu-sep" role="separator" />
+          {/* The font: the list is probed when first opened, and picks keep the menu open like the size's steps. */}
+          <button type="button" role="menuitem" aria-expanded={fontsOpen()} onClick={() => setFontsOpen(!fontsOpen())}>
+            Шрифт
+            <span class="hint">{Object.values(availableFonts()).flat().find((f) => f.stack === fontStack())?.name}</span>
+            <CHEVRON />
+          </button>
+          <Show when={fontsOpen()}>
+            <div class="menu-fonts" role="group" aria-label="Шрифт">
+              <For each={KINDS}>
+                {(kind) => (
+                  <Show when={availableFonts()[kind].length}>
+                    <div class="menu-fonts-title">{KIND_TITLES[kind]}</div>
+                    <For each={availableFonts()[kind]}>
+                      {(f) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={fontStack() === f.stack}
+                          style={{ 'font-family': f.stack }}
+                          onClick={() => setFont(f.stack)}
+                        >
+                          {f.name}
+                          <Show when={fontStack() === f.stack}><CHECK /></Show>
+                        </button>
+                      )}
+                    </For>
+                  </Show>
+                )}
+              </For>
+            </div>
+          </Show>
           <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
             {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}
             <Show when={!o.trashOpen() && o.deleted().length}>
