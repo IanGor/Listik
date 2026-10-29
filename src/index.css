@@ -632,27 +632,40 @@ kbd {
   transform: translate(-50%, -50%) scale(1.45);
 }
 
-/* A task: the bullet is a coral checkbox. Checked, it fills with a tick. */
-/* Round, as Apple's Reminders draw a task. */
-.bullet.todo::after {
+/* A task: a coral checkbox beside its bullet (the bullet still leads in).
+   Round, as Apple's Reminders draw a task; checked, it fills with a tick. */
+.check {
+  position: relative;
+  flex: none;
+  width: 16px;
+  height: 1lh;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.check::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 14px;
   height: 14px;
-  background: transparent;
   border: 1.5px solid var(--primary);
   border-radius: 50%;
   box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  transition: transform 180ms var(--ease-out), background-color 180ms var(--ease-out);
 }
 
-:where(:root.mouse) .bullet.todo:hover::after {
+:where(:root.mouse) .check:hover::after {
   transform: translate(-50%, -50%) scale(1.1);
 }
 
-.bullet.todo.checked::after {
+.check.checked::after {
   background: var(--primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 11px no-repeat;
-  border-color: var(--primary);
 }
 
-/* A mirror (model/mirrors.ts): a diamond of the dot's size, same coral; a task mirror keeps its checkbox and wears a small diamond at its corner. */
+/* A mirror (model/mirrors.ts): a diamond of the dot's size, same coral (a task mirror has its checkbox beside it, as any task). */
 .bullet.mirror::after {
   width: 7px;
   height: 7px;
@@ -662,29 +675,6 @@ kbd {
 
 :where(:root.mouse) .bullet.mirror:hover::after {
   transform: translate(-50%, -50%) rotate(45deg) scale(1.45);
-}
-
-.bullet.mirror.todo::after {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-}
-
-:where(:root.mouse) .bullet.mirror.todo:hover::after {
-  transform: translate(-50%, -50%) scale(1.1);
-}
-
-.bullet.mirror.todo::before {
-  content: '';
-  position: absolute;
-  top: calc(50% - 10px);
-  left: calc(50% + 6px + var(--bullet-reach, 0px) / 2);
-  width: 5px;
-  height: 5px;
-  background: var(--primary);
-  border-radius: 1px;
-  transform: rotate(45deg);
 }
 
 /* A mirror whose original is gone (purged from the trash): an empty row that says so. */
@@ -2976,6 +2966,13 @@ body.is-dragging * {
     box-sizing: content-box;
     padding-left: var(--bullet-reach);
     margin-left: calc(-1 * var(--bullet-reach));
+  }
+
+  /* The checkbox, wider to a finger than it is drawn: 30px rows leave no more height. */
+  .check::before {
+    content: '';
+    position: absolute;
+    inset: -2px -8px;
   }
 
   /* 44pt, Apple's least for a finger (Human Interface Guidelines). */

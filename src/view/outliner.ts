@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseAll, collapseChildren, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -1172,9 +1172,14 @@ export class Outliner {
     });
   }
 
-  /** Ctrl+L: plain bullets become tasks; tasks are checked or unchecked. */
-  cycleTask(ids: RowKey[], keep?: Focus): void {
-    this.changeTasks((ctx) => cycleTask(ctx, ids), ids, keep);
+  /**
+   * "Задача": a plain bullet gets a checkbox, a task loses it (Ctrl+L, the
+   * editing bar's task button, the row menu, a swipe to the right). Checking
+   * is the other verb, the same everywhere too: the checkbox, Ctrl+Enter,
+   * "Отметить выполненной" in the row menu (`toggleDone`).
+   */
+  toggleTask(ids: RowKey[], keep?: Focus): void {
+    this.changeTasks((ctx) => toggleTask(ctx, ids), ids, keep);
   }
 
   /** Ctrl+Shift+L: tasks become plain bullets again. */
@@ -1182,12 +1187,12 @@ export class Outliner {
     this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
   }
 
-  /** A swipe to the right (swipe.ts): the row gets a checkbox, or loses it; never checked. */
+  /** A swipe to the right (swipe.ts): `toggleTask`, the caret staying. */
   swipeCheck(key: RowKey): void {
-    this.changeTasks((ctx) => toggleTask(ctx, [key]), [key], this.keepFocus());
+    this.toggleTask([key], this.keepFocus());
   }
 
-  /** A click on a task's checkbox: checked or unchecked. */
+  /** The checkbox, Ctrl+Enter, the row menu: tasks checked, or unchecked if all are. */
   toggleDone(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => toggleDone(ctx, ids), ids, keep);
   }
@@ -1216,7 +1221,11 @@ export class Outliner {
    * bullet zooms in.
    */
   pressBullet(id: RowKey): void {
-    if (!this.contentOf(id).todo) return this.zoomTo(id);
+    this.zoomTo(id);
+  }
+
+  /** A click on a task's checkbox (beside its bullet): checked or unchecked, the caret staying where it is. */
+  pressCheck(id: RowKey): void {
     const cur = this.focus();
     this.toggleDone([id], cur && 'caret' in cur ? cur : undefined);
   }

@@ -66,7 +66,7 @@ describe('templates', () => {
 
   it('copies the whole template, its name for the text, tasks unchecked', () => {
     const { doc, ctx, run } = setup(['Чек #template', '  пункт']);
-    run(() => cmd.cycleTask(ctx, ['пункт']));
+    run(() => cmd.toggleTask(ctx, ['пункт']));
     run(() => cmd.toggleDone(ctx, ['пункт']));
     const t = templateTree(doc, 'Чек #template');
     expect(t).toEqual({ text: 'Чек', note: '', todo: false, children: [{ text: 'пункт', note: '', todo: true, children: [] }] });

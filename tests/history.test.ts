@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { indent, setNote, setText, sinkDone, split, toggleDone } from '../src/model/commands';
+import { indent, setNote, setText, sinkDone, split, toggleDone, toggleTask } from '../src/model/commands';
 import { History, focusAfter } from '../src/model/history';
 import { dump, setup } from './helpers';
 
@@ -18,6 +18,7 @@ describe('History', () => {
   it('a step still the last one takes more ops into its undo; once another came, it does not', () => {
     const env = setup(['a', 'b', 'c']);
     const history = new History();
+    env.doc.transact(() => toggleTask(env.ctx, ['a']));
     const check = env.doc.transact(() => toggleDone(env.ctx, ['a']));
     history.record({ ops: check, before: null, after: null });
     const sunk = env.doc.transact(() => sinkDone(env.ctx, ['a']));

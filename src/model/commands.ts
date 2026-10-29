@@ -217,37 +217,22 @@ export function setDone(doc: Doc, n: OutlineNode, to: boolean): void {
 }
 
 /**
- * Ctrl+L: completes the bullets, or un-completes them if all are done
- * already (for a selection: one press sets them all the same way).
+ * The checkbox, Ctrl+Enter, "Отметить выполненной": completes the tasks, or
+ * un-completes them if all are done already (a selection: one press sets
+ * them all the same way).
  */
 export function toggleDone({ doc }: Ctx, ids: RowKey[]): void {
-  const value = !ids.every((id) => doc.content(nodeOf(id)).done);
-  for (const id of ids) {
-    const n = doc.content(nodeOf(id));
-    if (n.done !== value) setDone(doc, n, value);
-  }
+  // Done is a task's state only: plain bullets among them are left as they are.
+  const tasks = [...new Set(ids.map((id) => doc.content(nodeOf(id))))].filter((n) => n.todo);
+  const value = !tasks.every((n) => n.done);
+  for (const n of tasks) if (n.done !== value) setDone(doc, n, value);
 }
 
 /**
- * Ctrl+L (and the editing bar's task button): three states in a circle — a
- * plain bullet becomes a task (an empty checkbox), a task is checked, a
- * checked one becomes a plain bullet again. For several bullets: any plain
- * ones become tasks first, then any open ones are checked, then all go
- * plain. A click on the checkbox itself only checks and unchecks.
- */
-export function cycleTask(ctx: Ctx, ids: RowKey[]): void {
-  const { doc } = ctx;
-  const nodes = [...new Set(ids.map((id) => doc.content(nodeOf(id))))];
-  const plain = nodes.filter((n) => !n.todo);
-  const open = nodes.filter((n) => n.todo && !n.done);
-  if (plain.length) for (const n of plain) doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
-  else if (open.length) for (const n of open) setDone(doc, n, true);
-  else untask(ctx, ids);
-}
-
-/**
- * A swipe to the right: a plain bullet gets a checkbox, a task loses it. Never
- * checked: the done state is not touched by this (a done task goes plain).
+ * "Задача" (Ctrl+L, the editing bar's task button, the row menu, a swipe to
+ * the right): a plain bullet gets a checkbox, a task loses it; of several,
+ * any plain ones become tasks first. Never checks: that is `toggleDone`, the
+ * other verb (the checkbox, Ctrl+Enter). A done task goes plain.
  */
 export function toggleTask(ctx: Ctx, ids: RowKey[]): void {
   const nodes = [...new Set(ids.map((id) => ctx.doc.content(nodeOf(id))))];

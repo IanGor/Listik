@@ -77,7 +77,7 @@ export function Row(props: RowProps) {
   /** A finger on the row's text, not the row being edited, nor what has a press of its own: held, it picks the row up (drag.ts). */
   const onRowPointerDown = (e: PointerEvent) => {
     if (e.pointerType !== 'touch' || o.readOnly || focused()) return;
-    if ((e.target as Element).closest('.bullet, .toggle, button, a, [contenteditable]')) return;
+    if ((e.target as Element).closest('.bullet, .check, .toggle, button, a, [contenteditable]')) return;
     props.grab(e, id, 'row');
   };
   /**
@@ -235,16 +235,28 @@ export function Row(props: RowProps) {
       <span
         ref={bullet}
         class="bullet"
-        classList={{ collapsed: folded(), todo: !!content()?.todo, checked: !!content()?.done, mirror: mirror() }}
-        role={content()?.todo ? 'checkbox' : undefined}
-        aria-checked={content()?.todo ? !!content()?.done : undefined}
+        classList={{ collapsed: folded(), mirror: mirror() }}
         title={mirror() ? 'Зеркало: этот пункт есть и в других местах, правка меняет все копии' : undefined}
         // No default on mousedown: DOM focus stays in the row being edited.
         onMouseDown={(e) => e.preventDefault()}
         // A held finger is a drag, not the browser's context menu.
         onContextMenu={(e) => e.preventDefault()}
-        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && !content()?.todo && o.zoomTo(id)}
+        // The bullet always leads in, a task's too: its checkbox is beside it.
+        onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && o.zoomTo(id)}
       />
+      <Show when={content()?.todo}>
+        <span
+          class="check"
+          classList={{ checked: !!content()?.done }}
+          role="checkbox"
+          aria-checked={!!content()?.done}
+          aria-label={content()?.done ? 'Снять отметку' : 'Отметить выполненной'}
+          aria-disabled={o.readOnly || undefined}
+          onMouseDown={(e) => e.preventDefault()}
+          onContextMenu={(e) => e.preventDefault()}
+          onClick={() => !o.readOnly && o.pressCheck(id)}
+        />
+      </Show>
       <div class="body">
         <Show
           when={editingText()}

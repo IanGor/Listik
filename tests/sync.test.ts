@@ -546,7 +546,8 @@ describe('sync', () => {
             () => cmd.setCollapsed(d.ctx, id, !node.collapsed),
             () => cmd.setText(d.ctx, id, node.text + 'абв'[Math.floor(rand() * 3)]),
             () => cmd.setNote(d.ctx, id, node.note + 'з'),
-            () => cmd.cycleTask(d.ctx, [id]),
+            () => cmd.toggleTask(d.ctx, [id]),
+            () => cmd.toggleDone(d.ctx, [id]),
           ]);
           d.run(action);
           steps++;

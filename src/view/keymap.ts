@@ -45,16 +45,16 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
 
   // Ctrl/Cmd+A over the whole text (or in an empty one) selects the bullet; the first one selects the text.
   if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyA' && whole) return handle(selectBullet);
-  // Ctrl/Cmd+L (by physical key): task on, checked, unchecked; with Shift, a plain bullet again.
-  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
+  // Ctrl/Cmd+L (by physical key): a checkbox on, or off (Shift too, as before). Checking is Ctrl+Enter.
+  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.toggleTask([id], here)));
   // Ctrl/Cmd+Shift+M: "Переместить в…", the bullet into a place found by name.
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
 
   switch (e.key) {
-    // Enter splits; Shift+Enter goes to the note. Ctrl+Enter, the old task key, does nothing.
+    // Enter splits; Shift+Enter goes to the note; Ctrl+Enter checks a task (as in Workflowy), or unchecks it.
     case 'Enter':
       return handle(() => {
-        if (mod) return;
+        if (mod) return o.contentOf(id).todo && o.toggleDone([id], here);
         if (e.shiftKey) return o.setFocus({ id, caret: o.contentOf(id).note.length, note: true });
         o.run((ctx) => {
           const text = ctx.doc.content(nodeOf(id)).text;
@@ -167,10 +167,13 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
     case 'Delete':
       return handle(() => o.run((ctx) => cmd.deleteMany(ctx, roots())));
     case 'Enter':
-      if (mod) return handle(() => {});
+      if (mod) return handle(() => {
+        const tasks = roots().filter((k) => o.contentOf(k).todo);
+        if (tasks.length) o.toggleDone(tasks);
+      });
       return handle(() => o.setFocus({ id: selection.head, caret: o.contentOf(selection.head).text.length }));
   }
-  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
+  if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask(roots()) : o.toggleTask(roots())));
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove(roots()));
   if (mod && e.code === 'KeyC') return handle(() => void copy());
   if (mod && e.code === 'KeyX') {
@@ -197,10 +200,10 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTM
   };
   if (mod && !e.altKey && e.code === 'KeyL') {
     const here = { id, caret: start, note: true } as const;
-    return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
+    return handle(() => (e.shiftKey ? o.untask([id], here) : o.toggleTask([id], here)));
   }
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
-  if (e.key === 'Enter' && mod) return handle(() => {});
+  if (e.key === 'Enter' && mod) return handle(() => o.contentOf(id).todo && o.toggleDone([id], { id, caret: start, note: true }));
   if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
   if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);
   if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && !mod && caretOnFirstLine(el)) {

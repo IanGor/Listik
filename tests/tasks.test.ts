@@ -22,7 +22,7 @@ describe('open tasks', () => {
     const { doc, ctx, run } = setup(['a', '  b', '    c', '  d', 'e']);
     const tasks = new PendingTasks(doc);
     expect(tasks.inside('a')).toBeNull();
-    run(() => cmd.cycleTask(ctx, ['d', 'c', 'a']));
+    run(() => cmd.toggleTask(ctx, ['d', 'c', 'a']));
     expect(tasks.inside('a')).toEqual({ task: 'c', count: 2 });
     expect(tasks.inside('b')).toEqual({ task: 'c', count: 1 });
     expect(tasks.isOpen('a')).toBe(true);
@@ -46,7 +46,7 @@ describe('open tasks', () => {
         steps++;
         const key = pick(rows.ids);
         const action = pick<() => unknown>([
-          () => cmd.cycleTask(ctx, [key]),
+          () => cmd.toggleTask(ctx, [key]),
           () => cmd.toggleDone(ctx, [key]),
           () => cmd.untask(ctx, [key]),
           () => cmd.indent(ctx, key),

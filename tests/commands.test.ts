@@ -218,6 +218,7 @@ describe('sinkDone (a task checked off goes last)', () => {
 describe('toggleDone and notes', () => {
   it('completes all, or un-completes all when they are all done already', () => {
     const { doc, ctx, run } = setup(['a', 'b']);
+    run(() => cmd.toggleTask(ctx, ['a', 'b']));
     run(() => toggleDone(ctx, ['a']));
     run(() => toggleDone(ctx, ['a', 'b']));
     expect([doc.get('a').done, doc.get('b').done]).toEqual([true, true]);
@@ -327,46 +328,52 @@ describe('tasks (checkbox bullets)', () => {
     expect(state()).toEqual({ todo: true, done: false });
     run(() => cmd.toggleTask(ctx, ['a']));
     expect(state()).toEqual({ todo: false, done: false });
-    run(() => cmd.cycleTask(ctx, ['a']));
-    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.toggleTask(ctx, ['a']));
+    run(() => cmd.toggleDone(ctx, ['a']));
     expect(state()).toEqual({ todo: true, done: true });
     run(() => cmd.toggleTask(ctx, ['a']));
     expect(state()).toEqual({ todo: false, done: false });
   });
 
-  it('Ctrl+L goes round three states: a task, checked, plain again; a click on the box only checks and unchecks', () => {
+  it('two verbs: Ctrl+L puts the checkbox on and takes it off, checking (the box, Ctrl+Enter) is the other', () => {
     const { doc, ctx, run } = setup(['a']);
     const state = () => ({ todo: doc.get('a').todo, done: doc.get('a').done });
-    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.toggleTask(ctx, ['a']));
     expect(state()).toEqual({ todo: true, done: false });
-    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.toggleDone(ctx, ['a']));
     expect(state()).toEqual({ todo: true, done: true });
-    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.toggleDone(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.toggleDone(ctx, ['a']));
+    run(() => cmd.toggleTask(ctx, ['a']));
     expect(state()).toEqual({ todo: false, done: false });
-    run(() => cmd.cycleTask(ctx, ['a']));
-    expect(state()).toEqual({ todo: true, done: false });
-    run(() => cmd.toggleDone(ctx, ['a']));
-    run(() => cmd.toggleDone(ctx, ['a']));
-    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.toggleTask(ctx, ['a']));
     run(() => cmd.untask(ctx, ['a']));
     expect(state()).toEqual({ todo: false, done: false });
   });
 
-  it('on several bullets, makes the plain ones tasks first, then checks them all', () => {
+  it('on several bullets, the plain ones become tasks first; checking sets them all one way', () => {
     const { doc, ctx, run } = setup(['a', 'b']);
-    run(() => cmd.cycleTask(ctx, ['a']));
-    run(() => cmd.cycleTask(ctx, ['a', 'b']));
-    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, false], [true, false]]);
-    run(() => cmd.cycleTask(ctx, ['a', 'b']));
-    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[true, true], [true, true]]);
-    run(() => cmd.cycleTask(ctx, ['a', 'b']));
-    expect([doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done])).toEqual([[false, false], [false, false]]);
+    const states = () => [doc.get('a'), doc.get('b')].map((n) => [n.todo, n.done]);
+    run(() => cmd.toggleTask(ctx, ['a']));
+    run(() => cmd.toggleTask(ctx, ['a', 'b']));
+    expect(states()).toEqual([[true, false], [true, false]]);
+    run(() => cmd.toggleDone(ctx, ['a']));
+    run(() => cmd.toggleDone(ctx, ['a', 'b']));
+    expect(states()).toEqual([[true, true], [true, true]]);
+    run(() => cmd.toggleDone(ctx, ['a', 'b']));
+    expect(states()).toEqual([[true, false], [true, false]]);
+    run(() => cmd.toggleTask(ctx, ['a', 'b']));
+    expect(states()).toEqual([[false, false], [false, false]]);
+    // A plain bullet is never checked.
+    run(() => cmd.toggleDone(ctx, ['a']));
+    expect(states()).toEqual([[false, false], [false, false]]);
   });
 
   it('writes tasks as - [ ] / - [x] and reads them back', () => {
     const { doc, ctx, run } = setup(['открытая', 'закрытая', 'текст']);
-    run(() => cmd.cycleTask(ctx, ['открытая', 'закрытая']));
-    run(() => cmd.cycleTask(ctx, ['закрытая']));
+    run(() => cmd.toggleTask(ctx, ['открытая', 'закрытая']));
+    run(() => cmd.toggleDone(ctx, ['закрытая']));
     const md = markdownOf(doc, doc.get(doc.root).children);
     expect(md).toBe('- [ ] открытая\n- [x] закрытая\n- текст\n');
     expect(parseIndented(md).map((t) => [t.text, !!t.todo, !!t.done])).toEqual([

@@ -105,6 +105,7 @@ describe('VisibleRows', () => {
 
   it('completed bullets always show, with their subtrees: completing one changes no rows', () => {
     const { doc, rows, ctx } = setup(['a', '  a1', 'b', 'c', '  c1']);
+    doc.transact(() => cmd.toggleTask(ctx, ['a', 'c1']));
     const before = rows.version;
     doc.transact(() => cmd.toggleDone(ctx, ['a', 'c1']));
     expect(doc.get('a').done).toBe(true);

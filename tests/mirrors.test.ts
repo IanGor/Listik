@@ -57,7 +57,7 @@ describe('mirrors', () => {
     const f = run(() => cmd.split(ctx, m, 4));
     expect(doc.content(m).text).toBe('Пьер');
     expect(doc.get(f.id).text).toBe(' Безухов');
-    run(() => cmd.cycleTask(ctx, [m]));
+    run(() => cmd.toggleTask(ctx, [m]));
     expect(doc.get('Пьер').todo).toBe(true);
     run(() => cmd.toggleDone(ctx, [m]));
     expect(doc.get('Пьер').done).toBe(true);
@@ -149,7 +149,7 @@ describe('mirrors', () => {
   it('deleting the copy that holds it all hands everything to the first other copy; copies stay copies; undo puts it back', () => {
     const { doc, ctx, rows, run } = mirrored(['m1', 'a #x', '  b', '  c', 'm2'], { m1: 'a #x', m2: 'a #x' });
     run(() => cmd.setNote(ctx, 'a #x', 'заметка'));
-    run(() => cmd.cycleTask(ctx, ['a #x']));
+    run(() => cmd.toggleTask(ctx, ['a #x']));
     const tags = new TagIndex(doc);
     const text = new TextIndex(doc);
     const before = dump(doc);
@@ -380,7 +380,7 @@ describe('a mirror shows the subtree of its original', () => {
     const ops = doc.transact(() => { cmd.deleteMany(ctx, ['b', 'm/b']); });
     expect(ops).toHaveLength(1);
     expect(doc.get('b').parent).toBe(TRASH);
-    run(() => cmd.cycleTask(ctx, ['a', 'm']));
+    run(() => cmd.toggleTask(ctx, ['a', 'm']));
     expect(doc.get('a').todo).toBe(true);
     expect(doc.get('a').done).toBe(false);
   });

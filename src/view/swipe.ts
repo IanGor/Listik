@@ -41,7 +41,7 @@ const TRASH = ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2
 export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () => boolean): () => void {
   const down = (e: PointerEvent) => {
     if (e.pointerType !== 'touch' || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
-    if (row.classList.contains('settling') || (e.target as Element).closest('.bullet')) return;
+    if (row.classList.contains('settling') || (e.target as Element).closest('.bullet, .check')) return;
     if (e.clientX < EDGE || e.clientX > innerWidth - EDGE) return;
     track(e);
   };

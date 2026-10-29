@@ -87,13 +87,17 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
           <Show
             when={n().todo}
             fallback={
-              <button type="button" role="menuitem" onClick={act(() => o.cycleTask([key]))}>
+              <button type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
                 Сделать задачей
                 <Symbol><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></Symbol>
               </button>
             }
           >
-            <button type="button" role="menuitem" onClick={act(() => o.untask([key]))}>
+            <button type="button" role="menuitem" onClick={act(() => o.toggleDone([key]))}>
+              {n().done ? 'Снять отметку' : 'Отметить выполненной'}
+              <Symbol><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></Symbol>
+            </button>
+            <button type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
               Убрать чекбокс
               <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></Symbol>
             </button>
