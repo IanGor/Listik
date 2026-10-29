@@ -92,13 +92,24 @@ export function toBacklog(doc: Doc, targets: readonly NodeId[]): number {
   const fresh = targets.map((t) => doc.origin(t)).filter((origin) => kanban === null || !doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)));
   if (!fresh.length) return 0;
   let backlog = findBacklog(doc);
-  if (backlog === null) backlog = addChild(doc, kanban ?? addChild(doc, doc.root, 'Kanban'), 'Backlog');
-  for (const origin of fresh) addChild(doc, backlog, '', origin);
+  if (backlog === null) {
+    const board = kanban ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
+    backlog = addChild(doc, board, 'Backlog', undefined, '', undefined, false, `${board}~backlog`);
+  }
+  for (const origin of fresh) addChild(doc, backlog, '', origin, '', undefined, false, `${backlog}~${origin}`);
   return fresh.length;
 }
 
-function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId, note = '', at?: number, open = false): NodeId {
-  const id = newId();
+/**
+ * Ids of what the Backlog and a day make by themselves, alike on every
+ * device (calendar.ts `fixedIds`): two devices adding the same mirror, or
+ * the Kanban, before they heard of each other end with one. Taken only
+ * while free; one in the trash, say, leaves a random id.
+ */
+const KANBAN_ID = 'kanban~';
+
+function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId, note = '', at?: number, open = false, fixed?: NodeId): NodeId {
+  const id = fixed !== undefined && !doc.has(fixed) ? fixed : newId();
   const now = clock.now();
   doc.apply({
     t: 'insert',
@@ -128,10 +139,10 @@ export function fillDayToday(ctx: Ctx, day: NodeId): boolean {
   if (!fillDay(ctx, day)) return false;
   let today = findToday(doc);
   if (today === null) {
-    const kanban = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban');
-    today = addChild(doc, kanban, 'Today', undefined, TODO_NOTE);
+    const kanban = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
+    today = addChild(doc, kanban, 'Today', undefined, TODO_NOTE, undefined, false, `${kanban}~today`);
   }
-  addChild(doc, day, '', today, '', Math.min(1, doc.get(day).children.length), true);
+  addChild(doc, day, '', today, '', Math.min(1, doc.get(day).children.length), true, `${day}~today`);
   return true;
 }
 

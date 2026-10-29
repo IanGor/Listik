@@ -11,6 +11,13 @@ export interface Tree {
   done?: boolean;
   /** Folded (the structure's quarters, the calendar's days); import and export leave it out. */
   collapsed?: boolean;
+  /**
+   * The id to take, unless the document has it already: bullets the app
+   * builds by itself, alike on every device (the calendar, a day's
+   * template), so two devices building the same at once end with one
+   * (merge.ts: an insert of a bullet that is there is a move).
+   */
+  id?: NodeId;
   children: Tree[];
 }
 

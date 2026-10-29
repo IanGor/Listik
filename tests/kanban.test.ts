@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { backlogTargets, findBacklog, findKanban, toBacklog } from '../src/model/kanban';
 import type { Doc } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
+import { applyMerged } from '../src/model/merge';
 import { deserialize, serialize } from '../src/persist/serialize';
 import { build } from './helpers';
 
@@ -59,6 +60,19 @@ describe('the Backlog of the Kanban', () => {
     const back = deserialize(serialize(doc));
     task(back, 'two');
     expect(back.get(findBacklog(back)!).children.map((c) => back.get(c).mirrorOf)).toEqual(['Alpha #project']);
+  });
+
+  it('two devices making the same project a task at once end with one Kanban and one mirror of it', () => {
+    const base = build(para);
+    const a = deserialize(serialize(base));
+    const b = deserialize(serialize(base));
+    const fromA = a.transact(() => { a.apply({ t: 'setTodo', id: 'one', from: false, to: true }); toBacklog(a, ['Alpha #project']); });
+    const fromB = b.transact(() => { b.apply({ t: 'setTodo', id: 'two', from: false, to: true }); toBacklog(b, ['Alpha #project']); });
+    const c = deserialize(serialize(base));
+    for (const op of [...fromA, ...fromB]) applyMerged(c, op);
+    expect(c.get(c.root).children.filter((k) => c.get(k).text === 'Kanban')).toHaveLength(1);
+    expect(c.get(findBacklog(c)!).children.map((k) => c.get(k).mirrorOf)).toEqual(['Alpha #project']);
+    checkInvariants(c);
   });
 
   it('finds them by place and word, with emoji and tags around', () => {

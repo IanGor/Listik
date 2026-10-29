@@ -381,13 +381,14 @@ export function split({ doc, rows }: Ctx, key: RowKey, caret: number): Focus {
 }
 
 /** Snapshot of a tree as new nodes: fresh ids, sequential order keys. */
-function snapshotOf(tree: Tree, order: string, now: number): NodeSnapshot {
+/** A tree as a new subtree; `doc` lets a tree's own id (`Tree.id`) be taken when it is free. */
+function snapshotOf(tree: Tree, order: string, now: number, doc?: Doc): NodeSnapshot {
   let prev: string | null = null;
   return {
-    id: newId(), order, text: tree.text, note: tree.note ?? '', collapsed: tree.collapsed ?? false,
+    id: tree.id !== undefined && doc && !doc.has(tree.id) ? tree.id : newId(), order, text: tree.text, note: tree.note ?? '', collapsed: tree.collapsed ?? false,
     todo: tree.todo ?? tree.done ?? false, done: tree.done ?? false,
     created: now, updated: now,
-    children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now)),
+    children: tree.children.map((c) => snapshotOf(c, (prev = generateKeyBetween(prev, null)), now, doc)),
   };
 }
 
@@ -445,7 +446,7 @@ export function placeTrees({ doc, rows }: Ctx, parent: NodeId, index: number, tr
   const now = clock.now();
   let first: NodeId | undefined;
   for (const tree of trees) {
-    const node = snapshotOf(tree, doc.orderAt(parent, index++), now);
+    const node = snapshotOf(tree, doc.orderAt(parent, index++), now, doc);
     doc.apply({ t: 'insert', parent, node });
     first ??= node.id;
   }

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import * as cmd from '../src/model/commands';
 import {
   SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTags, yearTree, type Period,
 } from '../src/model/calendar';
-import { invert } from '../src/model/doc';
+import { invert, type Doc } from '../src/model/doc';
+import { applyMerged } from '../src/model/merge';
+import { VisibleRows } from '../src/model/rows';
+import type { Op } from '../src/model/types';
+import { deserialize, serialize } from '../src/persist/serialize';
 import { fillDayToday, findToday, todayMirrorOf } from '../src/model/kanban';
 import { checkInvariants } from '../src/model/invariants';
 import type { Tree } from '../src/model/outline-text';
@@ -172,6 +177,56 @@ describe('days', () => {
     expect(parseTags(a).filter((t) => !parseTags(b).includes(t))).toEqual(['@y26']);
     expect(periodName(day(2026, 10, 19))).toBe('19.10.2026');
     expect(periodName({ kind: 'quarter', y: 2026, q: 4 })).toBe('4 квартал 2026');
+  });
+});
+
+describe('built on two devices at once', () => {
+  it('a year and a day\'s template made on two devices before they heard of each other merge into one of each', () => {
+    const { doc: base, ctx: baseCtx, run } = setup([]);
+    run(() => createStructure(baseCtx, 2026));
+    const copy = () => deserialize(serialize(base));
+    // Each device steps into 2027 and enters the same day of 2026 (two devices open at midnight).
+    const build = (doc: Doc): Op[] => {
+      const ctx = { doc, rows: new VisibleRows(doc) };
+      const tags = new TagIndex(doc);
+      return doc.transact(() => {
+        addYear(ctx, tags, 2027);
+        fillDayToday(ctx, findPeriod(doc, tags, day(2026, 10, 21))!);
+      });
+    };
+    const a = copy();
+    const b = copy();
+    const fromA = build(a);
+    const fromB = build(b);
+    // Another device applies both in the server's order; b rebases its own over a's.
+    const c = copy();
+    for (const op of [...fromA, ...fromB]) applyMerged(c, op);
+    b.transact(() => {
+      for (const op of [...fromB].reverse()) applyMerged(b, invert(op));
+      for (const op of fromA) applyMerged(b, op);
+      for (const op of fromB) applyMerged(b, op);
+    });
+    for (const doc of [c, b]) {
+      const tags = new TagIndex(doc);
+      for (let q = 1; q <= 4; q++) expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y26', '@y27']);
+      const d = findPeriod(doc, tags, day(2026, 10, 21))!;
+      expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', '', ...SLOTS]);
+      expect(doc.get(d).children.filter((k) => doc.get(k).mirrorOf)).toHaveLength(1);
+      checkInvariants(doc);
+    }
+    expect(dump(b)).toEqual(dump(c));
+  });
+
+  it('a template that went to the trash leaves its ids there: entering the emptied day again makes a new one', () => {
+    const { doc, ctx, run } = setup([]);
+    run(() => createStructure(ctx, 2026));
+    const tags = new TagIndex(doc);
+    const d = findPeriod(doc, tags, day(2026, 10, 21))!;
+    run(() => fillDay(ctx, d));
+    for (const k of [...doc.get(d).children]) run(() => cmd.deleteNode(ctx, k));
+    expect(run(() => fillDay(ctx, d))).toBe(true);
+    expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', ...SLOTS]);
+    checkInvariants(doc);
   });
 });
 

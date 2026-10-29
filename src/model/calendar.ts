@@ -374,7 +374,7 @@ export function addYear(ctx: Ctx, tags: TagIndex, y: number): boolean {
       return label?.kind === 'year' && label.y > y;
     });
     if (index < 0) index = kids.length;
-    placeTrees(ctx, quarter, index, [yearTree(y, q)]);
+    placeTrees(ctx, quarter, index, fixedIds([yearTree(y, q)], `${quarter}~y${y}~`));
     added = true;
   }
   return added;
@@ -383,8 +383,19 @@ export function addYear(ctx: Ctx, tags: TagIndex, y: number): boolean {
 /** A day entered for the first time, with nothing in it: the template goes in. Returns whether it did. */
 export function fillDay(ctx: Ctx, day: NodeId): boolean {
   if (ctx.doc.get(day).children.length) return false;
-  placeTrees(ctx, day, 0, dayTemplate());
+  placeTrees(ctx, day, 0, fixedIds(dayTemplate(), `${day}~`));
   return true;
+}
+
+/**
+ * Ids by place under `prefix` (`Tree.id`): what the app builds by itself is
+ * built alike on every device, so a year or a day's template made on two
+ * devices before they heard of each other (two devices open at midnight)
+ * merges into one, not two side by side. The prefix is a bullet they share
+ * (the quarter, the day); `.` and `~` never occur in a random id.
+ */
+export function fixedIds(trees: Tree[], prefix: string): Tree[] {
+  return trees.map((t, i) => ({ ...t, id: `${prefix}${i}`, children: fixedIds(t.children, `${prefix}${i}.`) }));
 }
 
 /**
