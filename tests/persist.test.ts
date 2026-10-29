@@ -104,6 +104,28 @@ describe('Persistence', () => {
     expect(dump(await reopen(name))).toEqual(['один два']);
   });
 
+  it('settle rejects while a write keeps failing, and resolves once it is on disk', async () => {
+    const name = freshName();
+    const { doc, persistence } = await Persistence.open(name);
+    persistence.onError = () => {};
+    const rows = new VisibleRows(doc);
+    const db = (persistence as unknown as { db: IDBDatabase }).db;
+    const transaction = db.transaction.bind(db);
+    let failing = true;
+    db.transaction = ((stores: string[], mode: IDBTransactionMode) => {
+      if (failing) throw new DOMException('Connection to Indexed Database server lost', 'UnknownError');
+      return transaction(stores, mode);
+    }) as typeof db.transaction;
+    (persistence as unknown as { reconnect(): Promise<void> }).reconnect = async () => {};
+    doc.transact(() => cmd.setText({ doc, rows }, rows.ids[0], 'не на диске'));
+    await persistence.flush(); // never rejects: the batch is kept
+    await expect(persistence.settle()).rejects.toThrow(/Indexed Database/);
+    failing = false;
+    await persistence.settle();
+    persistence.close();
+    expect(dump(await reopen(name))).toEqual(['не на диске']);
+  });
+
   it('a log with a gap still loads: an op after it merges, and the log folds into the snapshot', async () => {
     const name = freshName();
     const { doc, persistence } = await Persistence.open(name);

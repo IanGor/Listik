@@ -87,7 +87,13 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
     // The lost ops may have reached the server (the sync tail is cumulative): its copy is the whole one.
     outliner.notify(
       'Часть прежних правок не дошла до диска: документ собран из сохранённого',
-      handle ? { label: 'Взять с сервера', run: () => void requestRestore(handle, persistence, opened).then(() => location.reload()) } : null,
+      handle ? {
+        label: 'Взять с сервера',
+        run: () => void requestRestore(handle, persistence, opened).then(
+          () => location.reload(),
+          (e: unknown) => outliner.notify(`Не удалось: ${e instanceof Error ? e.message : String(e)}`),
+        ),
+      } : null,
     );
   }
   return outliner;

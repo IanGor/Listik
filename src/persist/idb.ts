@@ -195,6 +195,17 @@ export class Persistence implements DocListener {
     return written;
   }
 
+  /**
+   * As `flush`, but rejects while anything stays unwritten (`unsaved`):
+   * for a step that must not go on without it — the store replaced from the
+   * server's copy on the next load, which kept only what reached the disk.
+   * `flush` itself never rejects: a failed write is kept and tried again.
+   */
+  async settle(): Promise<void> {
+    await this.flush();
+    if (this.unsaved) throw this.error instanceof Error ? this.error : new Error('Правки не записались на диск');
+  }
+
   /** Folds the log into a new snapshot (one compaction at a time). */
   compact(force = false): Promise<void> {
     this.compacting ??= this.flush()

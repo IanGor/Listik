@@ -201,7 +201,8 @@ export async function restoreFromServer(opened: Opened): Promise<void> {
  */
 export async function requestRestore(handle: SyncHandle, persistence: Persistence, opened: Opened): Promise<void> {
   await handle.engine.flush();
-  await persistence.flush();
+  // What failed to reach the disk (the outbox among it) would be gone after the reload: not without it.
+  await persistence.settle();
   await writeRestore(opened.db, true);
 }
 
