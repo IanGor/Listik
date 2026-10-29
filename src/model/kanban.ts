@@ -43,87 +43,56 @@ function findPara(doc: Doc): NodeId | null {
   return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
-/** Columns where a bullet stays put: the Kanban's Week and Today, at any depth in it. */
-const HELD: string[] = ['week', 'today', 'неделя', 'сегодня'];
-
 /**
- * The bullets to bring to the Backlog after `ops`: the first level under
- * PARA's folder (Projects, Areas, …) that something was added to, however
- * deep: a bullet added in Projects → Alpha → Sub gives Alpha. A task made or
- * added right in a folder is its own (a bullet added there is a new first
- * level, not an addition to one). A bullet moved inside the same first level
- * is not an addition. Each only once.
+ * The bullets to mirror after `ops`: for each task they added or made that
+ * lies inside PARA, the first level under PARA's folder (Projects, Areas, …)
+ * it is in, however deep: Projects → Alpha → Sub → task gives Alpha, a task
+ * right in Projects is its own. Each only once.
  */
 export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const para = findPara(doc);
   if (para === null) return [];
+  const tasks = new Set<NodeId>();
+  for (const op of ops) {
+    if (op.t === 'setTodo') {
+      if (op.to) tasks.add(op.id);
+    } else if (op.t === 'insert' || op.t === 'move') {
+      const id = op.t === 'insert' ? op.node.id : op.id;
+      if (doc.has(id) && doc.inOutline(id)) doc.walk(id, (n) => n.todo && !n.mirrorOf && tasks.add(n.id));
+    }
+  }
   const out: NodeId[] = [];
-  /** `id` was added or made; `own`: it counts as its own first level (a task). */
-  const add = (id: NodeId, own: boolean, from?: NodeId | null) => {
-    if (!doc.has(id) || !doc.inOutline(id) || !searchable(doc, id)) return;
-    // The path from the bullet up to PARA's own child.
+  for (const task of tasks) {
+    if (!doc.has(task) || !doc.inOutline(task) || !searchable(doc, task)) continue;
+    // The path from the task up to PARA's own child.
     const path: NodeId[] = [];
-    let cur: NodeId | null = id;
+    let cur: NodeId | null = task;
     while (cur !== null && cur !== para && cur !== doc.root) {
       path.push(cur);
       cur = doc.get(cur).parent;
     }
-    if (cur !== para) return;
+    if (cur !== para) continue;
     path.pop(); // the Projects, Areas, … themselves are never mirrored
     const target = path[path.length - 1];
-    if (target === undefined || (target === id && !own) || out.includes(target)) return;
-    if (from && doc.within(from, target)) return;
-    out.push(target);
-  };
-  for (const op of ops) {
-    if (op.t === 'setTodo') {
-      if (op.to) add(op.id, true);
-    } else if (op.t === 'insert' || op.t === 'move') {
-      const id = op.t === 'insert' ? op.node.id : op.id;
-      if (!doc.has(id)) continue;
-      let task = false;
-      doc.walk(id, (n) => void (task ||= n.todo && !n.mirrorOf));
-      add(id, task, op.t === 'move' ? op.from.parent : null);
-    }
+    if (target !== undefined && !out.includes(target)) out.push(target);
   }
   return out;
 }
 
-/** Is the mirror in a column that holds it (Week, Today) inside the Kanban? */
-function held(doc: Doc, kanban: NodeId, mirror: NodeId): boolean {
-  for (let p = doc.get(mirror).parent; p !== null && p !== kanban; p = doc.get(p).parent) {
-    const words: string[] = titleOf(doc.content(p).text).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [];
-    if (HELD.some((h) => words.includes(h))) return true;
-  }
-  return false;
-}
-
 /**
- * Brings the bullets to the Backlog, last: a mirror of each, collapsed (a
- * project shows its next task under it), making the Kanban and the Backlog
- * if they are missing. A bullet whose mirror is in Week or Today stays
- * there; one whose mirror is elsewhere in the Kanban (another column,
- * deeper) is moved to the Backlog; one already in the Backlog stays.
- * Returns how many were mirrored or moved.
+ * Mirrors the bullets into the Backlog, last, collapsed (a project shows its
+ * next task under it), making the Kanban and the Backlog if they are missing.
+ * A bullet with a mirror anywhere in the Kanban (a column, deeper) is left:
+ * it is on the board already, wherever it was moved to. Returns how many came.
  */
 export function toBacklog(doc: Doc, targets: readonly NodeId[]): number {
   const kanban = findKanban(doc);
+  const fresh = targets.map((t) => doc.origin(t)).filter((origin) => kanban === null || !doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)));
+  if (!fresh.length) return 0;
   let backlog = findBacklog(doc);
-  let done = 0;
-  for (const t of targets) {
-    const origin = doc.origin(t);
-    const mirrors: NodeId[] = kanban === null ? [] : doc.copies(origin).filter((c) => c !== origin && doc.within(c, kanban));
-    if (mirrors.some((m) => held(doc, kanban!, m) || doc.get(m).parent === backlog)) continue;
-    if (backlog === null) backlog = addChild(doc, kanban ?? addChild(doc, doc.root, 'Kanban'), 'Backlog');
-    if (mirrors.length) {
-      const m = doc.get(mirrors[0]);
-      doc.apply({ t: 'move', id: m.id, from: { parent: m.parent!, order: m.order }, to: { parent: backlog, order: doc.orderAt(backlog, doc.get(backlog).children.length) } });
-    } else {
-      addChild(doc, backlog, '', origin);
-    }
-    done++;
-  }
-  return done;
+  if (backlog === null) backlog = addChild(doc, kanban ?? addChild(doc, doc.root, 'Kanban'), 'Backlog');
+  for (const origin of fresh) addChild(doc, backlog, '', origin);
+  return fresh.length;
 }
 
 function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId): NodeId {
