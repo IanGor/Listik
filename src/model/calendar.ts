@@ -173,16 +173,54 @@ export function structureTrees(y: number): Tree[] {
 /** The caption (note) of the Kanban's Today: its contexts, ready to filter the tasks by work or by home. */
 export const TODO_NOTE = '@work @home';
 
+/** The bullet the day's hours go in, folded: one line, not a wall of 19 empty ones (UX audit, 29 October 2026). */
+export const HOURS = `Часы ${SLOTS[0]}–${SLOTS[SLOTS.length - 1]}`;
+
 /**
  * What a day gets when it is first entered: notes with an empty bullet to
- * write in, then the hours. Between them goes a mirror of the Kanban's Today
- * in place of a list of its own (model/kanban.ts `fillDayToday`).
+ * write in, then the hours, folded in one bullet. Between them goes a mirror
+ * of the Kanban's Today in place of a list of its own (model/kanban.ts
+ * `fillDayToday`).
  */
 export function dayTemplate(): Tree[] {
   return [
     { text: '#notes', children: [{ text: '', children: [] }] },
-    ...SLOTS.map((text) => ({ text, children: [] })),
+    { text: HOURS, collapsed: true, children: SLOTS.map((text) => ({ text, children: [] })) },
   ];
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const monthName = (m: number) => utc(2000, m, 1).toLocaleString('ru', { month: 'long', timeZone: 'UTC' });
+const weekday = (p: { y: number; m: number; d: number }, style: 'long' | 'short') => utc(p.y, p.m, p.d).toLocaleString('ru', { weekday: style, timeZone: 'UTC' });
+
+/**
+ * How a bullet of the calendar reads to people, when its text is its tags
+ * only (as the app writes it): «Четверг, 29 октября 2026» for a day's
+ * title, «Чт 29» in the path. The tags stay the bullet's text, for search
+ * and the calendar's own finding (`periodAt`); this is how they show
+ * (UX audit, 29 October 2026). Null for anything else.
+ */
+export function calendarName(doc: Doc, id: NodeId, use: 'title' | 'crumb'): string | null {
+  const n = doc.get(id);
+  if (n.text.replace(/(^|\s)[@#]\S+/g, '').trim()) return null;
+  const label = labelOf(n.text);
+  if (!label) return null;
+  if (label.kind === 'quarter') return quarterAt(doc, id) === null ? null : use === 'crumb' ? `Q${label.q}` : `${label.q} квартал`;
+  const p = periodAt(doc, id);
+  if (!p) return null;
+  const short = use === 'crumb';
+  switch (p.kind) {
+    case 'quarter':
+      return String(p.y);
+    case 'month':
+      return short ? capital(monthName(p.m)) : `${capital(monthName(p.m))} ${p.y}`;
+    case 'week':
+      return short ? `Неделя ${p.w}` : `Неделя ${p.w} · ${monthName(p.m)} ${p.y}`;
+    case 'day':
+      return short
+        ? `${capital(weekday(p, 'short'))} ${p.d}`
+        : `${capital(weekday(p, 'long'))}, ${utc(p.y, p.m, p.d).toLocaleString('ru', { day: 'numeric', month: 'long', timeZone: 'UTC' })} ${p.y}`;
+  }
 }
 
 /** What a bullet's own tags call it, without the periods around it. */

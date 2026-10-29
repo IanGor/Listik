@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as cmd from '../src/model/commands';
 import {
-  SLOTS, STRUCTURE, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
+  HOURS, SLOTS, STRUCTURE, addYear, calendarName, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTags, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert, type Doc } from '../src/model/doc';
@@ -210,7 +210,7 @@ describe('built on two devices at once', () => {
       const tags = new TagIndex(doc);
       for (let q = 1; q <= 4; q++) expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y26', '@y27']);
       const d = findPeriod(doc, tags, day(2026, 10, 21))!;
-      expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', '', ...SLOTS]);
+      expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', '', HOURS]);
       expect(doc.get(d).children.filter((k) => doc.get(k).mirrorOf)).toHaveLength(1);
       checkInvariants(doc);
     }
@@ -225,7 +225,7 @@ describe('built on two devices at once', () => {
     run(() => fillDay(ctx, d));
     for (const k of [...doc.get(d).children]) run(() => cmd.deleteNode(ctx, k));
     expect(run(() => fillDay(ctx, d))).toBe(true);
-    expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', ...SLOTS]);
+    expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', HOURS]);
     checkInvariants(doc);
   });
 });
@@ -324,12 +324,36 @@ describe('findInbox', () => {
   });
 });
 
+describe('calendarName', () => {
+  it('reads a bullet of the calendar as a date in words, in the title and shorter in the path; anything else is null', () => {
+    const { doc, ctx, run } = setup([]);
+    run(() => createStructure(ctx, 2026));
+    const tags = new TagIndex(doc);
+    const day = findPeriod(doc, tags, { kind: 'day', y: 2026, m: 10, d: 29 })!;
+    expect(calendarName(doc, day, 'title')).toBe('Четверг, 29 октября 2026');
+    expect(calendarName(doc, day, 'crumb')).toBe('Чт 29');
+    const week = doc.get(day).parent!;
+    expect(calendarName(doc, week, 'crumb')).toBe('Неделя 44');
+    expect(calendarName(doc, week, 'title')).toBe('Неделя 44 · октябрь 2026');
+    const month = doc.get(week).parent!;
+    expect(calendarName(doc, month, 'crumb')).toBe('Октябрь');
+    const year = doc.get(month).parent!;
+    expect(calendarName(doc, year, 'title')).toBe('2026');
+    expect(calendarName(doc, doc.get(year).parent!, 'crumb')).toBe('Q4');
+    // Text of its own beside the tags: as it is written.
+    run(() => cmd.setText(ctx, day, `${doc.get(day).text} созвон`));
+    expect(calendarName(doc, day, 'title')).toBeNull();
+    expect(calendarName(doc, findInbox(doc)!, 'title')).toBeNull();
+  });
+});
+
 describe('fillDay', () => {
-  it('gives an empty day notes with an empty plain bullet, then the hours, once', () => {
+  it('gives an empty day notes with an empty plain bullet, then the hours folded in one bullet, once', () => {
     const { doc, ctx, run } = setup(['@d19 @m10 @понедельник']);
     const id = '@d19 @m10 @понедельник';
     expect(run(() => fillDay(ctx, id))).toBe(true);
-    expect(dump(doc)).toEqual([id, '  #notes', '    ', ...SLOTS.map((s) => `  ${s}`)]);
+    expect(dump(doc)).toEqual([id, '  #notes', '    ', `  ${HOURS} [+]`, ...SLOTS.map((s) => `    ${s}`)]);
+    expect(HOURS).toBe('Часы 09:00–18:00');
     const [notes] = doc.get(id).children;
     expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
     expect(doc.get(notes).note).toBe('');
@@ -348,7 +372,7 @@ describe('fillDayToday', () => {
     const { doc, ctx, run } = setup([id]);
     expect(run(() => fillDayToday(ctx, id))).toBe(true);
     const kids = doc.get(id).children;
-    expect(kids.map((c) => doc.get(c).text)).toEqual(['#notes', '', ...SLOTS]);
+    expect(kids.map((c) => doc.get(c).text)).toEqual(['#notes', '', HOURS]);
     const today = findToday(doc)!;
     expect(doc.get(today).text).toBe('Today');
     expect(doc.get(today).note).toBe('@work @home');

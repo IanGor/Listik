@@ -1008,9 +1008,13 @@ test.describe('structure and calendar', () => {
   const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', '@q1', '@q2', '@q3', '@q4'];
-  const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
+  // The day's hours, folded in one bullet (model/calendar.ts HOURS).
+  const HOURS = 'Часы 09:00–18:00';
+  // The path names the calendar by dates (model/calendar.ts calendarName).
+  const yearCrumb = String(now.getFullYear());
+  const monthCrumb = now.toLocaleString('ru', { month: 'long' }).replace(/^./, (c) => c.toUpperCase());
   /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
-  const DAY = ['#notes', '  ', 'Today', ...SLOTS];
+  const DAY = ['#notes', '  ', 'Today', HOURS];
   const title = (page: Page) => page.locator('.zoom-title');
   const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
   /** Opens the title for editing: a click past its text, as a day's title is all tags and a click on one filters. */
@@ -1026,7 +1030,7 @@ test.describe('structure and calendar', () => {
     // The bullet under "todo" is plain, as under the notes: no checkbox.
     await expect(page.locator('.row').nth(3).locator('.check')).toHaveCount(0);
     await expect(caret(page)).toHaveCount(0);
-    for (const crumb of [`@q${quarter}`, new RegExp(`^${year}$`), new RegExp(`^@m${two(now.getMonth() + 1)}$`), /^@w\d\d$/]) {
+    for (const crumb of [`Q${quarter}`, new RegExp(`^${yearCrumb}$`), new RegExp(`^${monthCrumb}$`), /^Неделя \d+$/]) {
       await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);
     }
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
@@ -1086,9 +1090,9 @@ test.describe('structure and calendar', () => {
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
-    expect(await outline(page)).toEqual(['#notes', '  утро', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', '  утро', 'Today', HOURS]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
@@ -1146,7 +1150,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
     await page.getByRole('button', { name: 'Следующий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(1)));
-    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(-1)));
@@ -1194,7 +1198,7 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.crumbbar .count')).toHaveText(/^\d+ пункт/);
     await page.locator('.search').fill('');
     // The year's bullet as earlier versions wrote it.
-    await page.locator('.crumbs .crumb', { hasText: new RegExp(`^${year}$`) }).click();
+    await page.locator('.crumbs .crumb', { hasText: new RegExp(`^${yearCrumb}$`) }).click();
     await editTitle(page);
     await page.keyboard.press('Control+a');
     await page.keyboard.type(`@y${now.getFullYear()}`);
@@ -1206,7 +1210,7 @@ test.describe('structure and calendar', () => {
     // The logo goes on into today, in that year: no second one is made.
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    await page.locator('.crumbs .crumb', { hasText: `@q${quarter}` }).click();
+    await page.locator('.crumbs .crumb', { hasText: `Q${quarter}` }).click();
     expect(await outline(page)).toEqual([year]);
   });
 
@@ -1233,7 +1237,7 @@ test.describe('structure and calendar', () => {
     expect(await left()).toBeGreaterThan(Math.min(100, max) - 3);
     await expect(title(page)).toHaveText(today);
     // A press without moving is a press.
-    await crumbs.locator('.crumb', { hasText: '@w' }).click();
+    await crumbs.locator('.crumb', { hasText: 'Неделя' }).click();
     await expect(title(page)).toHaveText(/^@w\d\d$/);
   });
 
@@ -1255,7 +1259,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DAY);
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
@@ -1286,12 +1290,12 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
     await page.waitForTimeout(500);
     await page.reload();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', HOURS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));
@@ -2246,6 +2250,7 @@ test.describe('touch screen', () => {
     expect((await page.locator('.goto').boundingBox())!.y).toBeLessThan(200);
     await page.keyboard.type('Часть вторая');
     // The places take the line's width (they once shared a class with the header's "Сегодня" and were 44px wide).
+    await expect(page.locator('.goto-place').first()).toHaveText(/^Часть вторая/);
     expect((await page.locator('.goto-place').first().boundingBox())!.width).toBeGreaterThan(300);
     await page.keyboard.press('Enter');
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');

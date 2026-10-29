@@ -1104,6 +1104,24 @@ mark,
   outline: none;
 }
 
+/* A bullet of the calendar: its date in words is the title; its tags, the text it holds, go small under it. */
+.zoom-date {
+  font-size: calc(34px * var(--text-scale));
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.zoom-title.dated {
+  min-height: 0;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
 /* The zoomed-in bullet's note: whole, under the title. */
 .zoom-note {
   margin-top: 6px;

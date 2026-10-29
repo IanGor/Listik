@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
+import { calendarName } from '../model/calendar';
 import { caretOutside, plainText } from '../model/format';
 import { decorate } from '../model/search';
 import type { NodeId } from '../model/types';
@@ -192,9 +193,11 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
   const id = props.id;
   o.nodes.acquire(id);
   onCleanup(() => o.nodes.release(id));
+  // A bullet of the calendar by its date («Чт 29», «Неделя 44»), not its tags.
   const text = () => {
     o.nodes.track(id);
-    return plainText(o.doc.nodes.get(id)?.text ?? '') || '…';
+    if (!o.doc.has(id)) return '…';
+    return calendarName(o.doc, id, 'crumb') ?? (plainText(o.doc.get(id).text) || '…');
   };
   return (
     <Show
@@ -242,6 +245,8 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   const terms = () => query()?.terms ?? [];
   const pieces = createMemo(() => decorate(text(), terms()));
   const notePieces = createMemo(() => decorate(note(), terms()));
+  /** A day (month, week…) of the calendar: its date in words above its tags, which turn small. */
+  const dated = createMemo(() => (text(), o.doc.has(id) ? calendarName(o.doc, id, 'title') : null));
 
   createEffect(on(o.titleRequests, () => !o.readOnly && setEdit({ note: false, caret: text().length }), { defer: true }));
 
@@ -266,9 +271,14 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
       <Show
         when={edit() && !edit()!.note}
         fallback={
-          <div class="zoom-title" onMouseDown={onMouseDown(false)}>
-            <Pieces o={o} pieces={pieces()} query={query()} />
-          </div>
+          <>
+            <Show when={dated()}>
+              <div class="zoom-date" aria-hidden="true">{dated()}</div>
+            </Show>
+            <div class="zoom-title" classList={{ dated: !!dated() }} onMouseDown={onMouseDown(false)}>
+              <Pieces o={o} pieces={pieces()} query={query()} />
+            </div>
+          </>
         }
       >
         <TitleEditable o={o} id={id} text={text} caret={edit()!.caret} edit={setEdit} leave={() => leave(false)} />
