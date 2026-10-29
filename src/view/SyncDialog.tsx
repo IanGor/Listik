@@ -1,7 +1,7 @@
 import { Match, Show, Switch, createEffect, createSignal, on } from 'solid-js';
 import { normalizeServer } from '../sync/client';
 import type { SyncStatus } from '../sync/engine';
-import { changePassphrase, createSync, disconnectSync, forgetOnDevice, joinSync, requestRestore } from '../sync/setup';
+import { changePassphrase, createSync, disconnectSync, forgetOnDevice, joinSync, relogin, requestRestore } from '../sync/setup';
 import { plural } from '../util/plural';
 import type { Outliner } from './outliner';
 
@@ -95,6 +95,13 @@ export function SyncDialog(props: { o: Outliner }) {
     location.reload();
   });
 
+  const signIn = attempt(async () => {
+    if (!o.syncHandle || !o.opened) return;
+    if (!pass()) throw new Error('Введите пароль');
+    await relogin(o.syncHandle, o.opened, pass());
+    location.reload();
+  });
+
   const forget = attempt(async () => {
     if (!o.opened) return;
     await forgetOnDevice(o.opened);
@@ -153,6 +160,13 @@ export function SyncDialog(props: { o: Outliner }) {
                   </dd>
                   <dt>Состояние</dt><dd>{describeSync(o.syncStatus())}</dd>
                 </dl>
+                <Show when={o.syncStatus().refused}>
+                  <form class="form sync-relogin" onSubmit={(e) => void signIn(e)}>
+                    <p class="form-note">Пароль сменили на другом устройстве. Введите новый: правки, ещё не отправленные с этого, сохранятся.</p>
+                    <label class="field"><span>Новый пароль</span><input type="password" autocomplete="current-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
+                    <button type="submit" class="button primary" disabled={busy() || !pass()}>{busy() ? 'Проверяю…' : 'Продолжить'}</button>
+                  </form>
+                </Show>
                 <p class="form-note">
                   На другом устройстве откройте Listik, выберите «Синхронизация → Подключиться» и введите адрес сервера, код документа и пароль.
                 </p>
@@ -163,7 +177,7 @@ export function SyncDialog(props: { o: Outliner }) {
                   <button type="button" class="button" disabled={busy()} onClick={(e) => void restore(e)}>Загрузить с сервера</button>
                   <button type="button" class="button danger" disabled={busy()} onClick={(e) => void disconnect(e)}>Отключить</button>
                 </div>
-                <Show when={mode() === 'change'}>
+                <Show when={mode() === 'change' && !o.syncStatus().refused}>
                   <form class="form" onSubmit={(e) => void change(e)}>
                     <label class="field"><span>Новый пароль</span><input type="password" autocomplete="new-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
                     <label class="field"><span>Ещё раз</span><input type="password" autocomplete="new-password" value={pass2()} onInput={(e) => setPass2(e.currentTarget.value)} /></label>

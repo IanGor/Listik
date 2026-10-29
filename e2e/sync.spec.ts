@@ -259,3 +259,53 @@ test('a log with a gap opens, and the server gives back what the gap took; so do
   await expect(a.locator('.toast')).toContainText('Документ загружен с сервера', { timeout: 30_000 });
   await expect(a.locator('.row .text')).toHaveText(['с сервера!', 'раз']);
 });
+
+test('a passphrase changed on one device: another is told, takes the new one, and what it typed meanwhile arrives', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const a = await (await browser.newContext()).newPage();
+  await a.goto('/?db=e2e-sync-pass-a&empty');
+  await a.locator('.row .text').click();
+  await a.keyboard.type('до смены');
+  await a.waitForTimeout(400);
+  await openSyncDialog(a);
+  await a.locator('.sync-dialog input[type="url"]').fill(SYNC);
+  const passwords = a.locator('.sync-dialog input[type="password"]');
+  await passwords.nth(0).fill(PASS);
+  await passwords.nth(1).fill(PASS);
+  await a.getByRole('button', { name: 'Создать и включить' }).click();
+  await expect(a.locator('.toast')).toContainText('Синхронизация включена', { timeout: 30_000 });
+  await openSyncDialog(a);
+  const code = (await a.locator('.doc-code').textContent())!.trim();
+  await a.keyboard.press('Escape');
+
+  const b = await (await browser.newContext()).newPage();
+  await b.goto('/?db=e2e-sync-pass-b&empty');
+  await openSyncDialog(b);
+  await b.getByRole('tab', { name: 'Подключиться к существующему' }).click();
+  await b.locator('.sync-dialog input[type="url"]').fill(SYNC);
+  await b.locator('.sync-dialog input[type="text"]').fill(code);
+  await b.locator('.sync-dialog input[type="password"]').fill(PASS);
+  await b.getByRole('button', { name: 'Подключиться' }).click();
+  await expect(b.locator('.row .text').first()).toHaveText('до смены', { timeout: 30_000 });
+
+  // A changes the passphrase (and reloads with the new token).
+  const NEW = 'совсем другой пароль';
+  await openSyncDialog(a); // opens on the passphrase form
+  const fresh = a.locator('.sync-dialog form input[type="password"]');
+  await fresh.nth(0).fill(NEW);
+  await fresh.nth(1).fill(NEW);
+  await a.locator('.sync-dialog form').getByRole('button', { name: 'Сменить пароль' }).click();
+  await expect(syncOn(a)).toBeVisible({ timeout: 30_000 });
+
+  // B types: its push is refused, it says so and stops asking; the edit waits.
+  await b.locator('.row .text').first().click();
+  await b.keyboard.press('Control+End');
+  await b.keyboard.type(', и после');
+  await b.keyboard.press('Escape');
+  await expect(b.locator('.toast')).toContainText('Пароль синхронизации сменили', { timeout: 15_000 });
+  await b.locator('.toast').getByRole('button', { name: 'Ввести новый' }).click();
+  await b.locator('.sync-dialog form input[type="password"]').fill(NEW);
+  await b.locator('.sync-dialog').getByRole('button', { name: 'Продолжить' }).click();
+  await expect(b.locator('.row .text').first()).toHaveText('до смены, и после', { timeout: 30_000 });
+  await expect.poll(() => rows(a), { timeout: 30_000 }).toEqual(['до смены, и после']);
+});

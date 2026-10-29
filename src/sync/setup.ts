@@ -32,13 +32,61 @@ export async function openVault(name: string): Promise<Opened> {
   return { db, config: config ?? null, keyslot: keyslot ?? null, secret };
 }
 
-/** The passphrase typed on the unlock screen. Throws on a wrong one. */
+/**
+ * The passphrase typed on the unlock screen. Throws on a wrong one. A
+ * passphrase the key slot here does not take may be a new one, set on
+ * another device: the server's key slot is tried with it, and kept here.
+ */
 export async function unlock(opened: Opened, passphrase: string, remember: boolean): Promise<Secret> {
   if (!opened.keyslot || !opened.config) throw new Error('Документ не зашифрован');
-  const secret = await openKeyslot(passphrase, opened.config.docId, opened.keyslot);
+  let secret: Secret;
+  try {
+    secret = await openKeyslot(passphrase, opened.config.docId, opened.keyslot);
+  } catch (e) {
+    const fresh = await fromServer(opened.config.server, opened.config.docId, passphrase).catch(() => null);
+    if (!fresh) throw e;
+    await writeKeyslot(opened.db, fresh.keyslot);
+    opened.keyslot = fresh.keyslot;
+    secret = { dek: fresh.dek, token: fresh.token };
+  }
   if (remember) await rememberSecret(opened.db, secret);
   opened.secret = secret;
   return secret;
+}
+
+/** The document's key slot from the server, opened with `passphrase`; throws with a word for the user. */
+async function fromServer(server: string, docId: string, passphrase: string): Promise<{ keyslot: Keyslot; dek: Uint8Array; token: string; transport: Transport }> {
+  const kek = await deriveKek(passphrase, docId);
+  const token = await tokenFromKek(kek);
+  const transport = httpTransport(server, docId, token);
+  let keyslot: Keyslot;
+  try {
+    keyslot = await transport.getKeyslot();
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 429) throw new Error('Сервер временно не отвечает на попытки подключения: слишком много неудачных');
+    if (e instanceof HttpError && (e.status === 401 || e.status === 404)) throw new Error('Документ с таким кодом и паролем на сервере не найден');
+    throw e;
+  }
+  const { dek } = await openKeyslot(passphrase, docId, keyslot);
+  return { keyslot, dek, token, transport };
+}
+
+/**
+ * The passphrase was changed on another device (the engine's status is
+ * `refused`): the new one opens the server's key slot, which is kept here
+ * with the new token. What this device has not sent yet stays in its
+ * outbox. Reload after.
+ */
+export async function relogin(handle: SyncHandle, opened: Opened, passphrase: string): Promise<void> {
+  const { keyslot, dek, token } = await fromServer(handle.config.server, handle.config.docId, passphrase);
+  if (dek.length !== handle.secret.dek.length || dek.some((b, i) => b !== handle.secret.dek[i])) {
+    throw new Error('Этот пароль открывает документ с другим ключом');
+  }
+  const remembered = (await recallSecret(opened.db)) !== null;
+  await writeKeyslot(opened.db, keyslot);
+  if (remembered) await rememberSecret(opened.db, { dek, token });
+  opened.keyslot = keyslot;
+  opened.secret = { dek, token };
 }
 
 export async function codecFor(secret: Secret | null): Promise<Codec> {
@@ -104,18 +152,7 @@ export async function createSync(doc: Doc, opened: Opened, persistence: Persiste
  * document is replaced by the server's snapshot. Reload the page after.
  */
 export async function joinSync(opened: Opened, persistence: Persistence | null, server: string, docId: string, passphrase: string): Promise<void> {
-  const kek = await deriveKek(passphrase, docId);
-  const token = await tokenFromKek(kek);
-  const transport = httpTransport(server, docId, token);
-  let keyslot: Keyslot;
-  try {
-    keyslot = await transport.getKeyslot();
-  } catch (e) {
-    if (e instanceof HttpError && e.status === 429) throw new Error('Сервер временно не отвечает на попытки подключения: слишком много неудачных');
-    if (e instanceof HttpError && (e.status === 401 || e.status === 404)) throw new Error('Документ с таким кодом и паролем на сервере не найден');
-    throw e;
-  }
-  const { dek } = await openKeyslot(passphrase, docId, keyslot);
+  const { keyslot, dek, token, transport } = await fromServer(server, docId, passphrase);
   const key = await dataKey(dek);
   await persistence?.flush();
   await writeSyncState(opened.db, undefined); // a fresh replica: nothing pending from before

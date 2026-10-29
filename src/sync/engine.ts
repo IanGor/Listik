@@ -6,7 +6,7 @@ import { LockedError, type Codec } from '../persist/codec';
 import { done, request } from '../persist/db';
 import type { MetaWrite, Rider } from '../persist/idb';
 import { coalesceInto, deserialize, serialize } from '../persist/serialize';
-import { GoneError, type Transport } from './client';
+import { GoneError, HttpError, type Transport } from './client';
 import { decryptWith, encryptWith, isEncrypted, type Encrypted } from './crypto';
 import { fromBase64, fromUtf8, gunzip, gzip, sha256, toBase64, utf8 } from './encoding';
 
@@ -59,6 +59,12 @@ export interface SyncStatus {
   /** When the last successful exchange ended. */
   last?: number;
   error?: string;
+  /**
+   * The server refuses this device's token: the passphrase was changed on
+   * another device. Nothing is tried again until the new one is typed in
+   * (setup.ts `relogin`); what waits in the outbox stays.
+   */
+  refused?: boolean;
 }
 
 /** A batch in the outbox; `sealed` once an exchange has started sending it (not stored). */
@@ -260,6 +266,8 @@ export class SyncEngine implements DocListener {
   private uploading: Promise<void> | null = null;
   /** A failed chain check: nothing more is sent or applied until the user resets. */
   private broken = false;
+  /** The token was refused (401): asking again only counted as failures against the address, and locked out every device behind it. */
+  private refused = false;
   private doc: Doc;
   private db: IDBDatabase;
   private transport: Transport;
@@ -403,7 +411,7 @@ export class SyncEngine implements DocListener {
   }
 
   private async exchange(): Promise<void> {
-    if (this.broken) return;
+    if (this.broken || this.refused) return;
     this.set({ phase: 'syncing' });
     try {
       await this.pull();
@@ -420,6 +428,10 @@ export class SyncEngine implements DocListener {
       this.maybeUploadSnapshot();
     } catch (e) {
       await this.save();
+      if (e instanceof HttpError && e.status === 401) {
+        this.refuse();
+        throw e;
+      }
       if (e instanceof GoneError) {
         this.set({ phase: 'error', error: 'Сервер больше не хранит журнал с этого места: нужно загрузить документ с сервера заново' });
         throw e;
@@ -553,20 +565,26 @@ export class SyncEngine implements DocListener {
   /** The event stream: the server says when its head moves. Reconnects with backoff while running. */
   private async listen(): Promise<void> {
     let delay = 1000;
-    while (this.running) {
+    while (this.running && !this.refused) {
       this.abort = new AbortController();
       try {
         await this.transport.events((head) => {
           delay = 1000;
           if (head > this.state.head) void this.sync();
         }, this.abort.signal);
-      } catch {
-        // Dropped or refused: fall through to the retry.
+      } catch (e) {
+        if (e instanceof HttpError && e.status === 401) return this.refuse();
+        // Dropped: fall through to the retry.
       }
-      if (!this.running) return;
+      if (!this.running || this.refused) return;
       await new Promise((resolve) => setTimeout(resolve, delay));
       delay = Math.min(delay * 2, 30_000);
     }
+  }
+
+  private refuse(): void {
+    this.refused = true;
+    this.set({ phase: 'error', refused: true, error: 'пароль сменили на другом устройстве' });
   }
 
   private onOnline = () => void this.sync();

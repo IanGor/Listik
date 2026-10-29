@@ -2275,6 +2275,16 @@ body.is-dragging * {
   overflow-wrap: anywhere;
 }
 
+/* The new passphrase asked for after another device changed it: first, set apart from the notes below. */
+.sync-relogin {
+  align-items: flex-start;
+  margin: 0 0 16px;
+}
+
+.sync-relogin .field {
+  align-self: stretch;
+}
+
 .unlock {
   display: flex;
   align-items: center;

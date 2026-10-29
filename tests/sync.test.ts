@@ -14,6 +14,7 @@ import { openDb } from '../src/persist/db';
 import { Persistence } from '../src/persist/idb';
 import { httpTransport } from '../src/sync/client';
 import { dataKey, newDocId } from '../src/sync/crypto';
+import { changePassphrase, codecFor, createSync, forgetOnDevice, joinSync, openVault, relogin, unlock, type SyncHandle } from '../src/sync/setup';
 import { SyncEngine, bootstrap, readSyncState } from '../src/sync/engine';
 import { dump, rng } from './helpers';
 import { plainCodec } from '../src/persist/codec';
@@ -320,6 +321,58 @@ describe('sync', () => {
     expect(dump(other.doc)).toEqual(['one!', 'two']);
     expect(dump(reloaded.doc)).toEqual(dump(other.doc));
     expect(engine.head).toBe(other.engine.head);
+  });
+
+  it('a passphrase changed on one device: the others stop asking and take the new one, keeping what they have not sent', { timeout: 120_000 }, async () => {
+    const nameA = `pass-a-${n++}`;
+    const openedA = await openVault(nameA);
+    const { doc: docA, persistence: pA } = await Persistence.open(nameA);
+    const handleA = await createSync(docA, openedA, pA, url, 'старый пароль');
+    handleA.engine.stop();
+    const docId = handleA.config.docId;
+    const join = async (name: string) => {
+      await joinSync(await openVault(name), null, url, docId, 'старый пароль');
+      const opened = await openVault(name);
+      const { doc, persistence } = await Persistence.open(name, await codecFor(opened.secret));
+      return { opened, doc, persistence, rows: new VisibleRows(doc) };
+    };
+    const b = await join(`pass-b-${n++}`);
+    const locked = await join(`pass-c-${n++}`);
+    await forgetOnDevice(locked.opened);
+    // b counts its requests: once refused, it stops asking (each would count against the address).
+    let calls = 0;
+    const counting: typeof fetch = (input, init) => { calls++; return fetch(input, init); };
+    const engineB = await SyncEngine.open(b.doc, b.opened.db, httpTransport(url, docId, b.opened.secret!.token, counting), await dataKey(b.opened.secret!.dek), docId, { live: false });
+    engineB.attach(b.persistence);
+    b.doc.transact(() => cmd.setText({ doc: b.doc, rows: b.rows }, b.rows.ids[0], 'с b, не отправлено'));
+    await changePassphrase(handleA, openedA, 'новый пароль');
+    await expect(engineB.sync()).rejects.toThrow();
+    expect(engineB.status.refused).toBe(true);
+    expect(engineB.status.pending).toBe(1);
+    const asked = calls;
+    await engineB.sync();
+    expect(calls).toBe(asked);
+    // The new passphrase, typed in the sync dialog: key slot and token from the server, the outbox kept.
+    const handleB = { engine: engineB, config: b.opened.config!, secret: b.opened.secret!, db: b.opened.db, transport: httpTransport(url, docId, b.opened.secret!.token) } satisfies SyncHandle;
+    await expect(relogin(handleB, b.opened, 'неверный')).rejects.toThrow(/не найден/);
+    await relogin(handleB, b.opened, 'новый пароль');
+    engineB.stop();
+    await b.persistence.flush();
+    const again = await openVault(b.opened.db.name);
+    const engine = await SyncEngine.open(b.doc, again.db, httpTransport(url, docId, again.secret!.token), await dataKey(again.secret!.dek), docId, { live: false });
+    expect(engine.status.pending).toBe(1);
+    await engine.sync();
+    expect(engine.status.phase).toBe('synced');
+    const engineA = await SyncEngine.open(docA, openedA.db, httpTransport(url, docId, (await openVault(nameA)).secret!.token), await dataKey(handleA.secret.dek), docId, { live: false });
+    await engineA.sync();
+    expect(dump(docA)).toEqual(['с b, не отправлено']);
+    // A device asking for the passphrase takes the new one: its own key slot is the old one, the server's opens.
+    const reopened = await openVault(locked.opened.db.name);
+    expect(reopened.secret).toBeNull();
+    const secret = await unlock(reopened, 'новый пароль', false);
+    expect(secret.dek).toEqual(handleA.secret.dek);
+    expect(await unlock(await openVault(locked.opened.db.name), 'новый пароль', false)).toBeTruthy(); // the key slot here is the new one now
+    await expect(unlock(await openVault(locked.opened.db.name), 'старый пароль', false)).rejects.toThrow();
   });
 
   it('an outbox an earlier version stored plain is read as it is and sealed from then on', async () => {
