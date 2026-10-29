@@ -151,3 +151,20 @@ describe('documents that are not there', () => {
     expect(mod.openDocuments()).toBe(before + 1);
   });
 });
+
+describe('deleting a document', () => {
+  it('is off unless LISTIK_ALLOW_DELETE=1: the token alone does not wipe it', async () => {
+    await start();
+    const id = newId();
+    await create(id, 1);
+    expect((await call(id, '', { method: 'DELETE' })).status).toBe(403);
+    expect((await ops(id)).batches.map((b) => b.body)).toEqual(['batch-1']);
+    process.env.LISTIK_ALLOW_DELETE = '1';
+    try {
+      expect((await call(id, '', { method: 'DELETE' })).status).toBe(200);
+      expect((await call(id, '/ops?after=0')).status).toBe(404);
+    } finally {
+      delete process.env.LISTIK_ALLOW_DELETE;
+    }
+  });
+});

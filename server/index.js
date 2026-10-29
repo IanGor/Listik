@@ -9,6 +9,7 @@
  *   LISTIK_PORT      port (default 8787)
  *   LISTIK_ORIGINS   allowed browser origins, comma-separated, or "*"
  *   LISTIK_RETENTION days to keep batches already folded into a snapshot (default 30)
+ *   LISTIK_ALLOW_DELETE "1" lets DELETE remove a document (off otherwise: the app never deletes one)
  *   LISTIK_ALLOW_CREATE "1" accepts new documents; anything else (and unset) refuses them. Set it to create
  *                    yours, then take it away (read per request; with systemd edit sync.env and restart)
  *
@@ -22,7 +23,7 @@
  *   GET    events             stream: "head: N" lines on connect and on every append
  *   PUT    snapshot           X-Seq: the sequence it covers; body: the encrypted snapshot
  *   GET    snapshot           the latest, X-Seq in the header
- *   DELETE                    remove the document
+ *   DELETE                    remove the document (only with LISTIK_ALLOW_DELETE=1)
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -440,6 +441,8 @@ async function handle(req, res) {
     return res.end(bytes);
   }
   if (!part && req.method === 'DELETE') {
+    // The app never deletes a document; a stolen token (or a device key used by a script on the app's origin) must not wipe it.
+    if (process.env.LISTIK_ALLOW_DELETE !== '1') throw new HttpError(403, 'deleting documents is turned off on this server');
     await doc.destroy();
     docs.delete(id);
     return json(res, 200, { deleted: true });
