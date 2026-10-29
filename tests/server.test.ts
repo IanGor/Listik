@@ -18,6 +18,7 @@ beforeAll(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'listik-server-'));
   process.env.LISTIK_DATA = dataDir;
   process.env.LISTIK_RETENTION = '30';
+  process.env.LISTIK_ALLOW_CREATE = '1';
 });
 
 afterEach(() => stop());
@@ -129,5 +130,24 @@ describe('the address failed attempts count against', () => {
     expect(last).toBe(429);
     // Another client behind the proxy is not.
     expect((await fetch(`${url}/docs/${id}/ops?after=0`, { headers: { Authorization: `Bearer token-of-${id}`, 'X-Forwarded-For': '203.0.113.10' } })).status).toBe(200);
+  });
+});
+
+describe('documents that are not there', () => {
+  it('a probe of a random id leaves nothing in memory, and two creations of one id at once: the first wins', async () => {
+    vi.resetModules();
+    const mod = (await import('../server/index.js')) as { createListikServer(): Server; warmUp(): Promise<void>; openDocuments(): number };
+    await mod.warmUp();
+    server = mod.createListikServer();
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+    const before = mod.openDocuments();
+    for (let k = 0; k < 5; k++) expect((await call(newId(), '/ops?after=0')).status).toBe(404);
+    expect(mod.openDocuments()).toBe(before);
+    const id = newId();
+    const put = (token: string) => fetch(`${url}/docs/${id}/keyslot`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyslot: { v: 1 }, token }) });
+    const statuses = (await Promise.all([put('first-token-0123456789'), put('second-token-0123456789')])).map((r) => r.status).sort();
+    expect(statuses).toEqual([201, 409]);
+    expect(mod.openDocuments()).toBe(before + 1);
   });
 });

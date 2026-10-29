@@ -20,7 +20,7 @@ npm run dev -- --host 127.0.0.1   # dev: http://127.0.0.1:5173 (/?demo, /?sample
 npm run app                        # сборка + preview на :4173 (PWA, ставится как приложение)
 npm test                           # Vitest (среда node; happy-dom только там, где указано в файле)
 npm run test:e2e                   # Playwright: проекты app (dev :5180) и pwa (сборка :5181); сервер синхронизации на :5182
-node server/index.js               # сервер синхронизации (LISTIK_DATA, LISTIK_PORT, LISTIK_ORIGINS, LISTIK_ALLOW_CREATE=0 после создания документа); деплой — server/DEPLOY.md
+node server/index.js               # сервер синхронизации (LISTIK_DATA, LISTIK_PORT, LISTIK_ORIGINS, LISTIK_ALLOW_CREATE=1 — только на время создания документа); деплой — server/DEPLOY.md
 # Деплой: приложение — .github/workflows/pages.yml (каждый пуш в master); сервер — .github/workflows/server.yml (пуш с изменением server/index.js) → SSH listik-deploy → server/deploy.sh
 npm run typecheck                  # tsc -b
 npm run bench                      # бенчмарк 67k и 200k bullet'ов → bench/RESULTS.md (~3 мин)

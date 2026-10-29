@@ -36,7 +36,7 @@ export default defineConfig({
       command: 'rm -rf test-results/sync-data && node server/index.js',
       url: `${sync}/health`,
       reuseExistingServer: !process.env.CI,
-      env: { LISTIK_DATA: 'test-results/sync-data', LISTIK_PORT: '5182', LISTIK_ORIGINS: '*' },
+      env: { LISTIK_DATA: 'test-results/sync-data', LISTIK_PORT: '5182', LISTIK_ORIGINS: '*', LISTIK_ALLOW_CREATE: '1' },
     },
   ],
 });

@@ -29,6 +29,7 @@ beforeAll(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'listik-sync-'));
   process.env.LISTIK_DATA = dataDir;
   process.env.LISTIK_RETENTION = '0';
+  process.env.LISTIK_ALLOW_CREATE = '1';
   const { createListikServer } = (await import('../server/index.js')) as { createListikServer(): Server };
   server = createListikServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -473,18 +474,21 @@ describe('sync', () => {
     expect(dump(b.doc)).toEqual(['', 'набрано во время обмена']);
   });
 
-  it('LISTIK_ALLOW_CREATE=0 refuses new documents but keeps serving existing ones', async () => {
+  it('without LISTIK_ALLOW_CREATE=1 new documents are refused, existing ones still served', async () => {
     const { a } = await createDoc();
-    process.env.LISTIK_ALLOW_CREATE = '0';
-    try {
-      const docId = newDocId();
-      const t = httpTransport(url, docId, `token-${docId}`);
-      await expect(t.putKeyslot({ v: 1, kdf: { m: 1, t: 1, p: 1 }, wrapped: { iv: '', ct: '' } })).rejects.toThrow(/new documents/);
-      a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'по-прежнему работает'));
-      await a.engine.sync();
-      expect(a.engine.status.phase).toBe('synced');
-    } finally {
-      delete process.env.LISTIK_ALLOW_CREATE;
+    for (const value of ['0', undefined]) {
+      if (value === undefined) delete process.env.LISTIK_ALLOW_CREATE;
+      else process.env.LISTIK_ALLOW_CREATE = value;
+      try {
+        const docId = newDocId();
+        const t = httpTransport(url, docId, `token-${docId}`);
+        await expect(t.putKeyslot({ v: 1, kdf: { m: 1, t: 1, p: 1 }, wrapped: { iv: '', ct: '' } })).rejects.toThrow(/new documents/);
+        a.run(() => cmd.setText(a.ctx, a.rows.ids[0], `по-прежнему работает ${value}`));
+        await a.engine.sync();
+        expect(a.engine.status.phase).toBe('synced');
+      } finally {
+        process.env.LISTIK_ALLOW_CREATE = '1';
+      }
     }
   });
 

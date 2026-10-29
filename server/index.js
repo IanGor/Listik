@@ -9,9 +9,8 @@
  *   LISTIK_PORT      port (default 8787)
  *   LISTIK_ORIGINS   allowed browser origins, comma-separated, or "*"
  *   LISTIK_RETENTION days to keep batches already folded into a snapshot (default 30)
- *   LISTIK_ALLOW_CREATE "0" refuses new documents (set it once yours exists; read per request, no restart needed
- *                    when the process is given the variable another way, e.g. systemctl set-environment is not
- *                    enough: edit sync.env and restart)
+ *   LISTIK_ALLOW_CREATE "1" accepts new documents; anything else (and unset) refuses them. Set it to create
+ *                    yours, then take it away (read per request; with systemd edit sync.env and restart)
  *
  * Failed authentications and probes of unknown documents are rate-limited per address.
  *
@@ -361,6 +360,9 @@ async function handle(req, res) {
   if (throttled(address)) throw new HttpError(429, 'too many failed attempts, try later');
   const doc = docFor(id);
   const exists = await doc.load();
+  const creating = part === 'keyslot' && req.method === 'PUT';
+  // A probe of a document that is not there leaves nothing in memory: random ids no longer pile up.
+  if (!exists && !creating && docs.get(id) === doc && !doc.meta && !doc.watchers.size) docs.delete(id);
   const refuse = (status, message) => {
     noteFailure(address);
     throw new HttpError(status, message);
@@ -370,10 +372,15 @@ async function handle(req, res) {
     const body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8'));
     if (!body.keyslot || typeof body.keyslot !== 'object') throw new HttpError(400, 'keyslot missing');
     if (!exists) {
-      if (process.env.LISTIK_ALLOW_CREATE === '0') refuse(403, 'this server does not accept new documents');
+      if (process.env.LISTIK_ALLOW_CREATE !== '1') refuse(403, 'this server does not accept new documents');
       const t = body.token ?? token(req);
       if (typeof t !== 'string' || t.length < 16) throw new HttpError(400, 'token missing');
-      await doc.create(hash(t), body.keyslot);
+      // Two creations of one id at once: the first one wins, the second is told (it used to overwrite the token).
+      await doc.serial(async () => {
+        if (doc.meta) throw new HttpError(409, 'the document exists');
+        await doc.create(hash(t), body.keyslot);
+      });
+      docs.set(id, doc);
       return json(res, 201, { created: true });
     }
     if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
@@ -454,6 +461,9 @@ export function createListikServer() {
     });
   });
 }
+
+/** How many documents are held in memory (for tests). */
+export const openDocuments = () => docs.size;
 
 /** Loads every document directory, so `events` and `oldest` are right from the first request. */
 export async function warmUp() {
