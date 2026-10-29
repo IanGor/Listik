@@ -28,6 +28,16 @@ describe('keys', () => {
     expect((await openKeyslot('новый пароль', docId, re.keyslot)).dek).toEqual(dek);
   });
 
+  it('a key slot asking for an Argon2id cost past the limits is refused before any derivation', { timeout: 60_000 }, async () => {
+    const docId = newDocId();
+    const { keyslot } = await createKeyslot('пароль', docId);
+    for (const kdf of [{ m: 1 << 24, t: 3, p: 1 }, { m: 65536, t: 100_000, p: 1 }, { m: 65536, t: 3, p: 0 }, { m: 65536.5, t: 3, p: 1 }, null]) {
+      const started = performance.now();
+      await expect(openKeyslot('пароль', docId, { ...keyslot, kdf } as unknown as typeof keyslot)).rejects.toThrow(/недопустимые параметры/);
+      expect(performance.now() - started).toBeLessThan(100);
+    }
+  });
+
   it('records are bound to their context and the device key seals the secret', { timeout: 60_000 }, async () => {
     const key = await dataKey(utf8('0123456789abcdef0123456789abcdef'));
     const rec = await encryptWith(key, utf8('тайна'), 'listik|doc|ops|7');

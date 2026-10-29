@@ -93,8 +93,26 @@ async function wrapDek(kek: Uint8Array, dek: Uint8Array): Promise<Keyslot> {
   return { v: 1, kdf: KDF, wrapped: { iv: toBase64(w.iv), ct: toBase64(w.ct) } };
 }
 
+/**
+ * The Argon2id cost a key slot may ask for. It comes from the server: one
+ * asking for gigabytes, or for thousands of passes, hung or crashed the
+ * page before any check of the passphrase. A smaller cost than ours only
+ * gives a key that does not open the slot.
+ */
+const KDF_LIMITS = { m: [8, 1 << 20], t: [1, 16], p: [1, 8] } as const;
+
+function checkKdf(kdf: unknown): asserts kdf is typeof KDF {
+  const k = kdf as Record<string, unknown> | null;
+  const ok = !!k && (Object.keys(KDF_LIMITS) as (keyof typeof KDF_LIMITS)[]).every((key) => {
+    const v = k[key];
+    return Number.isInteger(v) && (v as number) >= KDF_LIMITS[key][0] && (v as number) <= KDF_LIMITS[key][1];
+  });
+  if (!ok) throw new Error('Слот ключа с сервера просит недопустимые параметры: документ не открыт');
+}
+
 /** Unwraps the document key; throws if the passphrase is wrong. */
 export async function openKeyslot(passphrase: string, docId: string, keyslot: Keyslot): Promise<{ dek: Uint8Array; token: string }> {
+  checkKdf(keyslot.kdf);
   const kek = await deriveKek(passphrase, docId, keyslot.kdf);
   const dek = await decryptWith(await importAes(kek), { enc: 1, iv: fromBase64(keyslot.wrapped.iv), ct: fromBase64(keyslot.wrapped.ct) }, 'listik|keyslot');
   return { dek, token: await tokenFromKek(kek) };
