@@ -1072,7 +1072,7 @@ test.describe('structure and calendar', () => {
     await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
-  test('a task in PARA puts its first-level bullet into the structure\'s Kanban Backlog', async ({ page }) => {
+  test('a task in PARA puts its #project into the structure\'s Kanban Backlog', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
@@ -1080,7 +1080,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.zoom-title').click();
     await page.keyboard.press('Control+End');
     await page.keyboard.press('Enter');
-    await page.keyboard.type('Alpha');
+    await page.keyboard.type('Alpha #project ');
     await page.keyboard.press('Enter');
     await page.keyboard.press('Tab');
     await page.keyboard.type('write');
@@ -1089,7 +1089,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.row', { hasText: 'Kanban' }).locator('.toggle').click();
     const rows = await outline(page);
     const at = rows.indexOf('Kanban');
-    expect(rows.slice(at, at + 5)).toEqual(['Kanban', '  Backlog', '    Alpha', '  Today', '@q1']);
+    expect(rows.slice(at, at + 5)).toEqual(['Kanban', '  Backlog', '    Alpha #project ', '  Today', '@q1']);
   });
 
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {

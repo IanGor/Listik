@@ -12,7 +12,7 @@ function task(doc: Doc, id: string): void {
 
 
 describe('the Backlog of the Kanban', () => {
-  const para = ['PARA', '  Projects', '    Alpha', '      one', '      two', '  Areas', '    solo'];
+  const para = ['PARA', '  Projects', '    Alpha #project', '      one', '      two', '  Areas', '    solo #project'];
 
   it('a task makes its project a mirror in a new Kanban and Backlog', () => {
     const doc = build([...para, '📥 Inbox']);
@@ -21,7 +21,7 @@ describe('the Backlog of the Kanban', () => {
     const backlog = findBacklog(doc)!;
     expect(doc.get(kanban).text).toBe('Kanban');
     expect(doc.get(backlog).text).toBe('Backlog');
-    expect(doc.get(backlog).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+    expect(doc.get(backlog).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
     checkInvariants(doc);
   });
 
@@ -29,34 +29,34 @@ describe('the Backlog of the Kanban', () => {
     const doc = build(para);
     task(doc, 'one');
     task(doc, 'two');
-    task(doc, 'solo');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha', 'solo']);
+    task(doc, 'solo #project');
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project', 'solo #project']);
   });
 
   it('the first level under a PARA folder is mirrored, however deep the task lies', () => {
-    const doc = build(['PARA', '  Projects', '    Alpha', '      Phase', '        Step', '          deep']);
+    const doc = build(['PARA', '  Projects', '    Alpha #project', '      Phase', '        Step', '          deep']);
     task(doc, 'deep');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
   });
 
   it('a mirror anywhere in the Kanban keeps it from coming again', () => {
     const doc = build([...para, 'Kanban', '  Backlog', '  Doing', '    Wip']);
     doc.apply({
       t: 'insert', parent: 'Wip',
-      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha' },
+      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha #project' },
     });
     task(doc, 'one');
     task(doc, 'two');
     expect(doc.get('Backlog').children).toHaveLength(0);
-    task(doc, 'solo');
-    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo']);
+    task(doc, 'solo #project');
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo #project']);
   });
 
   it('finds them by place and word, with emoji and tags around', () => {
     const doc = build([...para, '🗂 KANBAN #board', '  ⏳ backlog @x', '  Doing']);
     task(doc, 'one');
     expect(findKanban(doc)).toBe('🗂 KANBAN #board');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
     expect(doc.get('🗂 KANBAN #board').children).toHaveLength(2);
   });
 
@@ -77,16 +77,29 @@ describe('the Backlog of the Kanban', () => {
   });
 
   it('an inserted or moved subtree with a task comes along', () => {
-    const doc = build([...para, 'Elsewhere', '  Beta', '    chore']);
+    const doc = build([...para, 'Elsewhere', '  Beta #project', '    chore']);
     doc.apply({ t: 'setTodo', id: 'chore', from: false, to: true });
     expect(findKanban(doc)).toBeNull();
-    const ops = doc.transact(() => doc.apply({ t: 'move', id: 'Beta', from: { parent: 'Elsewhere', order: doc.get('Beta').order }, to: { parent: 'Areas', order: doc.orderAt('Areas', 1) } }));
+    const ops = doc.transact(() => doc.apply({ t: 'move', id: 'Beta #project', from: { parent: 'Elsewhere', order: doc.get('Beta #project').order }, to: { parent: 'Areas', order: doc.orderAt('Areas', 1) } }));
     toBacklog(doc, backlogTargets(doc, ops));
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Beta']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Beta #project']);
+  });
+
+  it('the #project is mirrored, not the groups above it nor the bullets below it', () => {
+    const doc = build(['PARA', '  Projects', '    Work', '      Stream', '        PBR #project @work', '          timeline', '            day', '              t']);
+    task(doc, 't');
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['PBR #project @work']);
+  });
+
+  it('a task under no #project, or under one outside PARA, is left', () => {
+    const doc = build(['PARA', '  Projects', '    Plain', '      t', 'Elsewhere #project', '  u']);
+    task(doc, 't');
+    task(doc, 'u');
+    expect(findKanban(doc)).toBeNull();
   });
 
   it('a #secret project is not mirrored', () => {
-    const doc = build(['PARA', '  Projects', '    Hidden #secret', '      t']);
+    const doc = build(['PARA', '  Projects', '    Hidden #secret #project', '      t']);
     task(doc, 't');
     expect(findKanban(doc)).toBeNull();
   });

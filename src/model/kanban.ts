@@ -3,13 +3,12 @@ import type { Ctx } from './commands';
 import { clock } from './clock';
 import { newId, type Doc } from './doc';
 import { titleOf } from './links';
-import { searchable } from './tags';
+import { content, parseTags, searchable } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
- * Tasks of PARA come to the Kanban's Backlog (October 2026). A bullet inside
- * PARA that is a task, or holds one right in it, is mirrored into the
- * Backlog, inside the Kanban at the top level; the one lacking is made.
+ * Tasks of PARA come to the Kanban's Backlog (October 2026). The `#project`
+ * bullet a task lies in (inside PARA) is mirrored into the Backlog, inside the Kanban at the top level; the one lacking is made.
  * Both are found by place and name as the Inbox is: a top-level bullet with
  * the word "kanban" in its title, and in it one with "backlog"; emoji and
  * tags around do not matter. Only changes made here are looked at (an
@@ -20,6 +19,13 @@ import type { NodeId, Op } from './types';
 const KANBAN = 'kanban';
 const BACKLOG = 'backlog';
 const TODAY = 'today';
+const PROJECT = 'project';
+
+/** A bullet tagged `#project`: the unit that comes to the Backlog. */
+const isProject = (doc: Doc, id: NodeId): boolean => {
+  const text = content(doc.get(id));
+  return text.includes('#') && parseTags(text).includes(PROJECT);
+};
 
 const hasWord = (text: string, word: string) =>
   titleOf(text).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_]+/gu)?.includes(word) ?? false;
@@ -47,9 +53,9 @@ function findPara(doc: Doc): NodeId | null {
 
 /**
  * The bullets to mirror after `ops`: for each task they added or made that
- * lies inside PARA, the first level under PARA's folder (Projects, Areas, …)
- * it is in, however deep: Projects → Alpha → Sub → task gives Alpha, a task
- * right in Projects is its own. Each only once.
+ * lies inside PARA, the nearest bullet at or above it tagged `#project`
+ * (Projects → Work → Group → PBR #project → timeline → day → task gives PBR);
+ * a task under no project is left. Each only once.
  */
 export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const para = findPara(doc);
@@ -66,17 +72,11 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const out: NodeId[] = [];
   for (const task of tasks) {
     if (!doc.has(task) || !doc.inOutline(task) || !searchable(doc, task)) continue;
-    // The path from the task up to PARA's own child.
-    const path: NodeId[] = [];
+    // Up from the task to the nearest `#project`, which must lie inside PARA.
     let cur: NodeId | null = task;
-    while (cur !== null && cur !== para && cur !== doc.root) {
-      path.push(cur);
-      cur = doc.get(cur).parent;
-    }
-    if (cur !== para) continue;
-    path.pop(); // the Projects, Areas, … themselves are never mirrored
-    const target = path[path.length - 1];
-    if (target !== undefined && !out.includes(target)) out.push(target);
+    while (cur !== null && cur !== para && cur !== doc.root && !isProject(doc, cur)) cur = doc.get(cur).parent;
+    if (cur === null || cur === para || cur === doc.root || !doc.within(cur, para) || out.includes(cur)) continue;
+    out.push(cur);
   }
   return out;
 }
