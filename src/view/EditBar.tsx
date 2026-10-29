@@ -6,7 +6,6 @@ import { selectionIn } from './caret';
 import { formatSelection } from './keymap';
 import type { Outliner } from './outliner';
 import { keyboard, touch } from './screen';
-import { CALENDAR } from './swipe';
 
 /** Which set the bar shows: the main one, or one of the sets it leads to. */
 type SetName = 'main' | 'move' | 'extra';
@@ -134,7 +133,6 @@ const SETS: SubSet[] = [
     name: 'extra',
     label: 'Ещё',
     items: [
-      { label: 'Дата', icon: CALENDAR, run: (o, h) => o.openPlanner([h.id]) },
       { label: 'Зеркало', glyph: '(( ))', run: (o, h) => o.insert(h, '(())', 0, 2), off: (h) => !!h.note },
       TIME,
       BOLD,

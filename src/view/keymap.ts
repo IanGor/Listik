@@ -49,8 +49,6 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
   if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
   // Ctrl/Cmd+Shift+M: "Переместить в…", the bullet into a place found by name.
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
-  // Ctrl/Cmd+S: the calendar that plans the bullet for a day (Planner.tsx, model/today.ts).
-  if (mod && !e.shiftKey && !e.altKey && e.code === 'KeyS') return handle(() => o.openPlanner([id]));
 
   switch (e.key) {
     // Enter splits; Shift+Enter goes to the note. Ctrl+Enter, the old task key, does nothing.
@@ -174,7 +172,6 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
   }
   if (mod && !e.altKey && e.code === 'KeyL') return handle(() => (e.shiftKey ? o.untask(roots()) : o.cycleTask(roots())));
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove(roots()));
-  if (mod && !e.shiftKey && !e.altKey && e.code === 'KeyS') return handle(() => o.openPlanner(roots()));
   if (mod && e.code === 'KeyC') return handle(() => void copy());
   if (mod && e.code === 'KeyX') {
     return handle(() => {
@@ -203,7 +200,6 @@ export function onNoteKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTM
     return handle(() => (e.shiftKey ? o.untask([id], here) : o.cycleTask([id], here)));
   }
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
-  if (mod && !e.shiftKey && !e.altKey && e.code === 'KeyS') return handle(() => o.openPlanner([id]));
   if (e.key === 'Enter' && mod) return handle(() => {});
   if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Escape') return handle(toText);
   if (e.key === 'Backspace' && start === 0 && end === 0 && !el.textContent) return handle(toText);

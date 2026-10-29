@@ -418,3 +418,26 @@ export function yearTags(doc: Doc): { id: NodeId; text: string }[] {
   for (const q of doc.get(doc.root).children) if (labelOf(doc.get(q).text)?.kind === 'quarter') walk(q, 1);
   return out;
 }
+
+/** The title of a day's list of things to do (`TODO_NOTE` is its caption). */
+export const TODO = 'todo';
+
+/** The day's `todo`: the first bullet right in it whose first word is "todo". Null if it has none. */
+export function todoOf(doc: Doc, day: NodeId): NodeId | null {
+  return doc.get(day).children.find((c) => !doc.get(c).mirrorOf && firstWord(doc.get(c).text) === TODO) ?? null;
+}
+
+/** A date of the calendar. */
+export interface DayDate {
+  y: number;
+  m: number;
+  d: number;
+}
+
+export const sameDate = (a: DayDate, b: DayDate) => a.y === b.y && a.m === b.m && a.d === b.d;
+
+/** The date `n` days after (before, if negative). */
+export function addDays(p: DayDate, n: number): DayDate {
+  const date = new Date(p.y, p.m - 1, p.d + n);
+  return { y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate() };
+}

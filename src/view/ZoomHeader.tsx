@@ -7,7 +7,6 @@ import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCar
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces, pasteLink } from './Row';
-import { CALENDAR } from './swipe';
 import { plural } from '../util/plural';
 
 /**
@@ -243,18 +242,6 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   const pieces = createMemo(() => decorate(text(), terms()));
   const notePieces = createMemo(() => decorate(note(), terms()));
 
-  /** The title's plan (model/today.ts): the date it is planned for, if any; null date and button alike, when it cannot be planned. */
-  const plan = createMemo(() => o.planOf(id), undefined, {
-    equals: (a, b) => a === b || (!!a && !!b && a.date?.y === b.date?.y && a.date?.m === b.date?.m && a.date?.d === b.date?.d),
-  });
-  const planned = () => plan()?.date ?? null;
-  const onPlan = (e: MouseEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    o.openPlanner([id], (e.currentTarget as HTMLElement).getBoundingClientRect());
-  };
-
   createEffect(on(o.titleRequests, () => !o.readOnly && setEdit({ note: false, caret: text().length }), { defer: true }));
 
   const onMouseDown = (isNote: boolean) => (e: MouseEvent) => {
@@ -275,35 +262,6 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
 
   return (
     <>
-      {/* The plan of the bullet zoomed into, as in its row: the date, or a button to plan it; floated, so the title goes round it. */}
-      <Show when={!o.readOnly && plan() !== null}>
-        <Show
-          when={planned()}
-          fallback={
-            <button type="button" class="plan-title-button" aria-label="Запланировать" title="Запланировать на день (Ctrl+S)" onMouseDown={onPlan}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                {CALENDAR.map((d) => <path d={d} />)}
-              </svg>
-            </button>
-          }
-        >
-          {(date) => (
-            <button
-              type="button"
-              class="plan-date"
-              classList={{ today: o.planLabel(date()) === 'сегодня' }}
-              aria-label={`Запланировано на ${o.planLabel(date())}: изменить`}
-              title="Запланировано (Ctrl+S): изменить или отменить"
-              onMouseDown={onPlan}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                {CALENDAR.map((d) => <path d={d} />)}
-              </svg>
-              {o.planLabel(date())}
-            </button>
-          )}
-        </Show>
-      </Show>
       <Show
         when={edit() && !edit()!.note}
         fallback={

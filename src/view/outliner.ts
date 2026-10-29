@@ -1,8 +1,8 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addYear, createStructure, dayOf, fillDay, findInbox, firstWord, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, yearTags, type Period,
+  addDays, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, todoOf, yearTags, type DayDate, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror, placeTrees } from '../model/commands';
+import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -12,7 +12,6 @@ import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
-import { TODO, addDays, carryStars, compareDates, dayBounds, planLabel, planStars, plannable, plansOf, sameDate, todoOf, type PlanDate } from '../model/today';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
 import type { Backup } from '../persist/backup';
@@ -110,14 +109,6 @@ export interface SearchFilter {
   query: Query;
   matches: ReadonlySet<NodeId>;
   count: number;
-}
-
-/** A rectangle in the window, px: what the calendar of plans opens beside (Planner.tsx). */
-export interface PlannerRect {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
 }
 
 /** Glue between the model and the view: the doc, its derived state and the reactive handles the UI reads. */
@@ -248,12 +239,6 @@ export class Outliner {
   /** Today's date (`toDateString`), moved on at midnight and on coming back (`resumed`): stars and the marks of days follow it. */
   readonly date: Accessor<string>;
   private setDate: Setter<string>;
-  /**
-   * The calendar that plans a day (Planner.tsx): for which rows, and the
-   * rectangle of what asked for it (px in the window), which it opens beside.
-   */
-  readonly planner: Accessor<{ keys: RowKey[]; rect: PlannerRect } | null>;
-  private setPlanner: Setter<{ keys: RowKey[]; rect: PlannerRect } | null>;
   /** Bumped to open the sync dialog. */
   readonly syncRequests: Accessor<number>;
   private setSyncRequests: Setter<number>;
@@ -306,7 +291,6 @@ export class Outliner {
     [this.date, this.setDate] = createSignal(new Date().toDateString());
     [this.sketchToggled, this.setSketchToggled] = createSignal<ReadonlyMap<NodeId, boolean>>(new Map());
     [this.rowMenu, this.setRowMenu] = createSignal<{ key: RowKey; x: number; y: number } | null>(null);
-    [this.planner, this.setPlanner] = createSignal<{ keys: RowKey[]; rect: PlannerRect } | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
@@ -502,9 +486,8 @@ export class Outliner {
    * over the new place, so its results show level after level. A bullet
    * zoomed into opens folded: everything inside it, at any depth (the
    * command `collapseAll`, no undo step), so the place reads as an overview.
-   * It stays folded as left; only a day's `todo` stays open, its stars
-   * folded in it (model/today.ts): the day's list is what the day is
-   * entered for. `keepFolds` (a reload coming back to its place) shows it
+   * It stays folded as left; only a day's `todo` stays open: the day's
+   * list is what the day is entered for. `keepFolds` (a reload coming back to its place) shows it
    * as it was.
    */
   zoomTo(key: RowKey | null, keepSearch = false, keepFolds = false): void {
@@ -752,44 +735,9 @@ export class Outliner {
     const fill = () => {
       if (this.zoom() !== id || !this.doc.has(id)) return;
       this.scaffold((ctx) => fillDay(ctx, id));
-      this.carryOn(id);
     };
     if (this.syncing() && !this.synced) this.afterSync.push(fill);
     else fill();
-  }
-
-  /**
-   * Carries the unfinished on into today's `todo` (model/today.ts
-   * `carryStars`): the mirrors of the last day before it that hold an
-   * unchecked task come first in the list, the day before keeping its own.
-   * Once a day on this device, the first time today's day is entered with its
-   * list there (a new day, or one made ahead by planning, which is most of
-   * them): the mirrors are added, never taken back, so one put out of the list
-   * by hand stays out for the day. With sync, only once the server has been
-   * heard from. No undo step.
-   */
-  private carryOn(day: NodeId): void {
-    if (this.readOnly || !this.doc.has(day)) return;
-    const p = periodAt(this.doc, day);
-    const t = this.todayDate();
-    const todo = todoOf(this.doc, day);
-    if (p?.kind !== 'day' || p.y !== t.y || p.m !== t.m || p.d !== t.d || todo === null) return;
-    const key = `listik-carried:${this.docName}`;
-    const stamp = new Date().toDateString();
-    if (readSetting(key) === stamp) return;
-    if (this.syncing() && !this.synced) {
-      this.afterSync.push(() => this.carryOn(day));
-      return;
-    }
-    this.scaffold((ctx) => {
-      carryStars(ctx, todo, (back) => {
-        const date = new Date(t.y, t.m - 1, t.d - back);
-        const before = findPeriod(this.doc, this.tags, dayOf(date));
-        const list = before === null ? null : todoOf(this.doc, before);
-        return list === null ? null : { todo: list, end: dayBounds(date.getFullYear(), date.getMonth() + 1, date.getDate()).end };
-      });
-    });
-    writeSetting(key, stamp);
   }
 
   /**
@@ -845,7 +793,6 @@ export class Outliner {
       }
       return quiet ? undefined : this.notify(`В календаре нет дня ${periodName(today)}`);
     }
-    this.carryOn(day);
     batch(() => {
       this.setQuery('', true);
       this.setFocus(null);
@@ -893,63 +840,18 @@ export class Outliner {
     return inbox === null ? null : this.doc.get(inbox).children.length;
   }
 
-  /**
-   * The row's plan (model/today.ts): null when its bullet cannot be planned
-   * (the calendar, a secret, …), else the date it is planned for — the
-   * mirror in the list of that day, today or after — or null date for none.
-   * Reactive.
-   */
-  planOf(key: RowKey): { date: PlanDate | null } | null {
-    this.rowsVersion();
-    this.date();
-    const id = nodeOf(key);
-    if (!this.doc.has(id) || !this.doc.inOutline(id) || !plannable(this.doc, id)) return null;
-    return { date: plansOf(this.doc, id, this.todayDate())[0]?.date ?? null };
-  }
-
   /** Today, on the device's clock. */
-  todayDate(): PlanDate {
+  todayDate(): DayDate {
     const now = new Date();
     return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
   }
 
-  /** A date of a plan for people: «сегодня», «завтра», «30 окт». */
-  planLabel(date: PlanDate): string {
-    return planLabel(date, this.todayDate());
-  }
-
-  /** What the rows Ctrl+S and the calendar button act on: the selection, else the row being edited. */
-  private planKeys(): RowKey[] {
-    if (this.selection()) return this.selectionRoots();
-    const f = this.focus();
-    return f ? [f.id] : [];
-  }
-
   /**
-   * Opens the calendar for the rows (Planner.tsx; Ctrl+S, the row's calendar
-   * button, the row menu, "Ещё" in the editing bar, a swipe to the right):
-   * a day picked plans them for it (`planFor`). `rect` is where it opens
-   * beside, by default the first row's.
-   */
-  openPlanner(keys: RowKey[] = this.planKeys(), rect?: PlannerRect): void {
-    if (this.readOnly || !keys.length) return;
-    if (this.planner()) return this.closePlanner();
-    if (!keys.some((k) => this.planOf(k) !== null)) return this.notify('Этот пункт не запланировать');
-    const row = document.querySelector<HTMLElement>(`.row[data-id="${CSS.escape(keys[0])}"]`);
-    const box = rect ?? row?.getBoundingClientRect() ?? { left: innerWidth / 2, right: innerWidth / 2, top: 80, bottom: 80 };
-    this.setPlanner({ keys, rect: { left: box.left, right: box.right, top: box.top, bottom: box.bottom } });
-  }
-
-  closePlanner(): void {
-    this.setPlanner(null);
-  }
-
-  /**
-   * The day for a plan: found in the calendar, its year made first, its
+   * The day for a step: found in the calendar, its year made first, its
    * template put in if it is new (model/calendar.ts; neither is an undo step:
    * `scaffold`). Null, with a word to the user, when there is none to be had.
    */
-  private dayFor(date: PlanDate): NodeId | null {
+  private dayFor(date: DayDate): NodeId | null {
     if (!this.structure()) {
       this.notify('Структуры ещё нет: меню «⋯» → «Создать структуру»');
       return null;
@@ -962,12 +864,11 @@ export class Outliner {
       return null;
     }
     if (!this.doc.get(day).children.length) this.scaffold((ctx) => fillDay(ctx, day));
-    this.carryOn(day);
     return day;
   }
 
   /** The day of the calendar the zoom is in (the day itself, not a week or a month); null elsewhere. Reactive. */
-  zoomDay(): PlanDate | null {
+  zoomDay(): DayDate | null {
     this.rowsVersion();
     const z = this.zoom();
     const p = z && this.doc.has(z) ? periodAt(this.doc, z) : null;
@@ -988,7 +889,7 @@ export class Outliner {
   }
 
   /** The view into the day of a date, as «Сегодня» leads into today. */
-  private goToDate(date: PlanDate): void {
+  private goToDate(date: DayDate): void {
     if (sameDate(date, this.todayDate())) return this.goToday();
     const day = this.dayFor(date);
     if (day === null) return;
@@ -997,46 +898,6 @@ export class Outliner {
       this.setFocus(null);
       this.zoomTo(day);
     });
-  }
-
-  /**
-   * Plans the rows for a day, or, with null, cancels their plans (model/today.ts
-   * `planStars`): one undo step, the caret stays. The day comes first if it
-   * is not there: its year and template as the calendar makes them (the
-   * stars of the day before carried on, for today). A day gone by is not
-   * planned. The toast leads to the day and can take the step back.
-   */
-  planFor(keys: RowKey[], date: PlanDate | null): void {
-    if (this.readOnly || !keys.length) return;
-    const today = this.todayDate();
-    if (date && compareDates(date, today) < 0) return;
-    let day: NodeId | null = null;
-    if (date) {
-      day = this.dayFor(date);
-      if (day === null) return;
-    }
-    const keep = this.keepFocus();
-    let did: 'on' | 'off' | null = null;
-    const ops = this.run((ctx) => {
-      let todo: NodeId | null = null;
-      if (day !== null) {
-        todo = todoOf(this.doc, day);
-        if (todo === null) {
-          // Gone or renamed: a new one, after the notes if they lead the day.
-          const first = this.doc.get(day).children[0];
-          placeTrees(ctx, day, first !== undefined && firstWord(this.doc.get(first).text) === 'notes' ? 1 : 0, [{ text: TODO, children: [] }]);
-          todo = todoOf(this.doc, day)!;
-        }
-      }
-      did = planStars(ctx, keys, todo, today);
-      return keep;
-    }, keep);
-    if (!ops.length || !did) return;
-    if (!date) return this.notify('Планирование отменено', { label: 'Отменить', run: () => this.takeBack(ops, 'Снова запланировано') });
-    const back = { label: 'Отменить', run: () => this.takeBack(ops, 'Планирование отменено') };
-    const said = `${keys.length > 1 ? 'Запланированы' : 'Запланировано'} на ${this.planLabel(date)}`;
-    if (this.placeNow() === 'today' && sameDate(date, today)) return this.notify(said, back);
-    this.notify(said, back, { label: 'Открыть', run: () => { this.hideToast(); this.goToDate(date); } });
   }
 
   /** After a reload in today's day: the next morning still leads on to the new day (`resumed`), as after the logo. */
@@ -1053,9 +914,6 @@ export class Outliner {
     const now = new Date().toDateString();
     if (this.date() !== now) {
       this.setDate(now);
-      // A new day with the app left elsewhere: its unfinished still come to its list.
-      const day = this.structure() ? findPeriod(this.doc, this.tags, dayOf(new Date())) : null;
-      if (day !== null) this.carryOn(day);
     }
     const t = this.today;
     if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
@@ -1322,12 +1180,6 @@ export class Outliner {
       return keep;
     }, keep);
     this.notify('Удалено', { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') });
-  }
-
-  /** A row swiped to the right (swipe.ts): the calendar opens to plan it (`openPlanner`). */
-  swipePlan(key: RowKey, rect: PlannerRect): void {
-    if (this.rows.indexOf(key) < 0) return;
-    this.openPlanner([key], rect);
   }
 
   /**

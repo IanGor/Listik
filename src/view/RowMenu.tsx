@@ -1,7 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { Symbol } from './Menu';
 import type { Outliner } from './outliner';
-import { CALENDAR } from './swipe';
 
 /** Room kept between the menu and the window's edges, and between it and the finger, px. */
 const MARGIN = 8;
@@ -98,14 +97,6 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
               Убрать чекбокс
               <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></Symbol>
             </button>
-          </Show>
-          <Show when={o.planOf(key)}>
-            {(plan) => (
-              <button type="button" role="menuitem" onClick={act(() => o.openPlanner([key]))}>
-                {plan().date ? `Запланировано: ${o.planLabel(plan().date!)}` : 'Запланировать…'}
-                <Symbol>{CALENDAR.map((d) => <path d={d} />)}</Symbol>
-              </button>
-            )}
           </Show>
           <button type="button" role="menuitem" onClick={act(() => o.setFocus({ id: key, caret: n().note.length, note: true }))}>
             Заметка

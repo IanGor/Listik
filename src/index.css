@@ -39,9 +39,6 @@
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
-  /* The calendar of a bullet's plan (model/today.ts): yellow as in Things,
-     a deep amber on cream (3.4:1 there, an icon's 3:1), bright on graphite. */
-  --star: light-dark(#a97a00, #f2c94c);
   /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
   --danger: light-dark(#c0392b, #ff6b5e);
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
@@ -1075,48 +1072,6 @@ mark,
   outline: none;
 }
 
-/* The plan of the bullet zoomed into, beside its title (ZoomHeader.tsx): the
-   row's date, centred on the title's first line, or a button to plan it:
-   with a mouse while the pointer is over the header, on a touch screen always. */
-.zoomhead .plan-date {
-  margin-top: calc((34px * var(--text-scale) * 1.2 - 18px) / 2);
-}
-
-.plan-title-button {
-  display: grid;
-  float: right;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  margin: calc((34px * var(--text-scale) * 1.2 - 32px) / 2) 0 0 8px;
-  padding: 0;
-  color: var(--faint);
-  background: none;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out);
-}
-
-:where(:root.mouse) .zoomhead:hover .plan-title-button,
-.plan-title-button:focus-visible {
-  opacity: 1;
-}
-
-:where(:root.mouse) .plan-title-button:hover {
-  color: var(--star);
-}
-
-@media (pointer: coarse) {
-  .plan-title-button {
-    width: 44px;
-    height: 44px;
-    margin-block: calc((34px * var(--text-scale) * 1.2 - 44px) / 2) 0;
-    opacity: 1;
-  }
-}
-
 /* The zoomed-in bullet's note: whole, under the title. */
 .zoom-note {
   margin-top: 6px;
@@ -1303,13 +1258,6 @@ mark,
     font-size: calc(28px * var(--text-scale));
   }
 
-  .zoomhead .plan-date {
-    margin-top: calc((28px * var(--text-scale) * 1.2 - 18px) / 2);
-  }
-
-  .plan-title-button {
-    margin-block: calc((28px * var(--text-scale) * 1.2 - 44px) / 2) 0;
-  }
 
   .shortcuts-body,
   .sheet-body {
@@ -1546,141 +1494,6 @@ mark,
   position: fixed;
   inset: 0;
   z-index: 40;
-}
-
-/* The calendar that plans a bullet for a day (Planner.tsx), after Things'
-   date picker: small and quiet. The month at the left, its steps at the
-   right, the weekdays in small muted type, the days in a plain grid; no
-   fills but today's colour and the day planned. */
-.planner {
-  position: fixed;
-  right: auto;
-  z-index: 41;
-  width: 248px;
-  min-width: 0;
-  padding: 10px 8px 6px;
-  font-size: 13px;
-  user-select: none;
-}
-
-.planner-head {
-  display: flex;
-  align-items: center;
-  padding: 0 2px 0 6px;
-  margin-bottom: 6px;
-}
-
-.planner-month {
-  flex: 1;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.planner .planner-nav {
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  min-height: 0;
-  padding: 0;
-  color: var(--muted);
-  border-radius: 6px;
-}
-
-.planner .planner-nav:disabled {
-  color: var(--faint);
-  cursor: default;
-  background: none;
-  opacity: 0.5;
-}
-
-.planner-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  row-gap: 1px;
-}
-
-.planner-weekday {
-  padding-bottom: 4px;
-  font-size: 11px;
-  color: var(--faint);
-  text-align: center;
-}
-
-.planner .planner-day {
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-height: 0;
-  margin: 0 auto;
-  padding: 0;
-  font-variant-numeric: tabular-nums;
-  border-radius: 50%;
-}
-
-.planner .planner-day.today {
-  font-weight: 600;
-  color: var(--primary);
-}
-
-.planner .planner-day.planned {
-  font-weight: 600;
-  color: var(--canvas);
-  background: var(--primary);
-}
-
-.planner .planner-day.cursor:not(.planned) {
-  box-shadow: inset 0 0 0 1.5px var(--primary);
-}
-
-.planner .planner-day.planned.cursor {
-  box-shadow: 0 0 0 2px var(--canvas), 0 0 0 3.5px var(--primary);
-}
-
-.planner .planner-day:disabled {
-  color: var(--faint);
-  cursor: default;
-  opacity: 0.55;
-}
-
-:where(:root.mouse) .planner .planner-day:not(:disabled):not(.planned):hover {
-  background: var(--surface);
-}
-
-/* Cancelling: one quiet line under a hairline, red only for what it does. */
-.planner .planner-cancel {
-  min-height: 32px;
-  height: 32px;
-  margin-top: 6px;
-  padding: 0 6px;
-  font-size: 13px;
-  border-radius: 6px;
-}
-
-.planner-rule {
-  height: 1px;
-  margin: 6px -2px 0;
-  background: var(--hairline);
-}
-
-@media (pointer: coarse) {
-  .planner {
-    width: 296px;
-    font-size: 14px;
-  }
-
-  .planner .planner-day {
-    width: 38px;
-    height: 38px;
-  }
-
-  .planner .planner-nav {
-    width: 40px;
-    height: 40px;
-  }
-
-  .planner .planner-cancel {
-    height: 44px;
-  }
 }
 
 /* Deleting: red, last, apart from the rest (Apple's destructive action). */
@@ -2058,20 +1871,9 @@ mark,
   right: 0;
 }
 
-.swipe-back.right {
-  left: 0;
-  right: calc(100% - var(--swipe));
-  justify-content: flex-end;
-}
-
 .swipe-back svg {
   flex: none;
   color: var(--primary);
-}
-
-/* To the right: the calendar that plans the bullet. */
-.swipe-back.right svg {
-  color: var(--star);
 }
 
 /* Past the threshold: letting go does it. */
@@ -3108,101 +2910,6 @@ body.is-dragging * {
 
 :where(:root.mouse) .toast-link:hover {
   text-decoration-style: solid;
-}
-
-/* --- Planning: the calendar button and the date (Row.tsx, model/today.ts) - */
-
-/* With a mouse, the button is at the row's end, in a column the row keeps
-   free (the text wraps short of it): shown while the pointer is over the
-   row. Once the bullet is planned, the date in its line takes its place (no
-   button, no column). */
-.row:has(> .plan-button) .body {
-  padding-right: 26px;
-}
-
-.plan-button {
-  position: absolute;
-  top: 2px;
-  right: 0;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 1lh;
-  padding: 0;
-  font: inherit;
-  color: var(--faint);
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out), scale 100ms var(--ease-out);
-}
-
-:where(:root.mouse) .row:hover > .plan-button,
-.plan-button:focus-visible {
-  opacity: 1;
-}
-
-:where(:root.mouse) .plan-button:hover {
-  color: var(--star);
-}
-
-.plan-button:active {
-  scale: 0.85;
-}
-
-/* The day a bullet is planned for, at the end of its first line (floated: the
-   text goes round it, edited or not): a press opens the calendar. */
-.plan-date {
-  display: flex;
-  float: right;
-  gap: 4px;
-  align-items: center;
-  margin: calc((var(--font-size) * var(--line-height) - 18px) / 2) 0 0 8px;
-  padding: 0 7px 0 5px;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--muted);
-  white-space: nowrap;
-  background: var(--surface);
-  border: none;
-  border-radius: 9px;
-  cursor: pointer;
-}
-
-.plan-date svg {
-  flex: none;
-  color: var(--star);
-}
-
-/* Today: the one to look at first. */
-.plan-date.today {
-  color: var(--text);
-}
-
-:where(:root.mouse) .plan-date:hover {
-  background: var(--surface-2);
-}
-
-/* A finger-sized target around the small date. */
-@media (pointer: coarse) {
-  .plan-date {
-    position: relative;
-  }
-
-  .plan-date::before {
-    content: '';
-    position: absolute;
-    inset: -13px -6px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .plan-button {
-    transition: none;
-  }
 }
 
 /* --- Guide lines that fold (Outline.tsx) --------------------------------- */
