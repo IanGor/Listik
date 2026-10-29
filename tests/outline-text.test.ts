@@ -39,6 +39,16 @@ describe('Markdown and OPML', () => {
     expect(outline(parseIndented(toMarkdown(doc)))).toEqual(lines);
   });
 
+  it('a mirror inside what it mirrors goes into OPML without its children, and a mirror elsewhere with them', () => {
+    const doc = build(['a', '  b', '  m', 'm2']);
+    doc.apply({ t: 'setMirror', id: 'm', from: null, to: 'a' });
+    doc.apply({ t: 'setMirror', id: 'm2', from: null, to: 'a' });
+    const xml = toOpml(doc);
+    expect(xml.match(/text="a"/g)).toHaveLength(4); // a, m in it, m2, and m again under m2: both without children
+    expect(xml).toContain('      <outline text="a" />');
+    expect(xml.match(/text="b"/g)).toHaveLength(2); // under the original and under m2
+  });
+
   it('round-trips through OPML, escaping XML', () => {
     const doc = build(lines);
     const xml = toOpml(doc);

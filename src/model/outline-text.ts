@@ -115,14 +115,20 @@ export function toOpml(doc: Doc, title = 'Listik'): string {
     `  <head><title>${escapeXml(title)}</title></head>`,
     '  <body>',
   ];
+  // The bullets whose children are being written, outermost first: a mirror
+  // inside what it mirrors writes no children (as `VisibleRows.host`), or the
+  // export went round it until the stack overflowed.
+  const open = new Set<NodeId>();
   const emit = (id: NodeId, depth: number) => {
     const n = doc.content(id); // a mirror exports as a copy of its original
     const pad = '  '.repeat(depth + 2);
     const extra = (n.note ? ` _note="${escapeXml(n.note)}"` : '') + (n.todo ? ' _task="true"' : '') + (n.done ? ' _complete="true"' : '');
-    const open = `${pad}<outline text="${escapeXml(n.text)}"${extra}`;
-    if (!n.children.length) return out.push(`${open} />`);
-    out.push(`${open}>`);
+    const head = `${pad}<outline text="${escapeXml(n.text)}"${extra}`;
+    if (!n.children.length || open.has(n.id)) return out.push(`${head} />`);
+    out.push(`${head}>`);
+    open.add(n.id);
     for (const c of n.children) emit(c, depth + 1);
+    open.delete(n.id);
     out.push(`${pad}</outline>`);
   };
   for (const c of doc.get(doc.root).children) emit(c, 0);
