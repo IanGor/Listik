@@ -2,7 +2,9 @@
 // The page is network-first, so a new build arrives on the next load; hashed
 // build files are cache-first, since a hash never changes its content.
 // Bump CACHE when this file's strategy changes.
-const CACHE = 'listik-v1';
+// v2: only the app's own page is kept for offline (v1 kept any answer, an
+// error page or a Wi-Fi login page too, and then started offline with it).
+const CACHE = 'listik-v2';
 const SHELL = ['./', './manifest.webmanifest', './favicon.svg', './icons/icon.svg', './icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -25,8 +27,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put('./', copy));
+          if (response.ok && !response.redirected && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put('./', copy));
+          }
           return response;
         })
         .catch(() => caches.match('./')),
