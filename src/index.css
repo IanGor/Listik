@@ -36,6 +36,12 @@
   --tag: light-dark(#28706a, #7cc2b8);
   --tag-chip: light-dark(rgb(40 112 106 / 0.1), rgb(124 194 184 / 0.14));
   --tag-chip-strong: light-dark(rgb(40 112 106 / 0.2), rgb(124 194 184 / 0.26));
+  /* A tag on its stronger chip (the active filter): a step deeper, 4.5:1 there (--tag gave 4.2:1). */
+  --tag-on-strong: light-dark(#1f5a55, #93d0c6);
+  /* Text on the coral (a primary button). */
+  --on-primary: light-dark(#fff, #fff);
+  /* The marker's own colour, opaque, for its swatch among the sketch tools. */
+  --marker-swatch: light-dark(rgb(240 178 80), rgb(232 165 90));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
@@ -892,6 +898,7 @@ kbd {
 
 .tag.active {
   --tag-chip: var(--tag-chip-strong);
+  color: var(--tag-on-strong);
 }
 
 :where(:root.mouse) .tag:hover {
@@ -1549,8 +1556,16 @@ mark,
 }
 
 /* Deleting: red, last, apart from the rest (Apple's destructive action). */
-.menu button.destructive {
+.menu button.destructive,
+.editbar-labelled.destructive {
   color: var(--danger);
+}
+
+/* A new document's one empty bullet says what to do (an empty sheet gave no clue). */
+.window > .row:only-child .text:empty::before {
+  content: 'Пишите здесь · Enter — новый пункт · / — команды';
+  color: var(--faint);
+  pointer-events: none;
 }
 
 /* Between groups: a band across the whole menu, as in Apple's menus, not a hairline. */
@@ -2311,7 +2326,7 @@ body.is-dragging * {
 
 .button.primary {
   align-self: flex-start;
-  color: #fff;
+  color: var(--on-primary);
   background: var(--primary);
 }
 
@@ -3232,7 +3247,7 @@ body.is-dragging * {
 }
 
 .sketch-tool .sketch-swatch {
-  stroke: rgb(240 178 80);
+  stroke: var(--marker-swatch);
   stroke-width: 2.4;
 }
 

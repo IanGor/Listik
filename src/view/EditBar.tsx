@@ -33,6 +33,8 @@ interface Item {
   /** Class of the written name: a format shows in its own style. */
   class?: string;
   run: Run;
+  /** Destructive: set apart by a line and in the danger colour, as in the row menu. */
+  destructive?: true;
   /** Not offered here (greyed out): a mirror is a bullet, not text in a note. */
   off?: (here: Focus) => boolean;
 }
@@ -138,7 +140,7 @@ const SETS: SubSet[] = [
       BOLD,
       ITALIC,
       REDO,
-      { label: 'Удалить', icon: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'], run: (o, h) => o.deleteRows([h.id]) },
+      { label: 'Удалить', icon: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'], run: (o, h) => o.deleteRows([h.id]), destructive: true },
     ],
   },
 ];
@@ -269,10 +271,15 @@ export function EditBar(props: { o: Outliner }) {
               {button({ label: 'Назад', icon: ['M15 6l-6 6 6 6'], run: () => {} }, () => setShown('main'), 'editbar-back')}
               <For each={set.items}>
                 {(item) => (
+                  <>
+                  <Show when={item.destructive}>
+                    <span class="editbar-sep" aria-hidden="true" />
+                  </Show>
                   <button
                     type="button"
                     tabIndex={-1}
                     class="editbar-labelled"
+                    classList={{ destructive: !!item.destructive }}
                     aria-label={item.label}
                     disabled={!!item.off?.({ id: '', caret: 0, ...(inNote() ? { note: true } : {}) })}
                     onClick={() => pick(set, item)}
@@ -280,6 +287,7 @@ export function EditBar(props: { o: Outliner }) {
                     {item.glyph ? <span class="editbar-glyph" aria-hidden="true">{item.glyph}</span> : <Icon paths={item.icon!} />}
                     <span class={`editbar-caption ${item.class ?? ''}`}>{item.label}</span>
                   </button>
+                  </>
                 )}
               </For>
             </div>
