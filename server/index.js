@@ -27,7 +27,7 @@
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
-import { appendFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, rm, stat, truncate } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const DATA = process.env.LISTIK_DATA ?? './data';
@@ -44,6 +44,60 @@ const FAIL_WINDOW_MS = 10 * 60_000;
 
 const ID = /^[A-Za-z0-9_-]{8,64}$/;
 const hash = (s) => createHash('sha256').update(s).digest('hex');
+
+/**
+ * Writes a file whole or not at all: a temporary file, flushed to the disk,
+ * renamed over the old one, and the directory flushed so the rename lasts
+ * a power cut. A crash midway leaves the previous version.
+ */
+async function writeAtomic(path, data) {
+  const tmp = `${path}.tmp`;
+  const fh = await open(tmp, 'w');
+  try {
+    await fh.writeFile(data);
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+  await rename(tmp, path);
+  await syncDir(join(path, '..'));
+}
+
+async function syncDir(dir) {
+  try {
+    const fh = await open(dir, 'r');
+    try {
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    // Not every platform flushes a directory; the file itself is on disk.
+  }
+}
+
+/**
+ * Appends a line to the log, flushed before the answer goes out; resolves to
+ * the file's size before it. A write that fails (a full disk) is cut back to
+ * where the file was: half a line left there swallowed the next batch
+ * appended after it.
+ */
+async function appendDurable(path, line) {
+  const size = await stat(path).then((s) => s.size, (e) => (e.code === 'ENOENT' ? 0 : Promise.reject(e)));
+  try {
+    const fh = await open(path, 'a');
+    try {
+      await fh.write(line);
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+  } catch (e) {
+    await truncate(path, size).catch(() => {});
+    throw e;
+  }
+  return size;
+}
 
 class HttpError extends Error {
   constructor(status, body) {
@@ -63,6 +117,7 @@ class Document {
     this.oldest = 1; // lowest seq still kept
     this.watchers = new Set();
     this.lock = Promise.resolve();
+    this.loading = null;
   }
 
   /** Runs `fn` after every earlier write to this document. */
@@ -72,10 +127,19 @@ class Document {
     return run;
   }
 
-  async load() {
-    if (this.meta) return true;
+  /** Reads the document from disk once; requests that come meanwhile wait for the same reading. */
+  load() {
+    if (this.meta) return Promise.resolve(true);
+    this.loading ??= this.read().finally(() => {
+      this.loading = null;
+    });
+    return this.loading;
+  }
+
+  async read() {
+    let meta;
     try {
-      this.meta = JSON.parse(await readFile(join(this.dir, 'meta.json'), 'utf8'));
+      meta = JSON.parse(await readFile(join(this.dir, 'meta.json'), 'utf8'));
     } catch (e) {
       if (e.code === 'ENOENT') return false;
       throw e;
@@ -86,26 +150,51 @@ class Document {
     } catch (e) {
       if (e.code !== 'ENOENT') throw e;
     }
-    this.oldest = this.meta.head + 1;
+    this.ops.clear();
+    this.oldest = meta.head + 1;
+    // A line cut short by a crash (or one past the head: appended, never
+    // acknowledged) is left out and the log written again without it, rather
+    // than the whole document refusing to open.
+    let dropped = 0;
     for (const line of text.split('\n')) {
       if (!line) continue;
-      const { seq, body, t } = JSON.parse(line);
-      this.ops.set(seq, { body, t });
-      if (seq < this.oldest) this.oldest = seq;
+      let rec;
+      try {
+        rec = JSON.parse(line);
+      } catch {
+        dropped++;
+        continue;
+      }
+      if (!Number.isInteger(rec.seq) || rec.seq > meta.head || typeof rec.body !== 'string') {
+        dropped++;
+        continue;
+      }
+      this.ops.set(rec.seq, { body: rec.body, t: rec.t });
+      if (rec.seq < this.oldest) this.oldest = rec.seq;
     }
+    if (dropped) {
+      console.error(`listik: ${this.id}: ${dropped} damaged or unacknowledged line(s) left out of the log`);
+      await this.rewriteLog();
+    }
+    // Last: until the log is in, the document is not served.
+    this.meta = meta;
     return true;
   }
 
   async saveMeta() {
-    const tmp = join(this.dir, 'meta.json.tmp');
-    await writeFile(tmp, JSON.stringify(this.meta));
-    await rename(tmp, join(this.dir, 'meta.json'));
+    await writeAtomic(join(this.dir, 'meta.json'), JSON.stringify(this.meta));
+  }
+
+  /** The log file as the map holds it, in order. */
+  async rewriteLog() {
+    const lines = [...this.ops].sort((a, b) => a[0] - b[0]).map(([seq, r]) => JSON.stringify({ seq, body: r.body, t: r.t }));
+    await writeAtomic(join(this.dir, 'ops.jsonl'), lines.length ? `${lines.join('\n')}\n` : '');
   }
 
   async create(tokenHash, keyslot) {
     await mkdir(this.dir, { recursive: true });
     this.meta = { tokenHash, head: 0, snapshotSeq: -1, created: Date.now() };
-    await writeFile(join(this.dir, 'keyslot.json'), JSON.stringify(keyslot));
+    await writeAtomic(join(this.dir, 'keyslot.json'), JSON.stringify(keyslot));
     await this.saveMeta();
   }
 
@@ -121,10 +210,18 @@ class Document {
       if (parent !== this.meta.head) throw new HttpError(409, { head: this.meta.head });
       const seq = this.meta.head + 1;
       const t = Date.now();
-      await appendFile(join(this.dir, 'ops.jsonl'), `${JSON.stringify({ seq, body, t })}\n`);
-      this.ops.set(seq, { body, t });
+      const file = join(this.dir, 'ops.jsonl');
+      const size = await appendDurable(file, `${JSON.stringify({ seq, body, t })}\n`);
       this.meta.head = seq;
-      await this.saveMeta();
+      try {
+        await this.saveMeta();
+      } catch (e) {
+        // Not taken after all: nobody may see it, or after a restart another batch got its number.
+        this.meta.head = seq - 1;
+        await truncate(file, size).catch(() => {});
+        throw e;
+      }
+      this.ops.set(seq, { body, t });
       for (const w of this.watchers) w(seq);
       return seq;
     });
@@ -143,9 +240,7 @@ class Document {
     return this.serial(async () => {
       if (seq > this.meta.head) throw new HttpError(400, 'snapshot ahead of the log');
       if (seq < this.meta.snapshotSeq) return; // an older snapshot: nothing to do
-      const tmp = join(this.dir, 'snapshot.bin.tmp');
-      await writeFile(tmp, bytes);
-      await rename(tmp, join(this.dir, 'snapshot.bin'));
+      await writeAtomic(join(this.dir, 'snapshot.bin'), bytes);
       this.meta.snapshotSeq = seq;
       await this.saveMeta();
       await this.retire();
@@ -160,10 +255,7 @@ class Document {
     if (drop === this.oldest) return;
     for (let seq = this.oldest; seq < drop; seq++) this.ops.delete(seq);
     this.oldest = drop;
-    const lines = [...this.ops].sort((a, b) => a[0] - b[0]).map(([seq, r]) => JSON.stringify({ seq, body: r.body, t: r.t }));
-    const tmp = join(this.dir, 'ops.jsonl.tmp');
-    await writeFile(tmp, lines.length ? `${lines.join('\n')}\n` : '');
-    await rename(tmp, join(this.dir, 'ops.jsonl'));
+    await this.rewriteLog();
   }
 
   async destroy() {
@@ -272,7 +364,7 @@ async function handle(req, res) {
     }
     if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
     await doc.serial(async () => {
-      await writeFile(join(doc.dir, 'keyslot.json'), JSON.stringify(body.keyslot));
+      await writeAtomic(join(doc.dir, 'keyslot.json'), JSON.stringify(body.keyslot));
       if (typeof body.newToken === 'string' && body.newToken.length >= 16) {
         doc.meta.tokenHash = hash(body.newToken);
         await doc.saveMeta();
@@ -353,7 +445,13 @@ export function createListikServer() {
 export async function warmUp() {
   await mkdir(join(DATA, 'docs'), { recursive: true });
   for (const id of await readdir(join(DATA, 'docs'))) {
-    if (ID.test(id) && (await stat(join(DATA, 'docs', id))).isDirectory()) await docFor(id).load();
+    try {
+      if (ID.test(id) && (await stat(join(DATA, 'docs', id))).isDirectory()) await docFor(id).load();
+    } catch (e) {
+      // One damaged document must not keep the server, and every other document, down.
+      console.error(`listik: ${id} did not load`, e);
+      docs.delete(id);
+    }
   }
 }
 
