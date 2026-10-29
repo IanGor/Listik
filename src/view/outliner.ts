@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -1158,6 +1158,11 @@ export class Outliner {
   /** Ctrl+Shift+L: tasks become plain bullets again. */
   untask(ids: RowKey[], keep?: Focus): void {
     this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
+  }
+
+  /** A swipe to the right (swipe.ts): the row gets a checkbox, or loses it; never checked. */
+  swipeCheck(key: RowKey): void {
+    this.changeTasks((ctx) => toggleTask(ctx, [key]), [key], this.keepFocus());
   }
 
   /** A click on a task's checkbox: checked or unchecked. */

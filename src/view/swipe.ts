@@ -1,11 +1,11 @@
 import type { RowKey } from '../model/rows';
 import type { Outliner } from './outliner';
-import { tablet } from './screen';
 
 /**
  * A finger swiping a row sideways: to the left the bullet goes to the trash
- * with all it holds (the toast can take it back); to the right nothing
- * happens. One movement: the row's content follows the finger over a
+ * with all it holds (the toast can take it back), to the right the bullet
+ * gets a checkbox, or loses it if it has one (never checked: `Outliner.swipeCheck`).
+ * One movement: the row's content follows the finger over a
  * backing that says what will happen; let go past THRESHOLD of the row's
  * width (or flicked past FLICK), it happens, back under it nothing does.
  *
@@ -32,13 +32,15 @@ const SETTLE = 150;
 /** A swipe's own tap (compatibility mouse events) is not a click on what is under it. */
 const SWALLOW = 400;
 
-// The icon shared with the editing bar (EditBar.tsx) and the row menu: delete.
+// The icons: delete (shared with the editing bar and the row menu), a checkbox, a checkbox crossed out.
+const CHECK = ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z'];
+const UNCHECK = ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M8 12h8'];
 const TRASH = ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'];
 
-/** Lets the row be swiped (not on a tablet: it has the computer's controls); returns the function that stops it. */
+/** Lets the row be swiped (a tablet too, by a finger); returns the function that stops it. */
 export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () => boolean): () => void {
   const down = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch' || tablet() || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
+    if (e.pointerType !== 'touch' || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
     if (row.classList.contains('settling') || (e.target as Element).closest('.bullet')) return;
     if (e.clientX < EDGE || e.clientX > innerWidth - EDGE) return;
     track(e);
@@ -75,7 +77,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
       }
       if (ev.timeStamp > last.t) speed = (ev.clientX - last.x) / (ev.timeStamp - last.t);
       last = { x: ev.clientX, t: ev.timeStamp };
-      dx = Math.max(-width, Math.min(0, mx));
+      dx = Math.max(-width, Math.min(width, mx));
       show();
     };
 
@@ -86,9 +88,11 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
         row.style.setProperty('--swipe', '0px');
         return;
       }
-      if (!back) {
+      const side = dx < 0 ? 'left' : 'right';
+      if (back?.dataset.side !== side) {
+        back?.remove();
         armed = false;
-        back = backing('Удалить', TRASH);
+        back = side === 'left' ? backing(side, 'Удалить', TRASH) : backing(side, o.contentOf(key).todo ? 'Убрать чекбокс' : 'Чекбокс', o.contentOf(key).todo ? UNCHECK : CHECK);
         row.append(back);
       }
       row.style.setProperty('--swipe', `${dx}px`);
@@ -112,6 +116,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
           clear();
         });
       }
+      if (dx > 0 && (armed || flick)) o.swipeCheck(key);
       settle(0, clear);
     };
 
@@ -147,9 +152,10 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
 }
 
 /** What shows in the room the row's content leaves: the action's icon and word. */
-function backing(label: string, icon: string[]): HTMLElement {
+function backing(side: 'left' | 'right', label: string, icon: string[]): HTMLElement {
   const el = document.createElement('div');
-  el.className = 'swipe-back left';
+  el.className = `swipe-back ${side}`;
+  el.dataset.side = side;
   el.setAttribute('aria-hidden', 'true');
   const paths = icon.map((d) => `<path d="${d}"/>`).join('');
   el.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg><span>${label}</span>`;

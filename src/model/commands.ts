@@ -245,6 +245,16 @@ export function cycleTask(ctx: Ctx, ids: RowKey[]): void {
   else untask(ctx, ids);
 }
 
+/**
+ * A swipe to the right: a plain bullet gets a checkbox, a task loses it. Never
+ * checked: the done state is not touched by this (a done task goes plain).
+ */
+export function toggleTask(ctx: Ctx, ids: RowKey[]): void {
+  const nodes = [...new Set(ids.map((id) => ctx.doc.content(nodeOf(id))))];
+  if (nodes.every((n) => n.todo)) untask(ctx, ids);
+  else for (const n of nodes) if (!n.todo) ctx.doc.apply({ t: 'setTodo', id: n.id, from: false, to: true });
+}
+
 /** Ctrl+Shift+L: tasks become plain bullets again (and so not done). */
 export function untask({ doc }: Ctx, ids: RowKey[]): void {
   for (const n of new Set(ids.map((id) => doc.content(nodeOf(id))))) {

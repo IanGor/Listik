@@ -1871,6 +1871,12 @@ mark,
   right: 0;
 }
 
+.swipe-back.right {
+  left: 0;
+  right: calc(100% - var(--swipe));
+  justify-content: flex-end;
+}
+
 .swipe-back svg {
   flex: none;
   color: var(--primary);

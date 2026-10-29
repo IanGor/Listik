@@ -320,6 +320,20 @@ describe('moveManyTo (drag and drop)', () => {
 });
 
 describe('tasks (checkbox bullets)', () => {
+  it('a swipe to the right puts a checkbox on, and takes it off; a done task goes plain, never checked', () => {
+    const { doc, ctx, run } = setup(['a']);
+    const state = () => ({ todo: doc.get('a').todo, done: doc.get('a').done });
+    run(() => cmd.toggleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: false });
+    run(() => cmd.toggleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: false, done: false });
+    run(() => cmd.cycleTask(ctx, ['a']));
+    run(() => cmd.cycleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: true, done: true });
+    run(() => cmd.toggleTask(ctx, ['a']));
+    expect(state()).toEqual({ todo: false, done: false });
+  });
+
   it('Ctrl+L goes round three states: a task, checked, plain again; a click on the box only checks and unchecks', () => {
     const { doc, ctx, run } = setup(['a']);
     const state = () => ({ todo: doc.get('a').todo, done: doc.get('a').done });

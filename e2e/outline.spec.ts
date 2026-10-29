@@ -1474,26 +1474,26 @@ test.describe('done and notes', () => {
     await page.keyboard.press('Control+l');
     await expect(box).toHaveClass(/todo/);
     await expect(box).toHaveAttribute('aria-checked', 'false');
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await page.keyboard.press('Control+l');
     await expect(row).toHaveClass(/done/);
     await expect(box).toHaveAttribute('aria-checked', 'true');
     // The third press: a plain bullet again; the fourth, a task again.
     await page.keyboard.press('Control+l');
     await expect(box).not.toHaveClass(/todo/);
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await page.keyboard.press('Control+l');
     await expect(box).toHaveClass(/todo/);
     // A click on the box only checks and unchecks; the caret stays in the row.
     await box.click();
     await expect(row).toHaveClass(/done/);
     await box.click();
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await expect(box).toHaveClass(/todo/);
     await expect(editing(page)).toHaveText('Часть вторая');
     await page.keyboard.press('Control+l');
     await page.keyboard.press('Control+z');
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await page.keyboard.press('Control+Shift+L');
     await expect(box).not.toHaveClass(/todo/);
     // The old key does nothing now: no task, no split.
@@ -1513,7 +1513,7 @@ test.describe('done and notes', () => {
     await expect(row).toHaveClass(/done/);
     await expect(editing(page)).toHaveText('Том второй'); // editing goes on
     await row.locator('.bullet').click();
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
@@ -1532,7 +1532,7 @@ test.describe('done and notes', () => {
     await expect(page.locator('.toast')).toContainText('Выполнено');
     await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
     expect(await outline(page)).toEqual(DEMO);
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await expect(row.locator('.bullet')).toHaveClass(/todo/);
     // Unchecked before its time: it stays.
     await row.locator('.bullet').click();
@@ -1552,7 +1552,7 @@ test.describe('done and notes', () => {
     const first = Date.now();
     await page.waitForTimeout(1000);
     await box.click();
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await page.waitForTimeout(500);
     await box.click();
     const last = Date.now();
@@ -1605,7 +1605,7 @@ test.describe('done and notes', () => {
     await page.keyboard.press('Control+z');
     expect(await outline(page)).toEqual(DEMO);
     const row = page.locator('.row', { hasText: 'Eh bien' });
-    await expect(row).not.toHaveClass(/done/);
+    await expect(row).not.toHaveClass(/checked/);
     await expect(row.locator('.bullet')).toHaveClass(/todo/);
   });
 
@@ -2697,16 +2697,18 @@ test.describe('touch screen', () => {
     await expect(editing(page)).toHaveCount(0);
   });
 
-  test('a swipe to the right does nothing: the row springs back', async ({ page }) => {
-    await page.getByRole('button', { name: 'Меню документа' }).tap();
-    await page.getByRole('menuitem', { name: /Создать структуру/ }).tap();
-    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).tap();
-    const row = page.locator('.row', { hasText: 'Часть вторая' });
-    const before = await outline(page);
-    await swipeRow(page, 'Часть вторая', 0.3, 0.85);
-    await expect(page.locator('.swipe-back')).toHaveCount(0);
+  test('a swipe to the right puts a checkbox on the row, a second one takes it off; nothing is checked', async ({ page }) => {
+    const row = page.locator('.row', { hasText: 'Том второй' });
+    const finger = await swipeRow(page, 'Том второй', 0.3, 0.85, { lift: false });
+    await expect(page.locator('.swipe-back')).toHaveText('Чекбокс');
+    await finger.lift();
+    await expect(row.locator('.bullet')).toHaveClass(/todo/);
+    await expect(row.locator('.bullet')).not.toHaveClass(/checked/);
     await expect(row).not.toHaveClass(/settling/);
-    expect(await outline(page)).toEqual(before);
+    const again = await swipeRow(page, 'Том второй', 0.3, 0.85, { lift: false });
+    await expect(page.locator('.swipe-back')).toHaveText('Убрать чекбокс');
+    await again.lift();
+    await expect(row.locator('.bullet')).not.toHaveClass(/todo/);
   });
 
   test('no swipe when the finger goes up or down, starts at the screen edge, or is in the edited row', async ({ page }) => {
@@ -2997,7 +2999,7 @@ test.describe('templates', () => {
     // Copied unchecked, a task still.
     const copy = page.locator('.row', { hasText: 'Итоги' }).first();
     await expect(copy.locator('.bullet')).toHaveClass(/todo/);
-    await expect(copy).not.toHaveClass(/done/);
+    await expect(copy).not.toHaveClass(/checked/);
 
     // In a bullet with text: it all comes in after it, and /template lists them all.
     await page.keyboard.press('Escape');
