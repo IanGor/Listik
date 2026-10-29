@@ -3,7 +3,8 @@ import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseAll, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
-import { invert, type Doc } from '../model/doc';
+import { invert, newId, type Doc } from '../model/doc';
+import { clock } from '../model/clock';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
@@ -12,7 +13,8 @@ import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query
 import { projectTags } from '../model/projects';
 import { backlogTargets, fillDayToday, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
-import { TagIndex, searchable, tagText } from '../model/tags';
+import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
+import { timeOfDay } from '../model/time';
 import { insertTemplate } from '../model/templates';
 import { deletedEntries, restoreDeleted, type Deleted } from '../model/trash';
 import type { Focus, NodeId, Op } from '../model/types';
@@ -100,7 +102,8 @@ export type FocusRequest = Focus | { id: NodeId; x: number; line: 'first' | 'las
 export type TitleEdit = { note: boolean; caret: number } | null;
 
 /** What the places line (GoTo.tsx) is open for: going to a place, or moving rows into one. */
-export type PlaceLine = { kind: 'go' } | { kind: 'move'; keys: RowKey[]; label: string };
+/** The places line: going to a place, or putting rows into one (`mirror`: a copy of each, «Зеркало в…»). */
+export type PlaceLine = { kind: 'go' } | { kind: 'move'; keys: RowKey[]; label: string; mirror?: boolean };
 
 /** Several rows selected: from `anchor` (where it started) to `head` (the moving end). */
 export interface Selection {
@@ -638,18 +641,57 @@ export class Outliner {
    * Ctrl+Shift+M, "Куда…" on the editing bar: the places line opens as
    * "Переместить в…" for these rows (GoTo.tsx). The outline stays as it is.
    */
-  openMove(keys: RowKey[]): void {
+  openMove(keys: RowKey[], mirror = false): void {
     if (this.readOnly || !keys.length) return;
     this.settleTitle();
     this.placeBack = this.caretNow();
     const first = titleOf(this.contentOf(keys[0]).text) || 'пустой пункт';
-    this.setPlaceLine({ kind: 'move', keys, label: keys.length > 1 ? `${keys.length} ${plural(keys.length, 'пункт', 'пункта', 'пунктов')}` : `«${first}»` });
+    this.setPlaceLine({ kind: 'move', keys, mirror, label: keys.length > 1 ? `${keys.length} ${plural(keys.length, 'пункт', 'пункта', 'пунктов')}` : `«${first}»` });
   }
 
   /** The rows "Переместить в…" is open for, and what the line says of them; null: it is not. */
-  moving(): { keys: RowKey[]; label: string } | null {
+  moving(): { keys: RowKey[]; label: string; mirror?: boolean } | null {
     const line = this.placeLine();
     return line?.kind === 'move' ? line : null;
+  }
+
+  /** «Зеркало в…» (the row menu): the places line, the rows staying where they are and a copy of each going last into the place. */
+  openMirrorInto(keys: RowKey[]): void {
+    this.openMove(keys, true);
+  }
+
+  /** The copies «Зеркало в…» asked for, last in `target` (its original's children, for a mirror), folded: one undo step. */
+  private mirrorInto(keys: RowKey[], target: NodeId): void {
+    this.setPlaceLine(null);
+    const back = this.placeBack;
+    this.placeBack = null;
+    const origins = [...new Set(keys.filter((k) => this.rows.indexOf(k) >= 0).map((k) => this.doc.origin(nodeOf(k))))];
+    const host = this.doc.host(target)?.id;
+    if (!origins.length || !host) return;
+    const keep = back && 'caret' in back ? back : undefined;
+    const ops = this.run((ctx) => {
+      const now = clock.now();
+      for (const origin of origins) {
+        const order = ctx.doc.orderAt(host, ctx.doc.get(host).children.length);
+        ctx.doc.apply({
+          t: 'insert', parent: host,
+          node: { id: newId(), order, text: '', note: '', collapsed: true, todo: false, done: false, created: now, updated: now, children: [], mirrorOf: origin },
+        });
+      }
+      return keep;
+    }, keep);
+    const place = this.doc.origin(target);
+    const name = plainText(this.doc.get(place).text).trim() || 'пункт без названия';
+    this.notify(origins.length > 1 ? `${origins.length} ${plural(origins.length, 'зеркало', 'зеркала', 'зеркал')} в` : 'Зеркало в', {
+      label: 'Отменить',
+      run: () => this.takeBack(ops, 'Зеркало убрано'),
+    }, {
+      label: name.length > 40 ? name.slice(0, 39) + '…' : name,
+      run: () => {
+        this.hideToast();
+        this.zoomTo(place);
+      },
+    });
   }
 
   /** The places line closes with nothing done (Esc, a press outside): the caret goes back where it was. */
@@ -681,6 +723,7 @@ export class Outliner {
   moveInto(target: NodeId): void {
     const m = this.moving();
     if (!m || this.readOnly) return;
+    if (m.mirror) return this.mirrorInto(m.keys, target);
     this.setPlaceLine(null);
     const back = this.placeBack;
     this.placeBack = null;
@@ -1611,6 +1654,33 @@ export class Outliner {
    */
   makeMirror(id: RowKey, target: NodeId, start: number, end: number): void {
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
+  }
+
+  /**
+   * A `/command` taken from the suggestions (model/complete.ts `COMMANDS`),
+   * typed at [start, end) of the row's text (or note): one undo step. Some
+   * leave a start in its place for the next suggestions to take over (`((`,
+   * `[[`, `#`, `@`), the rest take the token out and act on the bullet.
+   */
+  slash(id: RowKey, note: boolean, start: number, end: number, name: string): void {
+    if (this.readOnly) return;
+    const at = (caret: number): Focus => (note ? { id, caret, note: true } : { id, caret });
+    const starts: Record<string, [string, number]> = {
+      ссылка: ['[[]]', 2], зеркало: ['(())', 2], тег: ['#', 1], дата: ['@', 1], жирный: ['****', 2], курсив: ['**', 1],
+    };
+    if (name === 'time') return this.insert(at(end), timeOfDay(), end - start);
+    if (starts[name]) return this.insert(at(end), starts[name][0], end - start, starts[name][1]);
+    this.run((ctx) => {
+      const n = ctx.doc.content(nodeOf(id));
+      const without = (note ? n.note : n.text).slice(0, start) + (note ? n.note : n.text).slice(end);
+      if (note) setNote(ctx, id, without);
+      else setText(ctx, id, without);
+      if (name === 'задача') toggleTask(ctx, [id]);
+      if (name === 'секрет' && !isSecret(n)) setText(ctx, id, `${n.text.replace(/\s+$/, '')}${n.text.trim() ? ' ' : ''}#secret`);
+      if (name === 'заметка') return { id, caret: n.note.length, note: true };
+      return at(start);
+    }, at(start));
+    if (name === 'переместить') this.openMove([id]);
   }
 
   /** A template taken from the `/` suggestions (model/templates.ts): what is inside it comes in, one undo step. */

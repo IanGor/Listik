@@ -37,6 +37,26 @@ export function SearchBar(props: { o: Outliner }) {
     return q ? list.filter((s) => normalize(s) !== q && normalize(s).includes(q)) : list;
   };
   const run = (query: string) => o.setQuery(query, true);
+  /** The search's own syntax, shown with the box empty: a press puts it in, the caret after it. */
+  const SYNTAX: { token: string; hint: string }[] = [
+    { token: '#', hint: 'тег' },
+    { token: '-', hint: 'без' },
+    { token: '""', hint: 'фраза' },
+    { token: 'OR ', hint: 'или' },
+    { token: 'is:todo ', hint: 'открытые' },
+    { token: 'is:done ', hint: 'выполненные' },
+  ];
+  const putIn = (token: string) => {
+    const q = o.query();
+    const next = `${q}${q && !q.endsWith(' ') ? ' ' : ''}${token}`;
+    o.setQuery(next);
+    const caret = token === '""' ? next.length - 1 : next.length;
+    queueMicrotask(() => input.setSelectionRange(caret, caret));
+  };
+  /** Focused, nothing typed since: the syntax shows only then, not over the path each time a query is cleared. */
+  const [fresh, setFresh] = createSignal(false);
+  // Not on a phone: there nothing drops over the outline under the keyboard (the help has the syntax).
+  const showSyntax = () => focused() && fresh() && !o.query().trim() && !narrow();
   /** While more of the list lies below, its bottom edge fades: it scrolls. */
   const fade = (el: HTMLElement) => {
     const more = () => el.classList.toggle('more', el.scrollTop + el.clientHeight < el.scrollHeight - 1);
@@ -82,12 +102,16 @@ export function SearchBar(props: { o: Outliner }) {
         title="Слова через пробел, «фраза в кавычках», #тег или @тег; -слово или -#тег исключает; OR — или; is:done — выполненные"
         spellcheck={false}
         value={o.query()}
-        onInput={(e) => o.setQuery(e.currentTarget.value)}
+        onInput={(e) => {
+          setFresh(false);
+          o.setQuery(e.currentTarget.value);
+        }}
         onKeyDown={onKeyDown}
         onFocus={() => {
           // Links follow a title just retyped before the search sees it.
           o.settleTitle();
           setFocused(true);
+          setFresh(true);
         }}
         onBlur={() => setFocused(false)}
       />
@@ -115,10 +139,25 @@ export function SearchBar(props: { o: Outliner }) {
           </svg>
         </button>
       </Show>
-      <Show when={focused() && offered().length}>
+      <Show when={focused() && (offered().length || showSyntax())}>
         {/* Presses never take focus from the box, so the keyboard stays on a phone. */}
         <div ref={fade} class="search-menu" role="list" aria-label="Избранные поиски" onMouseDown={(e) => e.preventDefault()}>
-          <div class="search-menu-label" aria-hidden="true">Избранное</div>
+          <Show when={showSyntax()}>
+            <div class="search-syntax" role="group" aria-label="Как искать">
+              <span class="search-menu-label">Как искать</span>
+              <For each={SYNTAX}>
+                {(s) => (
+                  <button type="button" class="search-token" title={`${s.token.trim()} — ${s.hint}`} onClick={() => putIn(s.token)}>
+                    <code>{s.token.trim() === '""' ? '"…"' : s.token.trim() === '-' ? '-слово' : s.token.trim() === '#' ? '#тег' : s.token.trim()}</code>
+                    <span>{s.hint}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+          <Show when={offered().length}>
+            <div class="search-menu-label" aria-hidden="true">Избранное</div>
+          </Show>
           <For each={offered()}>
             {(q) => (
               <div class="saved-search" role="listitem">

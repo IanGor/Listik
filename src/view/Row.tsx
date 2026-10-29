@@ -44,7 +44,13 @@ export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | nul
             // Opens in the browser (another tab; the system browser from the installed app).
             ? <a class="url" href={p.url} target="_blank" rel="noopener noreferrer">{plain}</a>
             : p.tag
-            ? <span class="tag" classList={{ active: !!props.query?.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit }} data-tag={p.tag}>{p.text}</span>
+            ? <span
+                class="tag"
+                classList={{ active: !!props.query?.tags.some((t) => p.tag!.startsWith(t)), hit: !!p.hit, secret: p.tag === 'secret' }}
+                data-tag={p.tag}
+                // #secret hides the bullet with all inside it from search, tags, links and places (model/tags.ts): it says so.
+                title={p.tag === 'secret' ? 'Секретный: этот пункт со всем вложенным не ищется и не попадает в теги, ссылки и места' : undefined}
+              >{p.text}</span>
             : plain;
         return p.bold || p.italic ? <span classList={{ 'md-bold': !!p.bold, 'md-italic': !!p.italic }}>{inner}</span> : inner;
       }}

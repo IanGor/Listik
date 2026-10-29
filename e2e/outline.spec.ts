@@ -66,6 +66,30 @@ test('a right click anywhere on a row opens its menu, never the browser\'s; the 
   await expect(menu).toHaveCount(0);
 });
 
+test('«Зеркало в…» in the row menu puts a copy of the bullet last into the place named; the toast takes it back', async ({ page }) => {
+  const menu = page.locator('.row-menu');
+  await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click({ button: 'right' });
+  await menu.getByRole('menuitem', { name: 'Зеркало в…' }).click();
+  await expect(page.locator('.goto-input')).toHaveAttribute('placeholder', 'Зеркало «Часть вторая» в…');
+  await page.keyboard.type('Том второй');
+  await page.keyboard.press('Enter');
+  expect(await outline(page)).toEqual([...DEMO, '  Часть вторая']);
+  await expect(page.locator('.row.mirror')).toHaveCount(2); // both copies wear the diamond
+  await expect(page.locator('.toast')).toContainText('Зеркало в');
+  await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+  expect(await outline(page)).toEqual(DEMO);
+});
+
+test('the search box, empty and focused, shows how to search; a press puts the piece in', async ({ page }) => {
+  await page.locator('input.search').click();
+  const syntax = page.getByRole('group', { name: 'Как искать' });
+  await expect(syntax).toBeVisible();
+  await syntax.getByRole('button', { name: /is:todo/ }).click();
+  await expect(page.locator('input.search')).toHaveValue('is:todo ');
+  await expect(page.locator('input.search')).toBeFocused();
+  await expect(syntax).toHaveCount(0); // with a query it gives way to the results
+});
+
 test('renders the demo outline', async ({ page }) => {
   expect(await outline(page)).toEqual(DEMO);
 });
@@ -257,6 +281,26 @@ test.describe('saved searches', () => {
 });
 
 test.describe('go to a place', () => {
+  test('> lists the document\'s actions by name: the trash, the help, undo; Enter runs the first', async ({ page }) => {
+    await page.keyboard.press('Control+k');
+    await expect(page.locator('.goto-input')).toHaveAttribute('placeholder', /> действие/);
+    await page.keyboard.type('>');
+    const list = page.getByRole('listbox', { name: 'Действия' });
+    await expect(list.getByRole('option').first()).toContainText('Сегодня');
+    await page.keyboard.type('корз');
+    await expect(list.getByRole('option')).toHaveText(['Корзина']);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.goto')).toHaveCount(0);
+    await expect(page.locator('.trash')).toBeVisible();
+    await page.keyboard.press('Control+k');
+    await page.keyboard.type('>нечто');
+    await expect(page.locator('.goto-empty')).toHaveText('Нет такого действия');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('>клавиш');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: 'Горячие клавиши' })).toBeVisible();
+  });
+
   const line = (page: Page) => page.getByRole('dialog', { name: 'Перейти к пункту' });
   const places = (page: Page) => page.getByRole('listbox', { name: 'Места' });
   const recent = (page: Page) => page.getByRole('listbox', { name: 'Недавние места' });
@@ -2656,14 +2700,14 @@ test.describe('touch screen', () => {
     await finger(page, 'Часть вторая', { hold: 500 });
     await expect(menu).toBeVisible();
     await expect(page.locator('.row.menu-target')).toHaveText('Часть вторая');
-    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Заметка', 'Переместить в…', 'Удалить']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Заметка', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
     expect(await outline(page)).toEqual(DEMO);
     await menu.getByRole('menuitem', { name: 'Сделать задачей' }).tap();
     await expect(menu).toHaveCount(0);
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
     // By its text too; now a task, it offers to check it and to take the checkbox away.
     await finger(page, 'Часть вторая', { hold: 500, on: '.text' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Отметить выполненной', 'Убрать чекбокс', 'Заметка', 'Переместить в…', 'Удалить']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Отметить выполненной', 'Убрать чекбокс', 'Заметка', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
     // A tap beside it closes it, and what is under the tap is not touched: the bullet is not zoomed into.
     const other = (await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').boundingBox())!;
     await page.touchscreen.tap(other.x + other.width / 2, other.y + other.height / 2);
@@ -3063,7 +3107,7 @@ test.describe('templates', () => {
 });
 
 test.describe('suggestions', () => {
-  const list = (page: Page, name: 'Теги' | 'Команды') => page.getByRole('listbox', { name });
+  const list = (page: Page, name: 'Теги' | 'Команды' | 'Зеркала') => page.getByRole('listbox', { name });
   const options = (page: Page) => page.getByRole('option').allTextContents();
   /** Pastes one line into the edited row: many tags at once. */
   const paste = (page: Page, text: string) =>
@@ -3130,13 +3174,40 @@ test.describe('suggestions', () => {
     await edit(page, 'Том второй');
     await page.keyboard.type(' /');
     await expect(list(page, 'Команды')).toBeVisible();
-    expect(await options(page)).toEqual(['/timeтекущее время, ЧЧ:ММ']);
+    // The block menu: every action on a bullet by name, what it does, its key.
+    expect((await options(page)).slice(0, 2)).toEqual(['/задачачекбокс у пунктаCtrl+L', '/заметказаметка под пунктомShift+Enter']);
     await page.keyboard.type('ti');
     await page.keyboard.press('Tab');
     await expect(editing(page)).toHaveText('Том второй 09:05');
     expect(await outline(page)).toEqual(DEMO.slice(0, -1).concat('Том второй 09:05'));
     await page.keyboard.type(' /x');
     await expect(list(page, 'Команды')).toHaveCount(0);
+  });
+
+  test('/задача puts a checkbox on, /зеркало starts a mirror, /переместить opens the places line: one undo step each', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.type(' /зада');
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('Том второй ');
+    await expect(page.locator('.row', { hasText: 'Том второй' }).locator('.check')).toHaveCount(1);
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.row', { hasText: 'Том второй' }).locator('.check')).toHaveCount(0);
+    await expect(editing(page)).toHaveText('Том второй /зада');
+    await page.keyboard.press('Escape');
+    await edit(page, 'Том второй /зада');
+    await page.keyboard.press('Control+End');
+    await expect(list(page, 'Команды')).toBeVisible(); // at the token's end its suggestions come back
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/mirr');
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toHaveText('(())');
+    await expect(list(page, 'Зеркала')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('/перем');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.goto-input')).toBeFocused();
   });
 
   test('as many as fit a third of the window; in the middle of a word the whole word is replaced', async ({ page }) => {

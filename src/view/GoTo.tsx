@@ -3,14 +3,41 @@ import { dayOf, periodName } from '../model/calendar';
 import { findPlaces, meansToday, placeOf, type Place } from '../model/places';
 import { searchable } from '../model/tags';
 import type { Outliner } from './outliner';
-import { phone } from './screen';
+import { MOD, phone } from './screen';
+import { toggleTheme } from './theme';
 
 /** Places listed for what is typed, and recent ones before anything is. */
 const PLACES = 8;
 const RECENT = 5;
 
 /** A place in the list, or today's day ("today", "сегодня" typed), which may not be in the calendar yet. */
-type Item = Place & { today?: true };
+type Item = Place & { today?: true; action?: () => void };
+
+/**
+ * What `>` lists in "Перейти к…": the document's actions by name, a command
+ * palette (UX audit, 29 October 2026), so they need neither the menu nor a
+ * key remembered. Each one's key, if it has one, stands where a place's
+ * path does.
+ */
+const actions = (o: Outliner): Item[] => {
+  const act = (title: string, hint: string, action: () => void): Item => ({ id: '', title, path: hint ? [hint] : [], action });
+  return [
+    act('Сегодня', '', () => o.goToday()),
+    act('Inbox', '', () => o.goInbox()),
+    act('Главная', '', () => o.goHome()),
+    ...(o.readOnly ? [] : [act('Записать в Inbox', `${MOD}+Shift+Space`, () => o.openCapture())]),
+    ...(o.readOnly || !o.history.canUndo ? [] : [act('Отменить', `${MOD}+Z`, () => o.undo())]),
+    ...(o.readOnly || !o.history.canRedo ? [] : [act('Повторить', `${MOD}+Shift+Z`, () => o.redo())]),
+    act(o.trashOpen() ? 'Скрыть корзину' : 'Корзина', '', () => o.showTrash()),
+    act('Тема: светлая / тёмная', '', () => toggleTheme(new DOMRect(innerWidth / 2, innerHeight / 3, 0, 0))),
+    act('Синхронизация', '', () => o.showSync()),
+    act('Жесты и клавиши', '?', () => o.showHelp()),
+    ...(o.readOnly ? [] : [act('Создать структуру', 'PARA и календарь', () => o.createStructure())]),
+  ];
+};
+
+/** `>` and what follows it: the actions' filter, or null for a place's name. */
+const actionQuery = (q: string): string | null => (q.trimStart().startsWith('>') ? q.trimStart().slice(1).trim().toLowerCase() : null);
 
 /** Today's day, the date where a place's path is. */
 const todayItem = (): Item => ({ id: '', title: 'Сегодня', path: [periodName(dayOf(new Date()))], today: true });
@@ -58,9 +85,16 @@ function Line(props: { o: Outliner }) {
   const lookUp = () => {
     const q = text();
     const m = moving();
-    const skip = m ? (id: string) => o.moveRefuses(id) : undefined;
+    const skip = m && !m.mirror ? (id: string) => o.moveRefuses(id) : undefined;
     const recent = m ? [...new Set([...o.recentTargets(), ...o.recentPlaces()])] : o.recentPlaces().filter((id) => id !== o.zoom());
     const today = !m && o.structure() && meansToday(q) ? [todayItem()] : [];
+    const wanted = m ? null : actionQuery(q);
+    if (wanted !== null) {
+      setPlaces(actions(o).filter((a) => a.title.toLowerCase().includes(wanted)));
+      setLooked(q);
+      setActive(0);
+      return;
+    }
     setPlaces(
       q.trim()
         ? [...today, ...findPlaces(o.doc, o.text, q, PLACES, skip)]
@@ -104,6 +138,10 @@ function Line(props: { o: Outliner }) {
 
   /** Goes to a place, or moves the rows into it; either way the line closes. */
   const take = (place: Item, edit: boolean) => {
+    if (place.action) {
+      o.closePlaceLine();
+      return place.action();
+    }
     if (place.today) o.goToTodayPlace();
     else if (moving()) o.moveInto(place.id);
     else o.goToPlace(place.id, edit);
@@ -144,13 +182,15 @@ function Line(props: { o: Outliner }) {
     }
   };
 
-  const label = () => (moving() ? 'Куда переместить' : text().trim() ? 'Места' : 'Недавние места');
+  /** The verb of a line that puts rows into a place: moved, or a mirror of them. */
+  const verb = () => (moving()?.mirror ? 'Зеркало' : 'Переместить');
+  const label = () => (moving() ? (moving()!.mirror ? 'Куда поставить зеркало' : 'Куда переместить') : actionQuery(text()) !== null ? 'Действия' : text().trim() ? 'Места' : 'Недавние места');
 
   return (
     <>
       <div class="goto-scrim" aria-hidden="true" />
       {/* Presses inside never take focus from the line, so the keyboard stays on a phone. */}
-      <div class="goto" role="dialog" aria-label={moving() ? 'Переместить' : 'Перейти к пункту'} onMouseDown={(e) => e.target !== input && e.preventDefault()}>
+      <div class="goto" role="dialog" aria-label={moving() ? verb() : 'Перейти к пункту'} onMouseDown={(e) => e.target !== input && e.preventDefault()}>
         <div class="goto-line">
           <Show
             when={moving()}
@@ -175,14 +215,14 @@ function Line(props: { o: Outliner }) {
             enterkeyhint="go"
             autocomplete="off"
             spellcheck={false}
-            placeholder={moving() ? `Переместить ${moving()!.label} в…` : 'Перейти к пункту…'}
-            aria-label={moving() ? `Переместить ${moving()!.label} в` : 'Перейти к пункту'}
+            placeholder={moving() ? `${verb()} ${moving()!.label} в…` : 'Перейти к пункту… или > действие'}
+            aria-label={moving() ? `${verb()} ${moving()!.label} в` : 'Перейти к пункту'}
             value={text()}
             onInput={(e) => setText(e.currentTarget.value)}
             onKeyDown={onKeyDown}
             onBlur={() => o.closePlaceLine()}
           />
-          <Show when={phone()} fallback={<span class="goto-hint" aria-hidden="true">{moving() ? 'Enter — переместить · Esc' : 'Enter — перейти · Esc'}</span>}>
+          <Show when={phone()} fallback={<span class="goto-hint" aria-hidden="true">{moving() ? (moving()!.mirror ? 'Enter — поставить · Esc' : 'Enter — переместить · Esc') : 'Enter — перейти · Esc'}</span>}>
             <button type="button" class="goto-close" aria-label="Закрыть" onClick={() => o.closePlaceLine()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
                 <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
@@ -194,13 +234,13 @@ function Line(props: { o: Outliner }) {
           when={places().length}
           fallback={
             <Show when={text().trim() && looked() === text()}>
-              <div class="goto-empty">{moving() ? 'Нет места с таким названием' : 'Нет пункта с таким названием'}</div>
+              <div class="goto-empty">{moving() ? 'Нет места с таким названием' : actionQuery(text()) !== null ? 'Нет такого действия' : 'Нет пункта с таким названием'}</div>
             </Show>
           }
         >
           <div ref={fade} class="goto-list">
             <Show when={!text().trim()}>
-              <div class="goto-label" aria-hidden="true">Недавние</div>
+              <div class="goto-label" aria-hidden="true">Недавние<Show when={!moving()}> · <kbd>&gt;</kbd> — действия</Show></div>
             </Show>
             <div role="listbox" aria-label={label()}>
               <For each={places()}>

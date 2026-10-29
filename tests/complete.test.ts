@@ -28,9 +28,15 @@ describe('tokenBefore', () => {
 
 describe('matchCommands', () => {
   it('filters by the start of the name, any case', () => {
-    expect(matchCommands('').map((c) => c.name)).toEqual(['time']);
+    // The block menu: every action on a bullet, by its Russian name or the English one.
+    expect(matchCommands('').map((c) => c.name)).toEqual(['задача', 'заметка', 'тег', 'ссылка', 'зеркало', 'дата', 'time', 'жирный', 'курсив', 'переместить', 'секрет']);
     expect(matchCommands('TI').map((c) => c.name)).toEqual(['time']);
+    expect(matchCommands('вре').map((c) => c.name)).toEqual(['time']);
+    expect(matchCommands('mir').map((c) => c.name)).toEqual(['зеркало']);
+    expect(matchCommands('за').map((c) => c.name)).toEqual(['задача', 'заметка']);
     expect(matchCommands('x')).toEqual([]);
+    // In a note: what works there.
+    expect(matchCommands('', true).map((c) => c.name)).toEqual(['тег', 'ссылка', 'дата', 'time', 'жирный', 'курсив']);
   });
 });
 

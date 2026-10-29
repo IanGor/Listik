@@ -1,4 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { markdownOf } from '../model/outline-text';
+import { nodeOf } from '../model/rows';
 import { Symbol } from './Menu';
 import type { Outliner } from './outliner';
 
@@ -110,6 +112,16 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
             Переместить в…
             <Symbol><path d="M3 7h6l2 2h10v10H3z" /><path d="M10 14h6M13 11l3 3-3 3" /></Symbol>
           </button>
+          <button type="button" role="menuitem" onClick={act(() => o.openMirrorInto([key]))}>
+            Зеркало в…
+            <Symbol><path d="m12 4 5 5-5 5-5-5z" /><path d="M5 19h14" /></Symbol>
+          </button>
+        </Show>
+        <button type="button" role="menuitem" onClick={act(() => void navigator.clipboard?.writeText(markdownOf(o.doc, [nodeOf(key)])).then(() => o.notify('Скопировано'), () => o.notify('Не удалось скопировать')))}>
+          Копировать
+          <Symbol><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></Symbol>
+        </button>
+        <Show when={!o.readOnly}>
           <div class="menu-sep" role="separator" />
           <button type="button" role="menuitem" class="destructive" onClick={act(() => o.swipeDelete(key))}>
             Удалить

@@ -48,17 +48,41 @@ export function tokenBefore(text: string, caret: number): Token | null {
 }
 
 export interface Command {
+  /** What it is called and shown as, `/name`. */
   name: string;
+  /** Other names it is found by (the English ones, typed on a Latin layout). */
+  aliases: string[];
   hint: string;
+  /** Its key, `Mod` standing for Ctrl or ⌘ (view/screen.ts `MOD`). */
+  key?: string;
+  /** Offered in a note too (the rest act on the bullet itself). */
+  note?: boolean;
 }
 
-/** What `/` offers; the action of each lives in view/Suggest.tsx. */
-export const COMMANDS: readonly Command[] = [{ name: 'time', hint: 'текущее время, ЧЧ:ММ' }];
+/**
+ * What `/` offers: the block menu, every action on a bullet by name, so
+ * none lives in typed syntax or a key alone (UX audit, 29 October 2026).
+ * Most used first; the action of each is `Outliner.slash`. Templates by
+ * name follow them (view/Suggest.tsx).
+ */
+export const COMMANDS: readonly Command[] = [
+  { name: 'задача', aliases: ['task', 'todo', 'чекбокс'], hint: 'чекбокс у пункта', key: 'Mod+L' },
+  { name: 'заметка', aliases: ['note'], hint: 'заметка под пунктом', key: 'Shift+Enter' },
+  { name: 'тег', aliases: ['tag'], hint: '#тег из уже существующих', note: true },
+  { name: 'ссылка', aliases: ['link'], hint: '[[ссылка]] на другой пункт', note: true },
+  { name: 'зеркало', aliases: ['mirror', 'копия'], hint: '((зеркало)): этот же пункт ещё и здесь' },
+  { name: 'дата', aliases: ['date', 'день'], hint: 'день словом: @today, @monday…', note: true },
+  { name: 'time', aliases: ['время'], hint: 'текущее время, ЧЧ:ММ', note: true },
+  { name: 'жирный', aliases: ['bold'], hint: '**жирный**', key: 'Mod+B', note: true },
+  { name: 'курсив', aliases: ['italic'], hint: '*курсив*', key: 'Mod+I', note: true },
+  { name: 'переместить', aliases: ['move'], hint: 'в другое место по названию', key: 'Mod+Shift+M' },
+  { name: 'секрет', aliases: ['secret'], hint: '#secret: не искать со всем, что внутри' },
+];
 
-/** Commands whose name starts with the query. */
-export function matchCommands(query: string): Command[] {
+/** Commands with a name or alias that starts with the query (in a note, those that work there). */
+export function matchCommands(query: string, note = false): Command[] {
   const q = query.toLowerCase();
-  return COMMANDS.filter((c) => c.name.startsWith(q));
+  return COMMANDS.filter((c) => (!note || c.note) && [c.name, ...c.aliases].some((name) => name.startsWith(q)));
 }
 
 /**

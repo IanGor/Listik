@@ -440,6 +440,48 @@ kbd {
   background: var(--canvas);
 }
 
+/* The search's syntax, with the box empty: one press puts a piece in. */
+.search-syntax {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 4px 8px;
+}
+
+.search-syntax .search-menu-label {
+  position: static;
+  flex-basis: 100%;
+  padding: 8px 4px 0;
+}
+
+.search-token {
+  display: inline-flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-token code {
+  font-family: var(--font-text);
+  color: var(--tag);
+}
+
+.search-token span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+:where(:root.mouse) .search-token:hover {
+  background: var(--surface-2);
+}
+
 .saved-search {
   display: flex;
   align-items: center;
@@ -1752,6 +1794,18 @@ mark,
 
 /* --- Suggestions for /commands and #tags (Suggest.tsx) --------------------- */
 
+/* #secret: a small lock before the tag, the one sign that the bullet and all inside it are left out of search. */
+.tag.secret::before {
+  content: '';
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.2em;
+  vertical-align: -0.05em;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='10' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
 .suggest {
   position: fixed;
   z-index: 25;
@@ -1791,6 +1845,25 @@ mark,
 
 .suggest-link .suggest-label {
   color: var(--link);
+}
+
+/* A command: its name (whole), what it does (giving way), its key. */
+.suggest-command .suggest-label {
+  flex: none;
+}
+
+.suggest-command .suggest-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggest-key {
+  flex: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
 }
 
 /* A link's hint is where the bullet is: it gives way to the title. */

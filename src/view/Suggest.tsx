@@ -5,12 +5,11 @@ import { dateHint, dateText, matchDates } from '../model/dates';
 import { findTargets } from '../model/links';
 import { asksTemplate, findTemplates, matchTemplates } from '../model/templates';
 import { tagKey, type Sigil } from '../model/tags';
-import { timeOfDay } from '../model/time';
 import { nodeOf, type RowKey } from '../model/rows';
 import type { NodeId } from '../model/types';
 import { selectionIn } from './caret';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { MOD, touch } from './screen';
 
 interface Item {
   label: string;
@@ -25,6 +24,10 @@ interface Item {
   template?: NodeId;
   /** Only says something (no templates yet): taking it does nothing. */
   info?: boolean;
+  /** A `/command` (model/complete.ts): taking it runs `Outliner.slash`. */
+  command?: string;
+  /** Its key, shown at the end. */
+  key?: string;
   /** What replaces the typed token. */
   text: () => string;
 }
@@ -41,8 +44,6 @@ interface Open {
   bottom: number;
 }
 
-/** What each command puts in place of itself (model/complete.ts lists them). */
-const RUN: Record<string, () => string> = { time: timeOfDay };
 
 const [open, setOpen] = createSignal<Open | null>(null);
 /** The token Esc closed: it stays closed until another one is typed. */
@@ -112,7 +113,8 @@ export function Suggest(props: { o: Outliner }) {
 
   /** Commands, then templates by name (not in a note: a template is bullets; not the template being typed in). */
   const commands = (id: RowKey, t: Token, limit: number, note: boolean): Item[] => {
-    const items: Item[] = matchCommands(t.query).slice(0, limit).map((c) => ({ label: `/${c.name}`, hint: c.hint, text: RUN[c.name] }));
+    const items: Item[] = matchCommands(t.query, note).slice(0, limit)
+      .map((c) => ({ label: `/${c.name}`, hint: c.hint, key: c.key?.replace('Mod', MOD), command: c.name, text: () => '' }));
     if (note) return items;
     const self = o.contentOf(id).id;
     const templates = matchTemplates(findTemplates(o.doc, o.tags).filter((tpl) => tpl.id !== self), t.query, limit - items.length);
@@ -238,6 +240,7 @@ export function Suggest(props: { o: Outliner }) {
     if (item.create) return void o.mirrorTitled(s.id, item.create, s.token.start, s.token.end);
     if (item.info) return;
     if (item.template) return o.insertTemplate(s.id, item.template, s.token.start, s.token.end);
+    if (item.command) return o.slash(s.id, s.note, s.token.start, s.token.end, item.command);
     o.insert(s.note ? { id: s.id, caret: s.token.end, note: true } : { id: s.id, caret: s.token.end }, insert, s.token.end - s.token.start);
   };
 
@@ -288,7 +291,7 @@ export function Suggest(props: { o: Outliner }) {
               <div
                 role="option"
                 class="suggest-item"
-                classList={{ current: i() === s().active, 'suggest-tag': !!item.tag, 'suggest-link': !!item.link }}
+                classList={{ current: i() === s().active, 'suggest-tag': !!item.tag, 'suggest-link': !!item.link, 'suggest-command': !!item.command }}
                 aria-selected={i() === s().active}
                 onPointerMove={() => i() !== s().active && setOpen({ ...s(), active: i() })}
                 onClick={() => accept(i())}
@@ -296,6 +299,9 @@ export function Suggest(props: { o: Outliner }) {
                 <span class="suggest-label">{item.label}</span>
                 <Show when={item.hint}>
                   <span class="suggest-hint">{item.hint}</span>
+                </Show>
+                <Show when={item.key && !touch()}>
+                  <kbd class="suggest-key">{item.key}</kbd>
                 </Show>
               </div>
             )}
