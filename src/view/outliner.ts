@@ -9,6 +9,7 @@ import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
+import { projectTags } from '../model/projects';
 import { backlogTargets, fillDayToday, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
@@ -568,6 +569,27 @@ export class Outliner {
       });
     };
     if (this.readOnly) return;
+    if (this.syncing() && !this.synced) this.afterSync.push(run);
+    else run();
+  }
+
+  /**
+   * Once per document on this device: bullets signed `@work` or `@home` get
+   * `#project` (model/projects.ts `projectTags`), which now marks what the
+   * Backlog takes. Like `tagYears`, after the server has been heard from;
+   * adds only where the tag is missing, so a second device finds it done.
+   * No undo step.
+   */
+  tagProjects(name: string): void {
+    const key = `listik-projects-tagged:${name}`;
+    if (this.readOnly || readSetting(key)) return;
+    const run = () => {
+      const fixes = projectTags(this.doc);
+      if (fixes.length) this.scaffold((ctx) => {
+        for (const { id, field, to } of fixes) (field === 'text' ? setText : setNote)(ctx, id, to);
+      });
+      writeSetting(key, '1');
+    };
     if (this.syncing() && !this.synced) this.afterSync.push(run);
     else run();
   }

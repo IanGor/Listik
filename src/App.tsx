@@ -80,6 +80,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.syncHandle = await startSync(doc, opened, persistence);
   outliner.watchSync();
   outliner.tagYears();
+  outliner.tagProjects(name);
   if (restored) outliner.notify(restored);
   else if (merged) {
     const handle = outliner.syncHandle;
