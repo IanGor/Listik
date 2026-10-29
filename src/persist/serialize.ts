@@ -75,6 +75,7 @@ export function deserialize(json: string): Doc {
     });
     doc.get(parent).children.push(id);
   });
+  doc.indexMirrors();
   return doc;
 }
 

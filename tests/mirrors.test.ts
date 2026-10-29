@@ -176,6 +176,23 @@ describe('mirrors', () => {
     expect(rows.ids).toEqual(['a #x', 'b', 'c']);
   });
 
+  it('loaded from a snapshot, copies are still copies: deleting the origin hands everything over', () => {
+    const { doc, ctx, run } = mirrored(['m1', 'a', '  b', 'm2'], { m1: 'a', m2: 'a' });
+    run(() => cmd.setNote(ctx, 'a', 'заметка'));
+    const back = deserialize(serialize(doc));
+    expect(back.hasMirrors('a')).toBe(true);
+    expect(back.isCopy('a') && back.isCopy('m1') && back.isCopy('m2')).toBe(true);
+    expect(back.copies('a').sort()).toEqual(['a', 'm1', 'm2']);
+    const rows = new VisibleRows(back);
+    back.transact(() => { cmd.deleteNode({ doc: back, rows }, 'a'); });
+    expect(back.get('m1').mirrorOf).toBeNull();
+    expect(back.get('m1').text).toBe('a');
+    expect(back.get('m1').note).toBe('заметка');
+    expect(back.get('m1').children).toEqual(['b']);
+    expect(back.get('m2').mirrorOf).toBe('m1');
+    checkInvariants(back);
+  });
+
   it('a mirror whose original went without handing over (an older document) reads it until the trash is purged', () => {
     const { doc, run } = mirrored(['a', 'm'], { m: 'a' });
     const n = doc.get('a');

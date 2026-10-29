@@ -152,6 +152,17 @@ export class Doc {
     return copies.length > 1 && copies.includes(id);
   }
 
+  /**
+   * Rebuilds the mirror index (`mirrored`) from the nodes, for a document
+   * filled without ops (`deserialize`): without it every copy loaded from a
+   * snapshot looked like a lone bullet, and deleting its origin handed
+   * nothing over.
+   */
+  indexMirrors(): void {
+    this.mirrored.clear();
+    for (const n of this.nodes.values()) this.linkMirror(n);
+  }
+
   /** Has the bullet mirrors pointing at it (in the outline or the trash)? */
   hasMirrors(id: NodeId): boolean {
     return !!this.mirrored.get(id)?.size;

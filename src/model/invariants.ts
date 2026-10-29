@@ -24,4 +24,10 @@ export function checkInvariants(doc: Doc): void {
     }
   }
   if (seen.size !== doc.nodes.size) throw new Error(`${doc.nodes.size - seen.size} unreachable nodes`);
+  // The mirror index (`Doc.hasMirrors`, `copies`) agrees with the bullets' `mirrorOf`.
+  const targets = new Set<NodeId>();
+  for (const n of doc.nodes.values()) if (n.mirrorOf) targets.add(n.mirrorOf);
+  for (const n of doc.nodes.values()) {
+    if (doc.hasMirrors(n.id) !== targets.has(n.id)) throw new Error(`mirror index of ${n.id} is stale`);
+  }
 }

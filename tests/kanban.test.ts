@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { backlogTargets, findBacklog, findKanban, toBacklog } from '../src/model/kanban';
 import type { Doc } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
+import { deserialize, serialize } from '../src/persist/serialize';
 import { build } from './helpers';
 
 /** Makes the bullet a task, as the command does, and lets the Backlog follow. */
@@ -50,6 +51,14 @@ describe('the Backlog of the Kanban', () => {
     expect(doc.get('Backlog').children).toHaveLength(0);
     task(doc, 'solo #project');
     expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo #project']);
+  });
+
+  it('after a reload (a snapshot), the mirror already in the Backlog keeps it from coming again', () => {
+    const doc = build(para);
+    task(doc, 'one');
+    const back = deserialize(serialize(doc));
+    task(back, 'two');
+    expect(back.get(findBacklog(back)!).children.map((c) => back.get(c).mirrorOf)).toEqual(['Alpha #project']);
   });
 
   it('finds them by place and word, with emoji and tags around', () => {
