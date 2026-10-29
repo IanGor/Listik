@@ -39,17 +39,53 @@ describe('the Backlog of the Kanban', () => {
     expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
   });
 
-  it('a mirror anywhere in the Kanban keeps it from coming again', () => {
-    const doc = build([...para, 'Kanban', '  Backlog', '  Doing', '    Wip']);
+  const mirror = (doc: Doc, parent: string, of: string, id = `m-${parent}`) =>
     doc.apply({
-      t: 'insert', parent: 'Wip',
-      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha' },
+      t: 'insert', parent,
+      node: { id, order: doc.orderAt(parent, doc.get(parent).children.length), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: of },
     });
+  /** A bullet added inside `parent`, as typing it does. */
+  const add = (doc: Doc, parent: string, id: string) => {
+    const ops = doc.transact(() =>
+      doc.apply({
+        t: 'insert', parent,
+        node: { id, order: doc.orderAt(parent, doc.get(parent).children.length), text: id, note: '', collapsed: false, todo: false, done: false, created: 0, updated: 0, children: [] },
+      }),
+    );
+    return toBacklog(doc, backlogTargets(doc, ops));
+  };
+
+  it('a mirror in Week or Today, at any depth, keeps it there', () => {
+    const doc = build([...para, 'Kanban', '  Backlog', '  Doing', '    Week', '      Wip']);
+    mirror(doc, 'Wip', 'Alpha');
     task(doc, 'one');
-    task(doc, 'two');
     expect(doc.get('Backlog').children).toHaveLength(0);
-    task(doc, 'solo');
-    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo']);
+    expect(doc.get('Wip').children).toHaveLength(1);
+  });
+
+  it('a mirror in another column goes back to the Backlog; one in the Backlog stays', () => {
+    const doc = build([...para, 'Kanban', '  Backlog', '  Doing']);
+    mirror(doc, 'Doing', 'Alpha');
+    task(doc, 'one');
+    expect(doc.get('Doing').children).toHaveLength(0);
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+    task(doc, 'two');
+    expect(doc.get('Backlog').children).toHaveLength(1);
+  });
+
+  it('any bullet added in a first-level bullet brings it; one added right in a folder is a new first level', () => {
+    const doc = build(para);
+    expect(add(doc, 'Areas', 'fresh')).toBe(0);
+    expect(findKanban(doc)).toBeNull();
+    expect(add(doc, 'Alpha', 'three')).toBe(1);
+    expect(add(doc, 'three', 'deeper')).toBe(0);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+  });
+
+  it('moved within the same first level, a bullet brings nothing', () => {
+    const doc = build(para);
+    const ops = doc.transact(() => doc.apply({ t: 'move', id: 'two', from: { parent: 'Alpha', order: doc.get('two').order }, to: { parent: 'one', order: doc.orderAt('one', 0) } }));
+    expect(backlogTargets(doc, ops)).toEqual([]);
   });
 
   it('finds them by place and word, with emoji and tags around', () => {
