@@ -81,6 +81,8 @@ function mergeOp(doc: Doc, op: Exclude<Op, { t: 'insert' }>): Op[] {
       return strokes.length ? [{ ...op, strokes }] : [];
     }
   }
+  // An op of a newer version (sync/engine.ts `FORMAT` stops such batches before they get here).
+  throw new Error(`applyMerged: unknown op ${(op as { t: string }).t}`);
 }
 
 /** The position, with a missing parent replaced by the trash; null if it would put `id` inside itself. */

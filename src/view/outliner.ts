@@ -1396,6 +1396,7 @@ export class Outliner {
     this.setSyncStatus(engine.status);
     this.unwatchSync = engine.subscribe((s) => {
       if (s.refused && !this.syncStatus().refused) this.notify('Пароль синхронизации сменили на другом устройстве', { label: 'Ввести новый', run: () => this.showSync() });
+      if (s.outdated && !this.syncStatus().outdated) this.notify('На другом устройстве версия Listik новее: синхронизация ждёт обновления', { label: 'Обновить', run: () => location.reload() });
       this.setSyncStatus({ ...s });
       if (s.phase === 'synced' || s.phase === 'offline' || s.phase === 'error') this.heardFromServer();
     });

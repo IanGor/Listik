@@ -31,6 +31,12 @@ describe('merge3', () => {
 });
 
 describe('applyMerged', () => {
+  it('an op of a type this version does not know is an error, not a half-applied batch', () => {
+    const doc = build(['a']);
+    expect(() => applyMerged(doc, { t: 'paint', id: 'a' } as unknown as Op)).toThrow(/unknown op paint/);
+    expect(dump(doc)).toEqual(['a']);
+  });
+
   it('moving and editing the same bullet on two devices both apply', () => {
     const { doc, ctx, run } = setup(['a', 'b', 'c']);
     // Device 1 edits "b" (authored against the same base).

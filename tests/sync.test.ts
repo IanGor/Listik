@@ -15,7 +15,9 @@ import { Persistence } from '../src/persist/idb';
 import { httpTransport, type Transport } from '../src/sync/client';
 import { dataKey, newDocId } from '../src/sync/crypto';
 import { changePassphrase, codecFor, createSync, forgetOnDevice, joinSync, openVault, relogin, unlock, type SyncHandle } from '../src/sync/setup';
-import { SyncEngine, bootstrap, readSyncState } from '../src/sync/engine';
+import { FORMAT, SyncEngine, bootstrap, readSyncState } from '../src/sync/engine';
+import { encryptWith } from '../src/sync/crypto';
+import { toBase64, utf8 } from '../src/sync/encoding';
 import { dump, rng } from './helpers';
 import { plainCodec } from '../src/persist/codec';
 
@@ -398,6 +400,29 @@ describe('sync', () => {
     (a.transport as { getOps: Transport['getOps'] }).getOps = async () => ({ head, snapshot: null, batches: [] });
     await expect(a.engine.sync()).rejects.toThrow(/меньше записей/);
     expect(posts).toBe(1);
+  });
+
+  it('a batch from a newer version stops this one before it applies: no wrong document, no snapshot, a word to update', async () => {
+    for (const body of [{ f: FORMAT + 1, ops: [] as unknown[] }, { ops: [{ t: 'paint', id: 'x' }] }]) {
+      const { docId, token, a } = await createDoc();
+      const b = await device(docId, token, { bootstrap: true });
+      a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'до'));
+      await a.engine.sync();
+      // A newer device appends a batch this version cannot read whole.
+      const seq = a.engine.head + 1;
+      const prev = (a.engine as unknown as { state: { headHash: string } }).state.headHash;
+      const sealed = await encryptWith(await key(), utf8(JSON.stringify({ device: 'newer', prev, ...body })), `listik|${docId}|ops|${seq}`);
+      const bytes = new Uint8Array([...sealed.iv, ...sealed.ct]);
+      expect(await a.transport.postOps(seq - 1, toBase64(bytes))).toEqual({ seq });
+      await expect(b.engine.sync()).rejects.toThrow(/версия приложения новее/);
+      expect(b.engine.status.outdated).toBe(true);
+      expect(b.engine.head).toBe(seq - 1); // what came before it applied
+      expect(dump(b.doc)).toEqual(['до']);
+      b.run(() => cmd.setText(b.ctx, b.rows.ids[0], 'до, правка'));
+      await b.engine.sync(); // stopped: neither pulls nor pushes
+      expect(b.engine.status.pending).toBe(1);
+      expect(b.engine.head).toBe(seq - 1);
+    }
   });
 
   it('an outbox an earlier version stored plain is read as it is and sealed from then on', async () => {

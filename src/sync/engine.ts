@@ -65,13 +65,35 @@ export interface SyncStatus {
    * (setup.ts `relogin`); what waits in the outbox stays.
    */
   refused?: boolean;
+  /** A batch from a newer version of the app came: this one stops until it is updated (reloaded). */
+  outdated?: boolean;
 }
 
 /** A batch in the outbox; `sealed` once an exchange has started sending it (not stored). */
 type OutboxBatch = Op[] & { sealed?: boolean };
 
+/**
+ * The format of the ops and snapshots this version writes. Raise it with any
+ * op type or field an older version would not know: that version then stops
+ * at the first batch (or snapshot) of the newer format and asks for an
+ * update, rather than applying it without the new fields, or failing on
+ * every pull, and uploading snapshots that lose them for every new device.
+ */
+export const FORMAT = 1;
+
+/** The op types this version applies (model/types.ts `Op`). */
+const KNOWN_OPS = new Set<string>(['insert', 'remove', 'setText', 'move', 'setCollapsed', 'setTodo', 'setDone', 'setNote', 'setMirror', 'addStrokes', 'removeStrokes']);
+
+/** Can this version apply the batch as it is? */
+const readable = (body: BatchBody): boolean =>
+  (body.f ?? 1) <= FORMAT && Array.isArray(body.ops) && body.ops.every((op) => KNOWN_OPS.has(op.t));
+
+const OUTDATED = 'На другом устройстве версия приложения новее: обновите страницу, чтобы синхронизация продолжилась';
+
 interface BatchBody {
   device: string;
+  /** `FORMAT` of the writer; absent in batches of versions before it. */
+  f?: number;
   /** Random per post (`SyncState.sent`); absent in batches of earlier versions. */
   id?: string;
   prev: string;
@@ -80,6 +102,8 @@ interface BatchBody {
 
 interface SnapshotBody {
   v: 1;
+  /** `FORMAT` of the writer; absent before it. */
+  f?: number;
   seq: number;
   hash: string;
   snapshot: string;
@@ -200,7 +224,7 @@ const unpack = (b: Uint8Array): Encrypted => ({ enc: 1, iv: b.subarray(0, 12), c
 
 /** Encrypts and packs a snapshot for the server; `hash` chains it to the batch it covers. */
 export async function sealSnapshot(key: CryptoKey, docId: string, seq: number, hash: string, snapshot: string): Promise<Uint8Array> {
-  const body: SnapshotBody = { v: 1, seq, hash, snapshot };
+  const body: SnapshotBody = { v: 1, f: FORMAT, seq, hash, snapshot };
   return pack(await encryptWith(key, await gzip(utf8(JSON.stringify(body))), snapshotAad(docId, seq)));
 }
 
@@ -208,6 +232,7 @@ export async function openSnapshot(key: CryptoKey, docId: string, seq: number, b
   const plain = await gunzip(await decryptWith(key, unpack(bytes), snapshotAad(docId, seq)));
   const body = JSON.parse(fromUtf8(plain)) as SnapshotBody;
   if (body.seq !== seq) throw new Error('snapshot sequence mismatch');
+  if ((body.f ?? 1) > FORMAT) throw new Error(OUTDATED);
   return body;
 }
 
@@ -268,6 +293,8 @@ export class SyncEngine implements DocListener {
   private uploading: Promise<void> | null = null;
   /** A failed chain check: nothing more is sent or applied until the user resets. */
   private broken = false;
+  /** A batch of a newer format came: nothing more is applied, sent or uploaded until the page loads the new version. */
+  private outdated = false;
   /** The token was refused (401): asking again only counted as failures against the address, and locked out every device behind it. */
   private refused = false;
   private doc: Doc;
@@ -413,7 +440,7 @@ export class SyncEngine implements DocListener {
   }
 
   private async exchange(): Promise<void> {
-    if (this.broken || this.refused) return;
+    if (this.broken || this.refused || this.outdated) return;
     this.set({ phase: 'syncing' });
     try {
       await this.pull();
@@ -472,6 +499,11 @@ export class SyncEngine implements DocListener {
           this.set({ phase: 'error', error: 'Журнал на сервере не сходится с этим устройством: запись не расшифровывается или цепочка разорвана' });
           throw new Error(`batch ${b.seq} rejected: ${body ? 'hash chain broken' : 'cannot decrypt'}`);
         }
+        if (!readable(body)) {
+          // Written by a newer version: what came before it applies, it and what follows wait for the update.
+          this.outdated = true;
+          break;
+        }
         prev = await sha256(bytes);
         batches.push({ seq: b.seq, body, hash: prev });
       }
@@ -490,9 +522,15 @@ export class SyncEngine implements DocListener {
       }
       if (theirs.length) this.applyRemote(theirs);
       const last = batches[batches.length - 1];
-      this.state.head = last.seq;
-      this.state.headHash = last.hash;
-      this.set({ head: last.seq });
+      if (last) {
+        this.state.head = last.seq;
+        this.state.headHash = last.hash;
+        this.set({ head: last.seq });
+      }
+      if (this.outdated) {
+        this.set({ phase: 'error', outdated: true, error: OUTDATED });
+        throw new Error(OUTDATED);
+      }
       if (last.seq >= page.head) return pulled;
     }
   }
@@ -535,7 +573,7 @@ export class SyncEngine implements DocListener {
     const ops = sealed.flat().map(unkept);
     const seq = this.state.head + 1;
     const id = newBatchId();
-    const body: BatchBody = { device: this.state.device, id, prev: this.state.headHash, ops };
+    const body: BatchBody = { device: this.state.device, f: FORMAT, id, prev: this.state.headHash, ops };
     const bytes = pack(await encryptWith(this.key, utf8(JSON.stringify(body)), opsAad(this.docId, seq)));
     // On disk before the post: a reload after a lost answer still knows the batch when it comes back.
     this.state.sent = { id, batches: sealed.length };
@@ -553,7 +591,7 @@ export class SyncEngine implements DocListener {
   }
 
   private maybeUploadSnapshot(): void {
-    if (this.uploading || this.state.outbox.length) return;
+    if (this.uploading || this.state.outbox.length || this.outdated) return;
     if (this.state.head - this.state.snapshotSeq < SNAPSHOT_EVERY && this.state.snapshotSeq >= 0) return;
     this.uploading = this.uploadSnapshot().catch((e: unknown) => console.error('Snapshot upload failed', e)).finally(() => {
       this.uploading = null;
