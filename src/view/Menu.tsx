@@ -128,11 +128,27 @@ export function DocumentMenu(props: { o: Outliner }) {
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
+          {/* Grouped by what for (UX audit, 29 October 2026): going and writing; undo; the look; the document; files; help. */}
           {/* Going to a place by its name: on a phone too, the line at the top of the screen as for "Куда…". */}
           <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
             Перейти к пункту… <Show when={!phone()}><span class="hint">{MOD}+K</span></Show>
             <GO />
           </button>
+          <Show when={!o.readOnly}>
+            <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
+              Записать в Inbox
+              <Show when={!phone()}><span class="hint">{MOD}+Shift+Space</span></Show>
+              <WRITE />
+            </button>
+          </Show>
+          <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
+            {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}
+            <Show when={!o.trashOpen() && o.deleted().length}>
+              <span class="hint">{o.deleted().length}</span>
+            </Show>
+            <TRASH />
+          </button>
+          <div class="menu-sep" role="separator" />
           {/* Undo for a mouse, and for a phone out of editing (its bar has undo only while a bullet is edited). */}
           <Show when={!o.readOnly && (o.history.canUndo || o.history.canRedo)}>
             <Show when={o.history.canUndo}>
@@ -149,26 +165,6 @@ export function DocumentMenu(props: { o: Outliner }) {
             </Show>
             <div class="menu-sep" role="separator" />
           </Show>
-          <Show when={!o.readOnly}>
-            <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
-              Записать в Inbox
-              <Show when={!phone()}><span class="hint">{MOD}+Shift+Space</span></Show>
-              <WRITE />
-            </button>
-            <div class="menu-sep" role="separator" />
-          </Show>
-          <button type="button" role="menuitem" onClick={() => exportAs('md')}>
-            Скачать как Markdown
-            <SAVE />
-          </button>
-          <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
-            Скачать как OPML <span class="hint">для Workflowy</span>
-            <SAVE />
-          </button>
-          <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
-            <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
-            <KEYS />
-          </button>
           {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}
           <button
             type="button"
@@ -210,7 +206,6 @@ export function DocumentMenu(props: { o: Outliner }) {
               <span class="step-a large" aria-hidden="true">A</span>
             </button>
           </div>
-          <div class="menu-sep" role="separator" />
           {/* The font: the list is probed when first opened, and picks keep the menu open like the size's steps. */}
           <button type="button" role="menuitem" aria-expanded={fontsOpen()} onClick={() => setFontsOpen(!fontsOpen())}>
             Шрифт
@@ -242,37 +237,19 @@ export function DocumentMenu(props: { o: Outliner }) {
               </For>
             </div>
           </Show>
-          <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
-            {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}
-            <Show when={!o.trashOpen() && o.deleted().length}>
-              <span class="hint">{o.deleted().length}</span>
-            </Show>
-            <TRASH />
-          </button>
-          <Show when={!o.readOnly}>
-            <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
-              Создать структуру <span class="hint">PARA и календарь</span>
-              <CALENDAR />
-            </button>
-            <button type="button" role="menuitem" onClick={() => void importFile()}>
-              Импорт из файла…
-              <OPEN />
-            </button>
-          </Show>
+          <div class="menu-sep" role="separator" />
           <Show when={o.opened && !o.readOnly}>
-            <div class="menu-sep" role="separator" />
             <Show when={o.syncing()}>
               <p class="menu-note">{describeSync(o.syncStatus())}</p>
             </Show>
             <button type="button" role="menuitem" onClick={() => { close(); o.showSync(); }}>
-              {o.syncing() ? 'Синхронизация…' : 'Синхронизация между устройствами…'}
+              Синхронизация…
               <CLOUD />
             </button>
           </Show>
           <Show when={backup()}>
             {(b) => (
               <>
-                <div class="menu-sep" role="separator" />
                 <Switch>
                   <Match when={b().state === 'unsupported'}>
                     <p class="menu-note">Автокопия в папку работает в Chrome и Edge</p>
@@ -307,6 +284,32 @@ export function DocumentMenu(props: { o: Outliner }) {
               </>
             )}
           </Show>
+          <Show when={!o.readOnly}>
+            <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
+              Создать структуру <span class="hint">PARA и календарь</span>
+              <CALENDAR />
+            </button>
+          </Show>
+          <div class="menu-sep" role="separator" />
+          <button type="button" role="menuitem" onClick={() => exportAs('md')}>
+            Скачать как Markdown
+            <SAVE />
+          </button>
+          <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
+            Скачать как OPML <span class="hint">для Workflowy</span>
+            <SAVE />
+          </button>
+          <Show when={!o.readOnly}>
+            <button type="button" role="menuitem" onClick={() => void importFile()}>
+              Импорт из файла…
+              <OPEN />
+            </button>
+          </Show>
+          <div class="menu-sep" role="separator" />
+          <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
+            <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
+            <KEYS />
+          </button>
         </div>
       </Show>
     </div>
