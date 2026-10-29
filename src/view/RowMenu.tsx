@@ -10,7 +10,7 @@ const MARGIN = 8;
  * and lifted without moving it (drag.ts), as a long press works on an iPhone
  * or iPad, or a right click with a mouse or trackpad (Row.tsx). Actions a
  * phone's edit bar keeps two presses away are one here: open the bullet,
- * make it a task or a plain bullet again, plan it for a day, write its note, move it, delete it (last, in red, as Apple sets a destructive action apart). A tap
+ * make it a task or a plain bullet again, write its note, move it, delete it (last, in red, as Apple sets a destructive action apart). A tap
  * anywhere else closes the menu and does nothing more.
  */
 export function RowMenu(props: { o: Outliner }) {

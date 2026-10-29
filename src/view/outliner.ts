@@ -880,7 +880,7 @@ export class Outliner {
   /**
    * ‹ › in a day: the day before (-1) or after (+1) by the calendar, across
    * weeks, months and years. The day comes first if it is not there: its year
-   * and template as planning makes them (`dayFor`, no undo step). Also
+   * and template as «Сегодня» makes them (`dayFor`, no undo step). Also
    * Ctrl+Alt+←/→ (Outline.tsx). Returns whether the zoom is in a day.
    */
   stepDay(step: -1 | 1): boolean {

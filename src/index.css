@@ -3196,10 +3196,8 @@ body.is-dragging * {
 /* --- Tablet (screen.ts: tablet) -------------------------------------------- */
 
 /* The computer's layout, a finger at the controls: what a computer shows
-   under the pointer (the fold arrows, the calendar buttons) a finger has no
+   under the pointer (the fold arrows) a finger has no
    hover to bring up, so it stays in view, quiet. */
-:root.tablet .toggle,
-:root.tablet .plan-button,
-:root.tablet .plan-title-button {
+:root.tablet .toggle {
   opacity: 1;
 }
