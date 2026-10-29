@@ -43,17 +43,25 @@ export interface Deleted {
 }
 
 /**
+ * Past its time in the trash: compaction (in a worker, on the stored copy)
+ * may have purged it already, though this page still holds it. Brought back
+ * here, it was gone again after the next load.
+ */
+export const expired = (key: string, now: number): boolean => trashTime(key) < now - TRASH_TTL;
+
+/**
  * What was deleted, newest first: each deleted block once, with its subtree.
  * An empty bullet with nothing in it (an empty line taken out) is left out,
- * and so is anything that came to the trash otherwise than by deleting.
+ * and so is anything that came to the trash otherwise than by deleting, or
+ * that is past its time (`expired`).
  */
-export function deletedEntries(doc: Doc): Deleted[] {
+export function deletedEntries(doc: Doc, now = Date.now()): Deleted[] {
   const out: Deleted[] = [];
   const kids = doc.get(TRASH).children;
   for (let i = kids.length - 1; i >= 0; i--) {
     const n = doc.get(kids[i]);
     const from = deletedFrom(n.order);
-    if (!from) continue;
+    if (!from || expired(n.order, now)) continue;
     const c = doc.content(n.id);
     if (!n.mirrorOf && !c.text.trim() && !c.note.trim() && !n.children.length) continue;
     out.push({ id: n.id, at: trashTime(n.order), from });
@@ -70,11 +78,11 @@ export function placeIsThere(doc: Doc, parent: NodeId): boolean {
  * "Вернуть": the deleted bullet, with its subtree, goes back where it was,
  * between the same neighbours. When that place is gone (deleted too, or
  * purged), it goes last at the top level. Returns whether it went home;
- * null if it is not in the trash.
+ * null if it is not in the trash, or past its time there.
  */
-export function restoreDeleted({ doc }: Ctx, id: NodeId): { home: boolean } | null {
+export function restoreDeleted({ doc }: Ctx, id: NodeId, now = Date.now()): { home: boolean } | null {
   const n = doc.nodes.get(id);
-  if (!n || n.parent !== TRASH) return null;
+  if (!n || n.parent !== TRASH || expired(n.order, now)) return null;
   const from = deletedFrom(n.order);
   // Children go where the bullet's own are (a mirror's to its original).
   const host = from && placeIsThere(doc, from.parent) ? doc.host(from.parent)?.id ?? null : null;

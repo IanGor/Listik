@@ -97,6 +97,20 @@ describe('trash', () => {
     expect(rows.ids).toEqual(['d']);
   });
 
+  it('past its time in the trash, a bullet is neither listed nor brought back: compaction may have purged the stored copy', () => {
+    const { doc, ctx, run } = setup(['a', 'b']);
+    run(() => cmd.deleteNode(ctx, 'b'));
+    const later = Date.now() + TRASH_TTL + 60_000;
+    expect(deletedEntries(doc).map((e) => e.id)).toEqual(['b']);
+    expect(deletedEntries(doc, later)).toEqual([]);
+    expect(run(() => restoreDeleted(ctx, 'b', later))).toBeNull();
+    expect(dump(doc)).toEqual(['a']);
+    // The stored copy, compacted: it is gone there, as the list said.
+    const stored = deserialize(serialize(doc));
+    purgeTrash(stored, later - TRASH_TTL);
+    expect(stored.has('b')).toBe(false);
+  });
+
   it('"Вернуть" puts a block back between the same neighbours, one undoable move; a gone place sends it to the end', () => {
     const { doc, ctx, run } = setup(['a', '  b', '    c', '  d', 'e']);
     run(() => cmd.deleteNode(ctx, 'b'));
