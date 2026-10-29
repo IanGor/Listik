@@ -31,6 +31,7 @@ const two = (n: number) => String(n).padStart(2, '0');
 export const STRUCTURE: readonly { text: string; children: readonly string[] }[] = [
   { text: '📥 Inbox', children: [] },
   { text: 'PARA', children: ['Projects', 'Areas', 'Resources', 'Archive'] },
+  { text: 'Kanban', children: ['Backlog'] },
   { text: '@q1', children: [] },
   { text: '@q2', children: [] },
   { text: '@q3', children: [] },
@@ -165,7 +166,7 @@ export function structureTrees(y: number): Tree[] {
     const q = labelOf(text);
     return q?.kind === 'quarter'
       ? { text, collapsed: true, children: [yearTree(y, q.q)] }
-      : { text, children: children.map((c) => ({ text: c, children: [] })) };
+      : { text, ...(text === 'Kanban' ? { collapsed: true } : {}), children: children.map((c) => ({ text: c, children: [] })) };
   });
 }
 

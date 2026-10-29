@@ -44,16 +44,18 @@ describe('structure', () => {
     expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @y28 @вторник');
   });
 
-  it('Inbox, PARA with its five, the quarters below folded with the year; no notes', () => {
+  it('Inbox, PARA with its four, the Kanban with its Backlog, the quarters below folded with the year; no notes', () => {
     const trees = structureTrees(2026);
-    expect(trees.map((t) => t.text)).toEqual(['📥 Inbox', 'PARA', '@q1', '@q2', '@q3', '@q4']);
+    expect(trees.map((t) => t.text)).toEqual(['📥 Inbox', 'PARA', 'Kanban', '@q1', '@q2', '@q3', '@q4']);
     expect(trees.map((t) => t.text)).toEqual(STRUCTURE.map((s) => s.text));
     expect(trees[1].children.map((t) => t.text)).toEqual(['Projects', 'Areas', 'Resources', 'Archive']);
     expect(trees[1].collapsed).toBeFalsy();
     const all = (ts: Tree[]): Tree[] => ts.flatMap((t) => [t, ...all(t.children)]);
     expect(all(trees).some((t) => t.note)).toBe(false);
-    expect(trees[5].collapsed).toBe(true);
-    expect(trees[5].children.map((y) => y.text)).toEqual(['@y26']);
+    expect(trees[2].children.map((t) => t.text)).toEqual(['Backlog']);
+    expect(trees[2].collapsed).toBe(true);
+    expect(trees[6].collapsed).toBe(true);
+    expect(trees[6].children.map((y) => y.text)).toEqual(['@y26']);
     expect(trees[0].children).toEqual([]);
   });
 
@@ -66,14 +68,14 @@ describe('structure', () => {
     expect(doc.get(first).text).toBe('📥 Inbox');
     expect(findInbox(doc)).toBe(first);
     expect(dumpRows(rows, doc)).toEqual(
-      ['а', '📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]'],
+      ['а', '📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban [+]', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]'],
     );
     expect(hasStructure(doc, tags)).toBe(true);
     const q4 = findQuarter(doc, tags, 4)!;
     expect(findPeriod(doc, tags, day(2026, 2, 28))).not.toBeNull();
     expect(findPeriod(doc, tags, day(2026, 10, 19))).not.toBeNull();
     run(() => createStructure(ctx, 2026));
-    expect(doc.get(doc.root).children.length).toBe(1 + 12);
+    expect(doc.get(doc.root).children.length).toBe(1 + 14);
     // The first one stays the calendar.
     expect(findQuarter(doc, tags, 4)).toBe(q4);
     const oct19 = findPeriod(doc, tags, day(2026, 10, 19))!;

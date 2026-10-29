@@ -43,16 +43,11 @@ function findPara(doc: Doc): NodeId | null {
   return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
-/** Holds a task: is one, or has one right in it. */
-function holdsTask(doc: Doc, id: NodeId): boolean {
-  const n = doc.get(id);
-  return !n.mirrorOf && (n.todo || n.children.some((c) => !doc.get(c).mirrorOf && doc.get(c).todo));
-}
-
 /**
- * The bullets to mirror after `ops`: for each task they added or made, the
- * topmost bullet holding a task that lies inside PARA below its four (a
- * task right in Projects is its own). Each only once.
+ * The bullets to mirror after `ops`: for each task they added or made that
+ * lies inside PARA, the first level under PARA's folder (Projects, Areas, …)
+ * it is in, however deep: Projects → Alpha → Sub → task gives Alpha, a task
+ * right in Projects is its own. Each only once.
  */
 export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const para = findPara(doc);
@@ -78,36 +73,26 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
     }
     if (cur !== para) continue;
     path.pop(); // the Projects, Areas, … themselves are never mirrored
-    let target: NodeId | null = null;
-    for (const id of path) if (holdsTask(doc, id)) target = id;
-    if (target !== null && !out.includes(target)) out.push(target);
+    const target = path[path.length - 1];
+    if (target !== undefined && !out.includes(target)) out.push(target);
   }
   return out;
 }
 
 /**
  * Mirrors the bullets into the Backlog, last, collapsed (a project shows its
- * next task under it), making the Kanban and the Backlog if they are missing;
- * one already there stays as it is. Returns how many came.
+ * next task under it), making the Kanban and the Backlog if they are missing.
+ * A bullet with a mirror anywhere in the Kanban (a column, deeper) is left:
+ * it is on the board already, wherever it was moved to. Returns how many came.
  */
 export function toBacklog(doc: Doc, targets: readonly NodeId[]): number {
-  if (!targets.length) return 0;
+  const kanban = findKanban(doc);
+  const fresh = targets.map((t) => doc.origin(t)).filter((origin) => kanban === null || !doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)));
+  if (!fresh.length) return 0;
   let backlog = findBacklog(doc);
-  if (backlog !== null && targets.every((t) => doc.copies(doc.origin(t)).some((c) => doc.get(c).parent === backlog))) return 0;
-  if (backlog === null) {
-    let kanban = findKanban(doc);
-    if (kanban === null) kanban = addChild(doc, doc.root, 'Kanban');
-    backlog = addChild(doc, kanban, 'Backlog');
-  }
-  let added = 0;
-  const list = backlog;
-  for (const t of targets) {
-    const origin = doc.origin(t);
-    if (doc.copies(origin).some((c) => doc.get(c).parent === list)) continue;
-    addChild(doc, list, '', origin);
-    added++;
-  }
-  return added;
+  if (backlog === null) backlog = addChild(doc, kanban ?? addChild(doc, doc.root, 'Kanban'), 'Backlog');
+  for (const origin of fresh) addChild(doc, backlog, '', origin);
+  return fresh.length;
 }
 
 function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId): NodeId {

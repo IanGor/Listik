@@ -33,6 +33,25 @@ describe('the Backlog of the Kanban', () => {
     expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha', 'solo']);
   });
 
+  it('the first level under a PARA folder is mirrored, however deep the task lies', () => {
+    const doc = build(['PARA', '  Projects', '    Alpha', '      Phase', '        Step', '          deep']);
+    task(doc, 'deep');
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha']);
+  });
+
+  it('a mirror anywhere in the Kanban keeps it from coming again', () => {
+    const doc = build([...para, 'Kanban', '  Backlog', '  Doing', '    Wip']);
+    doc.apply({
+      t: 'insert', parent: 'Wip',
+      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha' },
+    });
+    task(doc, 'one');
+    task(doc, 'two');
+    expect(doc.get('Backlog').children).toHaveLength(0);
+    task(doc, 'solo');
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo']);
+  });
+
   it('finds them by place and word, with emoji and tags around', () => {
     const doc = build([...para, '🗂 KANBAN #board', '  ⏳ backlog @x', '  Doing']);
     task(doc, 'one');

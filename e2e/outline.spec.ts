@@ -963,7 +963,7 @@ test.describe('structure and calendar', () => {
   const today = dayText(now);
   const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
-  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', '@q1', '@q2', '@q3', '@q4'];
+  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', '@q1', '@q2', '@q3', '@q4'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
   const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
@@ -987,7 +987,7 @@ test.describe('structure and calendar', () => {
     }
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual([...DEMO, ...STRUCTURE]);
+    expect(await outline(page)).toEqual([...DEMO, ...STRUCTURE.filter((t) => t !== '  Backlog')]);
     // The menu offers it again: a second one would go last too.
     await page.locator('.menu-button').click();
     await expect(page.getByRole('menuitem', { name: /Создать структуру/ })).toHaveCount(1);
@@ -1071,7 +1071,7 @@ test.describe('structure and calendar', () => {
     await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
-  test('a task in PARA puts its project into a Kanban\'s Backlog, made if missing', async ({ page }) => {
+  test('a task in PARA puts its first-level bullet into the structure\'s Kanban Backlog', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
@@ -1083,13 +1083,12 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Enter');
     await page.keyboard.press('Tab');
     await page.keyboard.type('write');
-    await expect(page.locator('.row', { hasText: 'Kanban' })).toHaveCount(0);
     await page.keyboard.press('Control+l');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
-    const kanban = page.locator('.row', { hasText: 'Kanban' });
-    await expect(kanban).toHaveCount(1);
-    await expect(page.locator('.row', { hasText: 'Backlog' })).toHaveCount(1);
-    expect((await outline(page)).slice(-3)).toEqual(['Kanban', '  Backlog', '    Alpha']);
+    await page.locator('.row', { hasText: 'Kanban' }).locator('.toggle').click();
+    const rows = await outline(page);
+    const at = rows.indexOf('Kanban');
+    expect(rows.slice(at, at + 4)).toEqual(['Kanban', '  Backlog', '    Alpha', '@q1']);
   });
 
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
@@ -1250,7 +1249,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(['#notes', '  запись', 'todo', '  ', ...SLOTS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
-    expect(await outline(page)).toEqual(STRUCTURE);
+    expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));
     await page.locator('.row', { hasText: '@q1' }).locator('.bullet').click();
     await page.waitForTimeout(300);
     await page.reload();
