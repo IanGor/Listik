@@ -104,3 +104,30 @@ describe('the sync server after a crash', () => {
     for (const page of pages) expect(page.batches.map((b) => b.seq)).toEqual([1, 2, 3]);
   });
 });
+
+describe('the address failed attempts count against', () => {
+  const req = (peer: string, forwarded?: string) => ({ socket: { remoteAddress: peer }, headers: forwarded === undefined ? {} : { 'x-forwarded-for': forwarded } });
+
+  it('is the last X-Forwarded-For entry from a proxy on this machine, the peer otherwise', async () => {
+    vi.resetModules();
+    const { addressOf } = await import('../server/index.js');
+    expect(addressOf(req('127.0.0.1', '203.0.113.7'))).toBe('203.0.113.7');
+    expect(addressOf(req('::1', 'spoofed, 203.0.113.7'))).toBe('203.0.113.7'); // the client's own entries come first
+    expect(addressOf(req('127.0.0.1'))).toBe('127.0.0.1');
+    expect(addressOf(req('198.51.100.2', '203.0.113.7'))).toBe('198.51.100.2'); // not through the proxy: the header is the client's
+  });
+
+  it('a client inventing a first entry per request is still throttled', async () => {
+    await start();
+    const id = newId();
+    await create(id, 0);
+    let last = 0;
+    for (let k = 0; k < 22; k++) {
+      const res = await fetch(`${url}/docs/${id}/ops?after=0`, { headers: { Authorization: 'Bearer wrong-token', 'X-Forwarded-For': `10.0.0.${k}, 203.0.113.9` } });
+      last = res.status;
+    }
+    expect(last).toBe(429);
+    // Another client behind the proxy is not.
+    expect((await fetch(`${url}/docs/${id}/ops?after=0`, { headers: { Authorization: `Bearer token-of-${id}`, 'X-Forwarded-For': '203.0.113.10' } })).status).toBe(200);
+  });
+});

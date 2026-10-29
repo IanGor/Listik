@@ -287,7 +287,21 @@ function noteFailure(address) {
   if (failures.size > 10_000) for (const [k, v] of failures) if (now > v.until) failures.delete(k);
 }
 
-const addressOf = (req) => (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() || req.socket.remoteAddress || '?';
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/**
+ * The address failures are counted against. `X-Forwarded-For` is believed
+ * only from a proxy on this machine (the TLS proxy in front, DEPLOY.md), and
+ * only its last entry, the one the proxy itself added: the first ones are
+ * whatever the client sent, and taking them let anyone pick a fresh address
+ * per request (or an owner's, to lock them out).
+ */
+export function addressOf(req) {
+  const peer = req.socket.remoteAddress ?? '?';
+  const forwarded = req.headers['x-forwarded-for'];
+  if (!LOOPBACK.has(peer) || typeof forwarded !== 'string') return peer;
+  return forwarded.split(',').map((s) => s.trim()).filter(Boolean).pop() ?? peer;
+}
 
 const docs = new Map();
 const docFor = (id) => {
