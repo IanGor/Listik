@@ -61,12 +61,25 @@ typography:
     fontFamily: "ui-monospace, monospace"
     fontSize: "12px"
     fontWeight: 600
+  ui:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+  ui-small:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+  input-touch:
+    fontFamily: "system-ui, -apple-system, sans-serif"
+    fontSize: "16px"
+    fontWeight: 400
 rounded:
   tag: "3px"
   crumb: "6px"
   item: "8px"
   control: "10px"
   surface: "12px"
+  line: "14px"
   pill: "999px"
   round: "50%"
 spacing:

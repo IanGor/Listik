@@ -144,6 +144,16 @@ const SETS: SubSet[] = [
 ];
 
 /**
+ * The bar in words, for the help (Shortcuts.tsx): built from the sets
+ * themselves, so the help names what the bar holds today.
+ */
+export const barInWords = (): string =>
+  ROW_MAIN.map((group) => group.map((a) => {
+    const opened = a.opens && SETS.find((s) => s.name === a.opens);
+    return opened ? `${a.label} (${opened.items.map((i) => i.label).join(', ')})` : a.label;
+  }).join(', ')).join(' | ').toLowerCase();
+
+/**
  * A bar of editing actions at the bottom of a touch screen while a bullet is
  * edited and the on-screen keyboard is up: the keyboard has no Tab,
  * Ctrl+L or Ctrl+Z, and # and [[ hide on its symbol pages. Hidden with the keyboard, even if the row is still
