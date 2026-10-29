@@ -202,6 +202,73 @@ describe('sync', () => {
     expect(engine2.head).toBe(engine.head);
   });
 
+  it('a batch the server took whose answer was lost is acknowledged when it comes back, not sent again over what came after', async () => {
+    const { docId, token, a } = await createDoc();
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'one'));
+    a.run(() => { cmd.split(a.ctx, a.rows.ids[0], 3); });
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[1], 'two'));
+    await a.engine.sync();
+    const b = await device(docId, token, { bootstrap: true });
+    await b.engine.sync();
+    const post = a.transport.postOps.bind(a.transport);
+    let lose = true;
+    (a.transport as { postOps: typeof post }).postOps = async (parent, body) => {
+      const result = await post(parent, body);
+      if (lose) {
+        lose = false;
+        throw new TypeError('Failed to fetch'); // the server has it; the answer never came
+      }
+      return result;
+    };
+    a.run(() => { cmd.indent(a.ctx, a.rows.ids[1]); });
+    await expect(a.engine.sync()).rejects.toThrow(/fetch/);
+    expect(a.engine.status.pending).toBe(1);
+    await b.engine.sync();
+    expect(dump(b.doc)).toEqual(['one', '  two']);
+    b.run(() => { cmd.outdent(b.ctx, b.rows.ids[1]); });
+    await b.engine.sync();
+    const head = b.engine.head;
+    await a.engine.sync();
+    expect(a.engine.status.pending).toBe(0);
+    expect(a.engine.head).toBe(head); // nothing went twice
+    await b.engine.sync();
+    expect(dump(a.doc)).toEqual(['one', 'two']);
+    expect(dump(b.doc)).toEqual(['one', 'two']);
+  });
+
+  it('a lost answer is still known after a reload: the batch posted is in the stored state', async () => {
+    const { docId, token, a: other } = await createDoc();
+    other.run(() => cmd.setText(other.ctx, other.rows.ids[0], 'one'));
+    other.run(() => { cmd.split(other.ctx, other.rows.ids[0], 3); });
+    other.run(() => cmd.setText(other.ctx, other.rows.ids[1], 'two'));
+    await other.engine.sync();
+    const a = await device(docId, token, { bootstrap: true, attach: true });
+    await a.engine.sync();
+    const post = a.transport.postOps.bind(a.transport);
+    (a.transport as { postOps: typeof post }).postOps = async (parent, body) => {
+      await post(parent, body);
+      throw new TypeError('Failed to fetch');
+    };
+    a.run(() => { cmd.indent(a.ctx, a.rows.ids[1]); });
+    await expect(a.engine.sync()).rejects.toThrow(/fetch/);
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'one!')); // typed after: not in the lost batch
+    await a.persistence.flush();
+    await other.engine.sync();
+    expect(dump(other.doc)).toEqual(['one', '  two']);
+    other.run(() => { cmd.outdent(other.ctx, other.rows.ids[1]); });
+    await other.engine.sync();
+    const reloaded = await Persistence.open(a.name);
+    const engine = await SyncEngine.open(reloaded.doc, await openDb(a.name), httpTransport(url, docId, token), await key(), docId, { live: false });
+    engine.attach(reloaded.persistence);
+    expect(engine.status.pending).toBe(2);
+    await engine.sync();
+    expect(engine.status.pending).toBe(0);
+    await other.engine.sync();
+    expect(dump(other.doc)).toEqual(['one!', 'two']);
+    expect(dump(reloaded.doc)).toEqual(dump(other.doc));
+    expect(engine.head).toBe(other.engine.head);
+  });
+
   it('an outbox an earlier version stored plain is read as it is and sealed from then on', async () => {
     const { docId, token } = await createDoc();
     const name = `sync-legacy-${n++}`;

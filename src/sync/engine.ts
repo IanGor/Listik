@@ -39,6 +39,14 @@ export interface SyncState {
   outbox: OutboxBatch[];
   /** The sequence of the last snapshot this device uploaded. */
   snapshotSeq: number;
+  /**
+   * The batch last posted and not acknowledged yet: its id and how many
+   * batches at the head of the outbox it carries. Written before the post,
+   * so a batch the server took whose answer was lost is known when it comes
+   * back in a pull: acknowledged then, not applied and sent a second time
+   * (which undid what other devices did in between).
+   */
+  sent?: { id: string; batches: number };
 }
 
 export type SyncPhase = 'idle' | 'syncing' | 'synced' | 'offline' | 'error' | 'stopped';
@@ -58,6 +66,8 @@ type OutboxBatch = Op[] & { sealed?: boolean };
 
 interface BatchBody {
   device: string;
+  /** Random per post (`SyncState.sent`); absent in batches of earlier versions. */
+  id?: string;
   prev: string;
   ops: Op[];
 }
@@ -87,6 +97,7 @@ const opsAad = (docId: string, seq: number) => `listik|${docId}|ops|${seq}`;
 const snapshotAad = (docId: string, seq: number) => `listik|${docId}|snapshot|${seq}`;
 
 const newDeviceId = () => toBase64(crypto.getRandomValues(new Uint8Array(9)));
+const newBatchId = () => toBase64(crypto.getRandomValues(new Uint8Array(12)));
 
 /**
  * The ops waiting to be sent are the document's text: stored sealed with
@@ -188,6 +199,7 @@ export async function bootstrap(db: IDBDatabase, codec: Codec, key: CryptoKey, d
   tx.objectStore('oplog').clear();
   tx.objectStore('meta').put({
     head: snap.seq, headHash: body.hash, device: prev?.device ?? newDeviceId(), outbox, snapshotSeq: snap.seq,
+    ...(prev?.sent ? { sent: prev.sent } : {}),
   } satisfies StoredState, STATE_KEY);
   tx.objectStore('meta').delete(TAIL_KEY); // folded into the outbox above
   await new Promise<void>((resolve, reject) => {
@@ -234,6 +246,8 @@ export class SyncEngine implements DocListener {
     this.docId = docId;
     this.options = options;
     this.state = state;
+    // Batches read back may have been posted: new edits open a batch of their own, so `sent.batches` still counts right.
+    for (const b of state.outbox as OutboxBatch[]) b.sealed = true;
     this.wholeHead = state.head;
     this.status = { phase: 'idle', pending: this.pendingCount(), head: state.head };
     doc.subscribe(this);
@@ -382,6 +396,8 @@ export class SyncEngine implements DocListener {
       if (!page.batches.length) return;
       const batches: { seq: number; body: BatchBody; hash: string }[] = [];
       let prev = this.state.headHash;
+      // A batch of the outbox already posted? Then the server took it though its answer never came.
+      const sent = this.state.sent;
       for (const b of page.batches) {
         const bytes = fromBase64(b.body);
         let body: BatchBody | null = null;
@@ -398,7 +414,20 @@ export class SyncEngine implements DocListener {
         prev = await sha256(bytes);
         batches.push({ seq: b.seq, body, hash: prev });
       }
-      this.applyRemote(batches.flatMap((b) => b.body.ops));
+      let theirs: Op[] = [];
+      for (const b of batches) {
+        if (sent && b.body.id === sent.id && b.body.device === this.state.device) {
+          // This device's own batch, its answer lost: the ops are here already; it is acknowledged, not applied again.
+          if (theirs.length) this.applyRemote(theirs);
+          theirs = [];
+          this.state.outbox.splice(0, Math.min(sent.batches, this.state.outbox.length));
+          this.state.sent = undefined;
+          this.set({ pending: this.pendingCount() });
+        } else {
+          theirs.push(...b.body.ops);
+        }
+      }
+      if (theirs.length) this.applyRemote(theirs);
       const last = batches[batches.length - 1];
       this.state.head = last.seq;
       this.state.headHash = last.hash;
@@ -431,12 +460,17 @@ export class SyncEngine implements DocListener {
     if (!sealed.length) throw new Error('push without a sealed batch'); // the exchange loop seals first
     const ops = coalesce(sealed.flat());
     const seq = this.state.head + 1;
-    const body: BatchBody = { device: this.state.device, prev: this.state.headHash, ops };
+    const id = newBatchId();
+    const body: BatchBody = { device: this.state.device, id, prev: this.state.headHash, ops };
     const bytes = pack(await encryptWith(this.key, utf8(JSON.stringify(body)), opsAad(this.docId, seq)));
+    // On disk before the post: a reload after a lost answer still knows the batch when it comes back.
+    this.state.sent = { id, batches: sealed.length };
+    await this.save();
     const result = await this.transport.postOps(this.state.head, toBase64(bytes));
     if ('conflict' in result) return false;
     // The state changes all at once: a batch of the log cut in between would take half of it.
     const hash = await sha256(bytes);
+    this.state.sent = undefined;
     this.state.outbox = this.state.outbox.filter((b) => !b.sealed);
     this.state.head = result.seq;
     this.state.headHash = hash;
@@ -505,8 +539,8 @@ export class SyncEngine implements DocListener {
   }
 
   private copy(): SyncState {
-    const { head, headHash, device, outbox, snapshotSeq } = this.state;
-    return { head, headHash, device, outbox: outbox.map((b) => [...b]), snapshotSeq };
+    const { head, headHash, device, outbox, snapshotSeq, sent } = this.state;
+    return { head, headHash, device, outbox: outbox.map((b) => [...b]), snapshotSeq, ...(sent ? { sent: { ...sent } } : {}) };
   }
 
   private set(patch: Partial<SyncStatus>): void {
