@@ -184,6 +184,35 @@ describe('sync', () => {
     expect(dump(c.doc)).toEqual(dump(reloaded.doc));
   });
 
+  it('restored from the server with edits not sent yet, the device shows them and sends them: it stays in step', async () => {
+    const { docId, token, a: other } = await createDoc();
+    const a = await device(docId, token, { bootstrap: true, attach: true });
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'на сервере'));
+    await a.engine.sync();
+    await other.engine.sync(); // before the snapshot: the server keeps no batch it covers here (retention 0)
+    await a.engine.uploadSnapshot(); // the server's newest snapshot is at its head: nothing to pull after it
+    const getOps = a.transport.getOps.bind(a.transport);
+    (a.transport as { getOps: typeof getOps }).getOps = async () => { throw new TypeError('Failed to fetch'); };
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'на сервере, и не отправлено'));
+    await expect(a.engine.sync()).rejects.toThrow(/fetch/);
+    await a.engine.flush();
+    await a.persistence.flush();
+    a.persistence.close();
+    // "Взять с сервера": the next load starts from the server's copy.
+    const db = await openDb(a.name);
+    await bootstrap(db, plainCodec, await key(), docId, httpTransport(url, docId, token));
+    db.close();
+    const reloaded = await Persistence.open(a.name);
+    expect(dump(reloaded.doc)).toEqual(['на сервере, и не отправлено']);
+    const engine = await SyncEngine.open(reloaded.doc, await openDb(a.name), httpTransport(url, docId, token), await key(), docId, { live: false });
+    engine.attach(reloaded.persistence);
+    expect(engine.status.pending).toBe(1);
+    await engine.sync();
+    await other.engine.sync();
+    expect(dump(other.doc)).toEqual(['на сервере, и не отправлено']);
+    expect(dump(reloaded.doc)).toEqual(dump(other.doc));
+  });
+
   it('attached to the log, the outbox agrees with it whenever the page stops: nothing typed stays unsent, nothing goes twice', async () => {
     const { docId, token, a: other } = await createDoc();
     const a = await device(docId, token, { bootstrap: true, attach: true });

@@ -215,9 +215,23 @@ export async function bootstrap(db: IDBDatabase, codec: Codec, key: CryptoKey, d
   const snap = await transport.getSnapshot();
   if (!snap) throw new Error('На сервере ещё нет снимка этого документа');
   const body = await openSnapshot(key, docId, snap.seq, snap.bytes);
-  deserialize(body.snapshot); // must parse: a corrupt snapshot fails here, not on the next load
-  const record = await codec.encodeSnapshot(body.snapshot);
-  const outbox = await seal(key, prev?.outbox ?? [], OUTBOX_AAD);
+  const doc = deserialize(body.snapshot); // must parse: a corrupt snapshot fails here, not on the next load
+  // What this device has not sent yet stays in view: applied on top of the
+  // server's copy, as a rebase would. Without it the edits went to the
+  // server but never showed here, and this device's next snapshot lost them.
+  const pending = prev?.outbox ?? [];
+  for (const op of firstEdits(pending)) op.was = doc.nodes.get(op.id)?.updated;
+  for (const batch of pending) {
+    for (const op of batch) {
+      try {
+        applyMerged(doc, op);
+      } catch (e) {
+        console.warn('bootstrap: an unsent op left out', op, e);
+      }
+    }
+  }
+  const record = await codec.encodeSnapshot(pending.length ? serialize(doc) : body.snapshot);
+  const outbox = await seal(key, pending, OUTBOX_AAD);
   const tx = db.transaction(['meta', 'oplog'], 'readwrite');
   tx.objectStore('meta').put(record, 'snapshot');
   tx.objectStore('oplog').clear();
