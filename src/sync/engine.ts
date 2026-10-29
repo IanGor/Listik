@@ -187,6 +187,8 @@ const unkept = (op: Op): Op => {
   return rest;
 };
 
+const behind = () => new Error('На сервере меньше записей, чем уже получило это устройство (сервер восстановлен из старой копии?). Документ здесь цел; новые правки не отправляются');
+
 /** iv ‖ ciphertext, as sent to the server. */
 const pack = (e: Encrypted): Uint8Array => {
   const out = new Uint8Array(e.iv.length + e.ct.length);
@@ -421,7 +423,8 @@ export class SyncEngine implements DocListener {
       for (;;) {
         for (const b of this.state.outbox) b.sealed = true;
         if (!this.state.outbox.length) break;
-        if (!(await this.push())) await this.pull();
+        // Refused (409) and nothing new to pull: the server's head is not ours to append to, and asking again would never end.
+        if (!(await this.push()) && !(await this.pull())) throw behind();
       }
       await this.save();
       this.set({ phase: 'synced', last: (this.options.now ?? Date.now)(), error: undefined });
@@ -443,11 +446,15 @@ export class SyncEngine implements DocListener {
     }
   }
 
-  /** Applies every batch after our head. */
-  private async pull(): Promise<void> {
+  /** Applies every batch after our head; resolves to how many there were. */
+  private async pull(): Promise<number> {
+    let pulled = 0;
     for (;;) {
       const page = await this.transport.getOps(this.state.head);
-      if (!page.batches.length) return;
+      // The server lost batches this device has applied (restored from an older copy, say).
+      if (page.head < this.state.head) throw behind();
+      if (!page.batches.length) return pulled;
+      pulled += page.batches.length;
       const batches: { seq: number; body: BatchBody; hash: string }[] = [];
       let prev = this.state.headHash;
       // A batch of the outbox already posted? Then the server took it though its answer never came.
@@ -486,7 +493,7 @@ export class SyncEngine implements DocListener {
       this.state.head = last.seq;
       this.state.headHash = last.hash;
       this.set({ head: last.seq });
-      if (last.seq >= page.head) return;
+      if (last.seq >= page.head) return pulled;
     }
   }
 

@@ -12,7 +12,7 @@ import { CONFLICT } from '../src/model/merge';
 import { VisibleRows } from '../src/model/rows';
 import { openDb } from '../src/persist/db';
 import { Persistence } from '../src/persist/idb';
-import { httpTransport } from '../src/sync/client';
+import { httpTransport, type Transport } from '../src/sync/client';
 import { dataKey, newDocId } from '../src/sync/crypto';
 import { changePassphrase, codecFor, createSync, forgetOnDevice, joinSync, openVault, relogin, unlock, type SyncHandle } from '../src/sync/setup';
 import { SyncEngine, bootstrap, readSyncState } from '../src/sync/engine';
@@ -373,6 +373,31 @@ describe('sync', () => {
     expect(secret.dek).toEqual(handleA.secret.dek);
     expect(await unlock(await openVault(locked.opened.db.name), 'новый пароль', false)).toBeTruthy(); // the key slot here is the new one now
     await expect(unlock(await openVault(locked.opened.db.name), 'старый пароль', false)).rejects.toThrow();
+  });
+
+  it('a server behind this device (restored from an older copy) is told, not asked again and again', async () => {
+    const { a } = await createDoc();
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'раз'));
+    await a.engine.sync();
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'раз, два'));
+    await a.engine.sync();
+    // The server now answers as it was before the last batch: its head is behind ours.
+    const head = a.engine.head;
+    let posts = 0;
+    (a.transport as { getOps: Transport['getOps'] }).getOps = async () => ({ head: head - 1, snapshot: null, batches: [] });
+    (a.transport as { postOps: Transport['postOps'] }).postOps = async () => {
+      posts++;
+      return { conflict: head - 1 };
+    };
+    a.run(() => cmd.setText(a.ctx, a.rows.ids[0], 'раз, два, три'));
+    await expect(a.engine.sync()).rejects.toThrow(/меньше записей/);
+    expect(posts).toBe(0);
+    expect(a.engine.status.phase).toBe('error');
+    expect(a.engine.status.pending).toBe(1);
+    // The same with a head that looks right but nothing to pull after a 409.
+    (a.transport as { getOps: Transport['getOps'] }).getOps = async () => ({ head, snapshot: null, batches: [] });
+    await expect(a.engine.sync()).rejects.toThrow(/меньше записей/);
+    expect(posts).toBe(1);
   });
 
   it('an outbox an earlier version stored plain is read as it is and sealed from then on', async () => {
