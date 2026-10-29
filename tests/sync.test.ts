@@ -127,6 +127,30 @@ describe('sync', () => {
     expect(b.doc.get(id).note).toBe(a.doc.get(id).note);
   });
 
+  it('a collision is decided the same way on a device whose own edit to the bullet waits in its outbox', async () => {
+    const { docId, token, a } = await createDoc();
+    const b = await device(docId, token, { bootstrap: true });
+    const c = await device(docId, token, { bootstrap: true });
+    const id = a.rows.ids[0];
+    a.run(() => cmd.setText(a.ctx, id, 'в'));
+    await a.engine.sync();
+    await b.engine.sync();
+    // c has not heard of it and types over the empty text; b types and takes it back, later than c.
+    c.run(() => cmd.setText(c.ctx, id, 'б'));
+    b.run(() => cmd.setText(b.ctx, id, 'ва'));
+    b.run(() => cmd.setText(b.ctx, id, 'в'));
+    await c.engine.sync();
+    await b.engine.sync();
+    await a.engine.sync();
+    await c.engine.sync();
+    // c's edit is the later of the two that collide: it wins everywhere, the other version is in the note.
+    expect(a.doc.get(id).text).toBe('б');
+    for (const d of [b, c]) {
+      expect(dump(d.doc)).toEqual(dump(a.doc));
+      expect(d.doc.get(id).note).toBe(a.doc.get(id).note);
+    }
+  });
+
   it('a new device starts from the snapshot, and a device left behind the retention gets told so', async () => {
     const { docId, token, a } = await createDoc();
     const stale = await device(docId, token, { bootstrap: true }); // starts at the seq-0 snapshot
@@ -344,7 +368,7 @@ describe('sync', () => {
   });
 
   it('many devices editing and syncing at random all end with the same outline', { timeout: 120_000 }, async () => {
-    for (let seed = 1; seed <= 3; seed++) {
+    for (let seed = 1; seed <= Number(process.env.SYNC_SEEDS ?? 3); seed++) {
       const rand = rng(seed);
       const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
       const { docId, token, a: first } = await createDoc();
@@ -355,6 +379,16 @@ describe('sync', () => {
         const d = await device(docId, token, { bootstrap: true });
         await d.engine.sync();
         devices.push(d);
+      }
+      // Now and then the server takes a batch and its answer is lost (a flaky network).
+      let lossy = true;
+      for (const d of devices) {
+        const post = d.transport.postOps.bind(d.transport);
+        (d.transport as { postOps: typeof post }).postOps = async (parent, body) => {
+          const result = await post(parent, body);
+          if (lossy && rand() < 0.15) throw new TypeError('Failed to fetch');
+          return result;
+        };
       }
       let steps = 0;
       for (let step = 0; step < 120; step++) {
@@ -382,9 +416,10 @@ describe('sync', () => {
           steps++;
         }
         // Devices sync at their own pace; some stay offline for long stretches.
-        if (rand() < 0.3) await pick(devices).engine.sync();
+        if (rand() < 0.3) await pick(devices).engine.sync().catch(() => {});
       }
       expect(steps).toBeGreaterThan(80);
+      lossy = false;
       for (let round = 0; round < 3; round++) for (const d of devices) await d.engine.sync();
       for (const d of devices) {
         checkInvariants(d.doc);

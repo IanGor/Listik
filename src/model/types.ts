@@ -70,8 +70,13 @@ export interface Position {
 export type Op =
   | { t: 'insert'; parent: NodeId; node: NodeSnapshot }
   | { t: 'remove'; parent: NodeId; node: NodeSnapshot }
-  /** `at`: edit time, so replaying the op log reproduces `updated`. */
-  | { t: 'setText'; id: NodeId; from: string; to: string; at?: number }
+  /**
+   * `at`: edit time, so replaying the op log reproduces `updated`. `was`:
+   * the bullet's `updated` before the op, kept on ops waiting in the sync
+   * outbox only (sync/engine.ts): undoing them for a rebase gives the time
+   * back, so a collision is decided here as on every other device.
+   */
+  | { t: 'setText'; id: NodeId; from: string; to: string; at?: number; was?: number }
   | { t: 'move'; id: NodeId; from: Position; to: Position }
   | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean }
   | { t: 'setTodo'; id: NodeId; from: boolean; to: boolean }
@@ -80,8 +85,8 @@ export type Op =
    * one it loses when unchecked — so the op inverts either way round.
    */
   | { t: 'setDone'; id: NodeId; from: boolean; to: boolean; at?: number }
-  /** `at`: edit time, as for setText. */
-  | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number }
+  /** `at`, `was`: as for setText. */
+  | { t: 'setNote'; id: NodeId; from: string; to: string; at?: number; was?: number }
   /** Makes the bullet a mirror of `to` (or a plain bullet again with null). */
   | { t: 'setMirror'; id: NodeId; from: NodeId | null; to: NodeId | null }
   /** Lines drawn on the bullet's sketch, added after the ones it has. */

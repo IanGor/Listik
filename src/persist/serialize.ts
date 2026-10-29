@@ -82,13 +82,16 @@ export function deserialize(json: string): Doc {
 /** Merges adjacent edits of the same bullet's text (or note): a typing burst becomes one op. */
 export function coalesce(ops: Op[]): Op[] {
   const out: Op[] = [];
-  for (const op of ops) {
-    const prev = out[out.length - 1];
-    if (prev && (op.t === 'setText' || op.t === 'setNote') && prev.t === op.t && prev.id === op.id) {
-      out[out.length - 1] = { ...prev, to: op.to, at: op.at };
-    } else {
-      out.push(op);
-    }
-  }
+  for (const op of ops) coalesceInto(out, op);
   return out;
+}
+
+/** Appends `op` to `out`, folded into the last op when it edits the same text (or note) after it. */
+export function coalesceInto(out: Op[], op: Op): void {
+  const prev = out[out.length - 1];
+  if (prev && (op.t === 'setText' || op.t === 'setNote') && prev.t === op.t && prev.id === op.id) {
+    out[out.length - 1] = { ...prev, to: op.to, at: op.at };
+  } else {
+    out.push(op);
+  }
 }

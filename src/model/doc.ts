@@ -78,6 +78,8 @@ export class Doc {
   private pending: Op[] | null = null;
   /** Bullet → the bullets that mirror it (`mirrorOf`), in the outline or the trash. */
   private mirrored = new Map<NodeId, Set<NodeId>>();
+  /** A text or note op applied → the bullet's `updated` before it (`updatedBefore`). */
+  private before = new WeakMap<Op, number>();
 
   constructor(root: NodeId = 'root') {
     this.root = root;
@@ -161,6 +163,11 @@ export class Doc {
   indexMirrors(): void {
     this.mirrored.clear();
     for (const n of this.nodes.values()) this.linkMirror(n);
+  }
+
+  /** The bullet's `updated` before `op` (a setText or setNote this doc applied), for the sync outbox's `was`. */
+  updatedBefore(op: Op): number | undefined {
+    return this.before.get(op);
   }
 
   /** Has the bullet mirrors pointing at it (in the outline or the trash)? */
@@ -298,6 +305,7 @@ export class Doc {
       case 'setText': {
         const n = this.get(op.id);
         if (n.text !== op.from) throw new Error(`setText: stale text for ${op.id}`);
+        this.before.set(op, n.updated);
         n.text = op.to;
         if (op.at !== undefined) n.updated = op.at;
         break;
@@ -337,6 +345,7 @@ export class Doc {
       case 'setNote': {
         const n = this.get(op.id);
         if (n.note !== op.from) throw new Error(`setNote: stale note for ${op.id}`);
+        this.before.set(op, n.updated);
         n.note = op.to;
         if (op.at !== undefined) n.updated = op.at;
         break;

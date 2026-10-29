@@ -5,7 +5,7 @@ import type { Op } from '../model/types';
 import { LockedError, type Codec } from '../persist/codec';
 import { done, request } from '../persist/db';
 import type { MetaWrite, Rider } from '../persist/idb';
-import { coalesce, deserialize, serialize } from '../persist/serialize';
+import { coalesceInto, deserialize, serialize } from '../persist/serialize';
 import { GoneError, type Transport } from './client';
 import { decryptWith, encryptWith, isEncrypted, type Encrypted } from './crypto';
 import { fromBase64, fromUtf8, gunzip, gzip, sha256, toBase64, utf8 } from './encoding';
@@ -156,6 +156,30 @@ export interface StateStore {
   flush(): Promise<void>;
   ride(rider: Rider): () => void;
 }
+
+type TextEdit = Extract<Op, { t: 'setText' | 'setNote' }>;
+
+/** The first text or note edit of each bullet in the outbox: the one whose `was` is the server's time. */
+function firstEdits(outbox: Op[][]): TextEdit[] {
+  const seen = new Set<string>();
+  const out: TextEdit[] = [];
+  for (const batch of outbox) {
+    for (const op of batch) {
+      if ((op.t === 'setText' || op.t === 'setNote') && !seen.has(op.id)) {
+        seen.add(op.id);
+        out.push(op);
+      }
+    }
+  }
+  return out;
+}
+
+/** An op as sent: without `was`, which is this device's own bookkeeping. */
+const unkept = (op: Op): Op => {
+  if ((op.t !== 'setText' && op.t !== 'setNote') || op.was === undefined) return op;
+  const { was: _, ...rest } = op;
+  return rest;
+};
 
 /** iv ‖ ciphertext, as sent to the server. */
 const pack = (e: Encrypted): Uint8Array => {
@@ -335,11 +359,15 @@ export class SyncEngine implements DocListener {
     // The folded state is this device's own.
     const shared = ops.filter((op) => op.t !== 'setCollapsed');
     if (!shared.length) return;
-    const last = this.state.outbox[this.state.outbox.length - 1];
-    if (last && !last.sealed) last.push(...shared);
-    else this.state.outbox.push(shared);
+    let last = this.state.outbox[this.state.outbox.length - 1];
+    if (!last || last.sealed) this.state.outbox.push((last = []));
+    // A typing burst becomes one op here, not only in the batch sent: the
+    // rebase must apply exactly what the other devices get, or a collision
+    // came out one way here and another way there.
+    const kept = shared.map((op) => (op.t === 'setText' || op.t === 'setNote' ? { ...op, was: this.doc.updatedBefore(op) } : op));
+    for (const op of kept) coalesceInto(last, op);
     if (this.store) {
-      this.tail.push(...shared);
+      this.tail.push(...kept);
       this.tailChanged = true;
     }
     this.set({ pending: this.pendingCount() });
@@ -446,7 +474,19 @@ export class SyncEngine implements DocListener {
         for (let i = outbox.length - 1; i >= 0; i--) {
           for (let k = outbox[i].length - 1; k >= 0; k--) applyMerged(this.doc, invert(outbox[i][k]));
         }
+        // An undone edit leaves its own time in `updated`, which decides a
+        // collision (merge.ts): each bullet gets back the server's, so the
+        // ops that come apply here as on any other device.
+        const first = firstEdits(outbox);
+        for (const op of first) {
+          const n = this.doc.nodes.get(op.id);
+          if (n && op.was !== undefined && n.updated !== op.was) this.doc.apply({ t: 'setText', id: n.id, from: n.text, to: n.text, at: op.was });
+        }
         for (const op of ops) applyMerged(this.doc, op);
+        for (const op of first) {
+          const n = this.doc.nodes.get(op.id);
+          if (n) op.was = n.updated;
+        }
         for (const batch of outbox) for (const op of batch) applyMerged(this.doc, op);
       });
     } finally {
@@ -458,7 +498,8 @@ export class SyncEngine implements DocListener {
   private async push(): Promise<boolean> {
     const sealed = this.state.outbox.filter((b) => b.sealed);
     if (!sealed.length) throw new Error('push without a sealed batch'); // the exchange loop seals first
-    const ops = coalesce(sealed.flat());
+    // As the outbox holds them (each batch coalesced as it grew): the rebase here applied the same ops.
+    const ops = sealed.flat().map(unkept);
     const seq = this.state.head + 1;
     const id = newBatchId();
     const body: BatchBody = { device: this.state.device, id, prev: this.state.headHash, ops };
