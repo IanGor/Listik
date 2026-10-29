@@ -81,4 +81,45 @@ describe('Backup', () => {
     expect(files.size).toBe(0);
     backup.close();
   });
+
+  it('a write that fails is tried again later, not given up; access taken back pauses it', async () => {
+    const doc = build(['Том первый']);
+    const now = new Date(2026, 9, 17, 12, 0).getTime();
+    const backup = await Backup.open(`backup-${dbCounter++}`, doc, () => now);
+    const { folder, files } = fakeFolder();
+    let failure: Error | null = new Error('disk busy');
+    const getFileHandle = folder.getFileHandle.bind(folder);
+    folder.getFileHandle = async (name, options) => {
+      if (failure) throw failure;
+      return getFileHandle(name, options);
+    };
+    vi.useFakeTimers();
+    await backup.choose(folder);
+    expect(backup.status.state).toBe('error');
+    expect(files.size).toBe(0);
+    failure = null;
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(backup.status.state).toBe('on');
+    expect(files.get('listik-2026-10-17.md')).toBe('- Том первый\n');
+    // An error, then an edit: the edit is copied on the next round too.
+    failure = new Error('disk busy');
+    const ctx = { doc, rows: new VisibleRows(doc) };
+    doc.transact(() => cmd.setText(ctx, 'Том первый', 'Том первый!'));
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(backup.status.state).toBe('error');
+    failure = null;
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(files.get('listik-2026-10-17.md')).toBe('- Том первый!\n');
+    // Access taken back: paused until resumed by a gesture, nothing tried meanwhile.
+    failure = new DOMException('no access', 'NotAllowedError');
+    doc.transact(() => cmd.setText(ctx, 'Том первый', 'Том первый!!'));
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(backup.status.state).toBe('paused');
+    failure = null;
+    await vi.advanceTimersByTimeAsync(15 * 60_000);
+    expect(files.get('listik-2026-10-17.md')).toBe('- Том первый!\n');
+    await backup.resume();
+    expect(files.get('listik-2026-10-17.md')).toBe('- Том первый!!\n');
+    backup.close();
+  });
 });

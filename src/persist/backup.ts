@@ -116,15 +116,23 @@ export class Backup implements DocListener {
 
   commit(): void {
     this.dirty = true;
-    if (this.status.state !== 'on') return;
+    if (this.writing()) this.schedule();
+  }
+
+  async writeIfDirty(): Promise<void> {
+    if (this.dirty && this.writing()) await this.write();
+  }
+
+  /** Copies go on while on, and after a failed write too: one error (a busy disk) no longer stopped them for good. */
+  private writing(): boolean {
+    return this.status.state === 'on' || this.status.state === 'error';
+  }
+
+  private schedule(): void {
     this.timer ??= setTimeout(() => {
       this.timer = null;
       void this.writeIfDirty();
     }, INTERVAL);
-  }
-
-  async writeIfDirty(): Promise<void> {
-    if (this.dirty && this.status.state === 'on') await this.write();
   }
 
   /** Writes today's copy now. */
@@ -141,7 +149,10 @@ export class Backup implements DocListener {
       this.set({ state: 'on', folder: folder.name, last: this.now() });
     } catch (e) {
       this.dirty = true;
-      this.set({ state: 'error', folder: folder.name, last: this.status.last, error: String(e) });
+      // Access taken back: only a gesture gives it again (`resume`). Anything else is tried again later.
+      const lost = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+      this.set({ state: lost ? 'paused' : 'error', folder: folder.name, last: this.status.last, error: String(e) });
+      if (!lost) this.schedule();
     }
   }
 
