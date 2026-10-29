@@ -1,4 +1,5 @@
-import { firstWord } from './calendar';
+import { TODO_NOTE, firstWord, fillDay } from './calendar';
+import type { Ctx } from './commands';
 import { clock } from './clock';
 import { newId, type Doc } from './doc';
 import { titleOf } from './links';
@@ -18,6 +19,7 @@ import type { NodeId, Op } from './types';
 
 const KANBAN = 'kanban';
 const BACKLOG = 'backlog';
+const TODAY = 'today';
 
 const hasWord = (text: string, word: string) =>
   titleOf(text).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_]+/gu)?.includes(word) ?? false;
@@ -95,16 +97,46 @@ export function toBacklog(doc: Doc, targets: readonly NodeId[]): number {
   return fresh.length;
 }
 
-function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId): NodeId {
+function addChild(doc: Doc, parent: NodeId, text: string, mirrorOf?: NodeId, note = '', at?: number, open = false): NodeId {
   const id = newId();
   const now = clock.now();
   doc.apply({
     t: 'insert',
     parent,
     node: {
-      id, order: doc.orderAt(parent, doc.get(parent).children.length), text, note: '', collapsed: !!mirrorOf, todo: false, done: false,
+      id, order: doc.orderAt(parent, at ?? doc.get(parent).children.length), text, note, collapsed: !!mirrorOf && !open, todo: false, done: false,
       created: now, updated: now, children: [], ...(mirrorOf ? { mirrorOf } : {}),
     },
   });
   return id;
+}
+
+/** The Today inside the Kanban, if there is one. */
+export function findToday(doc: Doc): NodeId | null {
+  const kanban = findKanban(doc);
+  return kanban === null ? null : findChild(doc, kanban, TODAY);
+}
+
+/**
+ * A new day's template (model/calendar.ts `fillDay`) with a mirror of the
+ * Kanban's Today where a list of its own used to be, after the notes, open.
+ * The Today (and the Kanban) is made if missing, its caption the contexts
+ * `TODO_NOTE`. False if the day had its content already.
+ */
+export function fillDayToday(ctx: Ctx, day: NodeId): boolean {
+  const { doc } = ctx;
+  if (!fillDay(ctx, day)) return false;
+  let today = findToday(doc);
+  if (today === null) {
+    const kanban = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban');
+    today = addChild(doc, kanban, 'Today', undefined, TODO_NOTE);
+  }
+  addChild(doc, day, '', today, '', Math.min(1, doc.get(day).children.length), true);
+  return true;
+}
+
+/** The mirror of the Today among a day's own bullets, if it has one. */
+export function todayMirrorOf(doc: Doc, day: NodeId): NodeId | null {
+  const today = findToday(doc);
+  return today === null ? null : doc.get(day).children.find((c) => doc.get(c).mirrorOf && doc.origin(c) === today) ?? null;
 }

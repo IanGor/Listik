@@ -1,6 +1,6 @@
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addDays, addYear, createStructure, dayOf, fillDay, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, todoOf, yearTags, type DayDate, type Period,
+  addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseAll, collapseChildren, cycleTask, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
@@ -9,7 +9,7 @@ import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
-import { backlogTargets, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
@@ -488,7 +488,7 @@ export class Outliner {
    * over the new place, so its results show level after level. A bullet
    * zoomed into opens folded: everything inside it, at any depth (the
    * command `collapseAll`, no undo step), so the place reads as an overview.
-   * It stays folded as left; only a day's `todo` stays open: the day's
+   * It stays folded as left; only a day's mirror of Today stays open: the day's
    * list is what the day is entered for. `keepFolds` (a reload coming back to its place) shows it
    * as it was.
    */
@@ -508,8 +508,8 @@ export class Outliner {
       if (target && !keepFolds) {
         this.scaffold((ctx) => {
           collapseAll(ctx, target);
-          const todo = periodAt(this.doc, target)?.kind === 'day' ? todoOf(this.doc, target) : null;
-          if (todo !== null && this.doc.get(todo).collapsed) setCollapsed(ctx, todo, false);
+          const today = periodAt(this.doc, target)?.kind === 'day' ? todayMirrorOf(this.doc, target) : null;
+          if (today !== null && this.doc.get(today).collapsed) setCollapsed(ctx, today, false);
         });
       }
       this.syncRows();
@@ -728,7 +728,7 @@ export class Outliner {
 
   /**
    * A day of the calendar entered for the first time, by any way: its
-   * template goes in (model/calendar.ts `fillDay`, no undo step: `scaffold`),
+   * template goes in (model/kanban.ts `fillDayToday`, no undo step: `scaffold`),
    * the caret stays out. With sync, only once the server has been heard from, and
    * only if the day is still where the user is.
    */
@@ -736,7 +736,7 @@ export class Outliner {
     if (this.readOnly || this.doc.get(id).children.length || periodAt(this.doc, id)?.kind !== 'day') return;
     const fill = () => {
       if (this.zoom() !== id || !this.doc.has(id)) return;
-      this.scaffold((ctx) => fillDay(ctx, id));
+      this.scaffold((ctx) => fillDayToday(ctx, id));
     };
     if (this.syncing() && !this.synced) this.afterSync.push(fill);
     else fill();
@@ -865,7 +865,7 @@ export class Outliner {
       this.notify(waiting ? 'День ещё не пришёл с сервера: попробуйте через минуту' : `В календаре нет дня ${periodName(p)}`);
       return null;
     }
-    if (!this.doc.get(day).children.length) this.scaffold((ctx) => fillDay(ctx, day));
+    if (!this.doc.get(day).children.length) this.scaffold((ctx) => fillDayToday(ctx, day));
     return day;
   }
 

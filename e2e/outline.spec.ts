@@ -966,7 +966,7 @@ test.describe('structure and calendar', () => {
   const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', '@q1', '@q2', '@q3', '@q4'];
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
-  const DAY = ['#notes', '  ', 'todo', '  ', ...SLOTS];
+  const DAY = ['#notes', '  ', 'Today', ...SLOTS];
   const title = (page: Page) => page.locator('.zoom-title');
   const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
   /** Opens the title for editing: a click past its text, as a day's title is all tags and a click on one filters. */
@@ -1042,9 +1042,9 @@ test.describe('structure and calendar', () => {
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
     await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
-    expect(await outline(page)).toEqual(['#notes', '  утро', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', '  утро', 'Today', ...SLOTS]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
@@ -1057,7 +1057,8 @@ test.describe('structure and calendar', () => {
     await page.locator('.row', { hasText: 'PARA' }).locator('.toggle').click();
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => !t.startsWith(' ')));
     await home.click();
-    const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : [t]));
+    // The Kanban holds the Today that today's day mirrors.
+    const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : t === '  Backlog' ? [t, '  Today'] : [t]));
     expect(await outline(page)).toEqual(QUARTERS);
     // A year opened as earlier versions left them, on a device that has not folded them yet.
     await page.locator('.row', { hasText: year }).first().locator('.toggle').click();
@@ -1088,7 +1089,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.row', { hasText: 'Kanban' }).locator('.toggle').click();
     const rows = await outline(page);
     const at = rows.indexOf('Kanban');
-    expect(rows.slice(at, at + 4)).toEqual(['Kanban', '  Backlog', '    Alpha', '@q1']);
+    expect(rows.slice(at, at + 5)).toEqual(['Kanban', '  Backlog', '    Alpha', '  Today', '@q1']);
   });
 
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
@@ -1101,7 +1102,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
     await page.getByRole('button', { name: 'Следующий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(1)));
-    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(-1)));
@@ -1210,7 +1211,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DAY);
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
@@ -1241,12 +1242,12 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', ...SLOTS]);
     await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
     await page.waitForTimeout(500);
     await page.reload();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', '  запись', 'todo', '  ', ...SLOTS]);
+    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', ...SLOTS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));

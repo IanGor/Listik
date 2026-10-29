@@ -4,6 +4,7 @@ import {
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTags, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert } from '../src/model/doc';
+import { fillDayToday, findToday, todayMirrorOf } from '../src/model/kanban';
 import { checkInvariants } from '../src/model/invariants';
 import type { Tree } from '../src/model/outline-text';
 import { TagIndex, parseTags } from '../src/model/tags';
@@ -269,22 +270,47 @@ describe('findInbox', () => {
 });
 
 describe('fillDay', () => {
-  it('gives an empty day notes and a todo list, each with an empty plain bullet, then the hours, once', () => {
+  it('gives an empty day notes with an empty plain bullet, then the hours, once', () => {
     const { doc, ctx, run } = setup(['@d19 @m10 @понедельник']);
     const id = '@d19 @m10 @понедельник';
     expect(run(() => fillDay(ctx, id))).toBe(true);
-    expect(dump(doc)).toEqual([id, '  #notes', '    ', '  todo', '    ', ...SLOTS.map((s) => `  ${s}`)]);
-    const [notes, todo] = doc.get(id).children;
+    expect(dump(doc)).toEqual([id, '  #notes', '    ', ...SLOTS.map((s) => `  ${s}`)]);
+    const [notes] = doc.get(id).children;
     expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
-    // Plain, like the one under the notes: no checkbox until it is made a task.
-    expect(doc.get(doc.get(todo).children[0]).todo).toBe(false);
-    // The todo's caption holds the two contexts; the notes have none.
-    expect(doc.get(todo).note).toBe('@work @home');
     expect(doc.get(notes).note).toBe('');
     expect(SLOTS[0]).toBe('09:00');
     expect(SLOTS.at(-1)).toBe('18:00');
     expect(SLOTS.length).toBe(19);
     expect(run(() => fillDay(ctx, id))).toBe(false);
     checkInvariants(doc);
+  });
+});
+
+describe('fillDayToday', () => {
+  const id = '@d19 @m10 @понедельник';
+
+  it('puts a mirror of the Kanban\'s Today after the notes, making Kanban and Today if missing', () => {
+    const { doc, ctx, run } = setup([id]);
+    expect(run(() => fillDayToday(ctx, id))).toBe(true);
+    const kids = doc.get(id).children;
+    expect(kids.map((c) => doc.get(c).text)).toEqual(['#notes', '', ...SLOTS]);
+    const today = findToday(doc)!;
+    expect(doc.get(today).text).toBe('Today');
+    expect(doc.get(today).note).toBe('@work @home');
+    expect(doc.get(doc.get(today).parent!).text).toBe('Kanban');
+    expect(doc.get(kids[1]).mirrorOf).toBe(today);
+    expect(doc.get(kids[1]).collapsed).toBe(false);
+    expect(todayMirrorOf(doc, id)).toBe(kids[1]);
+    expect(run(() => fillDayToday(ctx, id))).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('uses the Today there is, however it is dressed; a second day mirrors the same one', () => {
+    const { doc, ctx, run } = setup(['Kanban #board', '  🎯 TODAY', id, '@d20 @m10 @вторник']);
+    run(() => fillDayToday(ctx, id));
+    run(() => fillDayToday(ctx, '@d20 @m10 @вторник'));
+    expect(doc.get('Kanban #board').children).toEqual(['🎯 TODAY']);
+    expect(todayMirrorOf(doc, id)).not.toBeNull();
+    expect(doc.get(todayMirrorOf(doc, '@d20 @m10 @вторник')!).mirrorOf).toBe('🎯 TODAY');
   });
 });
