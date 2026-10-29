@@ -1071,6 +1071,27 @@ test.describe('structure and calendar', () => {
     await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
+  test('a task in PARA puts its project into a Kanban\'s Backlog, made if missing', async ({ page }) => {
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Projects' }).locator('.bullet').click();
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Alpha');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('write');
+    await expect(page.locator('.row', { hasText: 'Kanban' })).toHaveCount(0);
+    await page.keyboard.press('Control+l');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    const kanban = page.locator('.row', { hasText: 'Kanban' });
+    await expect(kanban).toHaveCount(1);
+    await expect(page.locator('.row', { hasText: 'Backlog' })).toHaveCount(1);
+    expect((await outline(page)).slice(-3)).toEqual(['Kanban', '  Backlog', '    Alpha']);
+  });
+
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
     await create(page);
     // Creating the structure leaves in today's day.

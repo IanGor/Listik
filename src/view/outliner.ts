@@ -9,6 +9,7 @@ import { History, focusAfter, type HistoryEntry } from '../model/history';
 import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
+import { backlogTargets, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, searchable, tagText } from '../model/tags';
 import { insertTemplate } from '../model/templates';
@@ -302,6 +303,7 @@ export class Outliner {
     writeSetting('listik-hide-done', null);
     doc.subscribe(this.nodes);
     doc.subscribe({
+      op: (o) => void this.collected?.push(o),
       commit: () => {
         if (this.tasks.version !== this.tasksVersion()) this.setTasksVersion(this.tasks.version);
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
@@ -1437,14 +1439,21 @@ export class Outliner {
   run(cmd: (ctx: Ctx) => Focus | RowKey | void, keep?: Focus): Op[] {
     if (this.readOnly) return [];
     let ops: Op[] = [];
+    const seen: Op[] = [];
+    this.collected = seen;
     batch(() => {
       const current = this.focus();
       const before = keep ?? (current && 'caret' in current ? current : null);
       let result = undefined as Focus | RowKey | void;
-      ops = this.doc.transact(() => {
-        result = cmd(this.ctx);
-        this.keepErased();
-      });
+      try {
+        ops = this.doc.transact(() => {
+          result = cmd(this.ctx);
+          this.keepErased();
+          this.fillBacklog(seen);
+        });
+      } finally {
+        this.collected = null;
+      }
       let target = typeof result === 'string' ? (before ? { ...before, id: result } : { id: result, caret: 0 }) : (result ?? keep);
       const near = before?.id ?? this.selection()?.head;
       const key = target && this.rows.locate(target.id, near);
@@ -1453,6 +1462,19 @@ export class Outliner {
       this.moveFocus(target ?? null);
     });
     return ops;
+  }
+
+  /** The ops a running command has applied so far (`run`), for `fillBacklog`; null outside one. */
+  private collected: Op[] | null = null;
+
+  /**
+   * The tasks the command made or brought into PARA come to the Kanban's
+   * Backlog (model/kanban.ts), inside the same undo step. Not before the
+   * server has been heard from: two devices would each make a Kanban.
+   */
+  private fillBacklog(seen: Op[]): void {
+    if (this.syncing() && !this.synced) return;
+    toBacklog(this.doc, backlogTargets(this.doc, seen));
   }
 
   /** Bullets erased to nothing that the command just deleted take their text along into the trash (`erased`). */
