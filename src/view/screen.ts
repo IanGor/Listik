@@ -87,3 +87,8 @@ export const keyboard: Accessor<boolean> = (() => {
   });
   return up;
 })();
+
+/** An Apple device: the modifier is ⌘ (and ⌥). The help and every hint of a key take their names from here. */
+export const MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+export const MOD = MAC ? '⌘' : 'Ctrl';
+export const ALT = MAC ? '⌥' : 'Alt';

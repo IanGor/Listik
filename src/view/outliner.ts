@@ -2,7 +2,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseAll, collapseChildren, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseAll, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, type Doc } from '../model/doc';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -27,6 +27,8 @@ import { narrow } from './screen';
 
 /** A task checked off stays struck through where it is this long, then goes last among its siblings, ms. */
 export const SINK_DELAY = 3000;
+/** How long «Удалено · Отменить» stays after more than one bullet went, ms: there is more to lose, and on a phone out of editing the toast is the quick way back. */
+export const DELETE_TOAST_MS = 8000;
 
 /**
  * Tasks just checked off (`Outliner.changeTasks`): the ops that checked them,
@@ -1203,17 +1205,45 @@ export class Outliner {
    * it back. A caret in another row stays there.
    */
   swipeDelete(key: RowKey): void {
-    const i = this.rows.indexOf(key);
-    if (this.readOnly || i < 0) return;
+    this.deleteRows([key], true);
+  }
+
+  /**
+   * Deletes rows with all they hold, whichever way it was asked (a swipe,
+   * the row menu, Ctrl+Shift+Backspace, Delete or Backspace on a selection,
+   * the editing bar): one undo step and always the same toast, «Удалено ·
+   * Отменить», longer when more than one bullet went (`DELETE_TOAST_MS`).
+   * Before, only a swipe and the row menu told it, and the other ways took
+   * a subtree away without a word. `elsewhere`: the rows are not the one
+   * being edited (a swipe, the menu), so a caret outside them stays.
+   */
+  deleteRows(keys: RowKey[], elsewhere = false): void {
+    const rows = keys.filter((k) => this.rows.indexOf(k) >= 0);
+    if (this.readOnly || !rows.length) return;
+    let count = 0;
+    for (const k of new Set(rows.map((r) => nodeOf(r)))) this.doc.walk(k, () => void count++);
     const cur = this.focus();
-    const at = cur ? this.rows.indexOf(cur.id) : -1;
-    const keep = cur && 'caret' in cur && at >= 0 && (at < i || at >= this.rows.subtreeEnd(i)) ? cur : undefined;
+    let keep: Focus | undefined;
+    if (elsewhere && cur && 'caret' in cur) {
+      const at = this.rows.indexOf(cur.id);
+      const inside = rows.some((k) => {
+        const i = this.rows.indexOf(k);
+        return at >= i && at < this.rows.subtreeEnd(i);
+      });
+      if (at >= 0 && !inside) keep = cur;
+    }
     if (this.selection()) this.select(null);
     const ops = this.run((ctx) => {
-      deleteNode(ctx, key);
-      return keep;
+      const focus = rows.length === 1 ? deleteNode(ctx, rows[0]) : deleteMany(ctx, rows);
+      return elsewhere ? keep : focus;
     }, keep);
-    this.notify('Удалено', { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') });
+    if (!ops.length) return;
+    this.notify(
+      count > 1 ? `Удалено: ${count} ${plural(count, 'пункт', 'пункта', 'пунктов')}` : 'Удалено',
+      { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') },
+      null,
+      count > 1 ? DELETE_TOAST_MS : undefined,
+    );
   }
 
   /**
@@ -1299,14 +1329,14 @@ export class Outliner {
   }
 
   /** Shows a message for a few seconds. */
-  notify(message: string, action: { label: string; run: () => void } | null = null, link: { label: string; run: () => void } | null = null): void {
+  notify(message: string, action: { label: string; run: () => void } | null = null, link: { label: string; run: () => void } | null = null, ms = 4000): void {
     batch(() => {
       this.setToast(message);
       this.setToastAction(action);
       this.setToastLink(link);
     });
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.hideToast(), 4000);
+    this.toastTimer = setTimeout(() => this.hideToast(), ms);
   }
 
   /** The toast goes (its time is up, or one of its buttons was taken). */

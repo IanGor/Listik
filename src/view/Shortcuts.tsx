@@ -1,10 +1,6 @@
 import { For, Show, createEffect, on } from 'solid-js';
 import type { Outliner } from './outliner';
-import { phone, touch } from './screen';
-
-const MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
-const MOD = MAC ? '⌘' : 'Ctrl';
-const ALT = MAC ? '⌥' : 'Alt';
+import { ALT, MOD, phone, touch } from './screen';
 
 /** What a finger does on a touch screen: [gesture, what it does]. */
 const GESTURES: [gesture: string, action: string][] = [

@@ -67,7 +67,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       return handle(() => o.run((ctx) => (e.shiftKey ? cmd.outdent : cmd.indent)(ctx, id), here));
 
     case 'Backspace':
-      if (mod && e.shiftKey) return handle(() => o.run((ctx) => cmd.deleteNode(ctx, id)));
+      if (mod && e.shiftKey) return handle(() => o.deleteRows([id]));
       if (!collapsed || start !== 0) return;
       // On a touch screen a held Backspace runs on into the bullet above:
       // there it only removes an empty bullet, never joins two texts. (At a
@@ -165,7 +165,7 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
       return handle(() => o.run((ctx) => (e.shiftKey ? cmd.outdentMany : cmd.indentMany)(ctx, roots())));
     case 'Backspace':
     case 'Delete':
-      return handle(() => o.run((ctx) => cmd.deleteMany(ctx, roots())));
+      return handle(() => o.deleteRows(roots()));
     case 'Enter':
       if (mod) return handle(() => {
         const tasks = roots().filter((k) => o.contentOf(k).todo);

@@ -1363,6 +1363,36 @@ test.describe('quick capture', () => {
   });
 });
 
+test.describe('deleting', () => {
+  test('every way of deleting tells it the same way and takes it back: Ctrl+Shift+Backspace, a selection, the menu', async ({ page }) => {
+    // A subtree from the keyboard: the toast counts it, and stays longer.
+    await edit(page, 'Часть первая');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(page.locator('.toast')).toContainText('Удалено: 3 пункта');
+    await page.waitForTimeout(5000);
+    await expect(page.locator('.toast')).toContainText('Удалено: 3 пункта');
+    await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    // A selection's Delete.
+    await edit(page, 'Часть вторая');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+    await page.keyboard.press('Delete');
+    await expect(page.locator('.toast')).toContainText('Удалено: 2 пункта');
+    await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    // One bullet: just «Удалено». Undone out of editing, from the menu (a mouse, or a phone off its editing bar).
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(page.locator('.toast')).toHaveText(/^Удалено/);
+    await page.keyboard.press('Escape');
+    await page.locator('.topbar [aria-label="Меню документа"]').click();
+    await page.getByRole('menuitem', { name: /^Отменить/ }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    await page.locator('.topbar [aria-label="Меню документа"]').click();
+    await expect(page.getByRole('menuitem', { name: /^Повторить/ })).toBeVisible();
+  });
+});
+
 test.describe('trash', () => {
   const panel = (page: Page) => page.getByRole('complementary', { name: 'Корзина' });
   const openTrash = async (page: Page) => {

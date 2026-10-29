@@ -6,7 +6,7 @@ import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import { KINDS, KIND_TITLES, availableFonts, fontStack, setFont } from './fonts';
 import type { Outliner } from './outliner';
-import { phone } from './screen';
+import { MOD, phone } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
@@ -23,6 +23,8 @@ export function Symbol(props: { children: JSX.Element }) {
   );
 }
 
+const UNDO = () => <Symbol><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Symbol>;
+const REDO = () => <Symbol><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></Symbol>;
 const GO = () => <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>;
 // A note being written (square.and.pencil): the tray is the header's Inbox, a place, not this action.
 const WRITE = () => <Symbol><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" /></Symbol>;
@@ -132,6 +134,22 @@ export function DocumentMenu(props: { o: Outliner }) {
               Перейти к пункту… <span class="hint">Ctrl+K</span>
               <GO />
             </button>
+          </Show>
+          {/* Undo for a mouse, and for a phone out of editing (its bar has undo only while a bullet is edited). */}
+          <Show when={!o.readOnly && (o.history.canUndo || o.history.canRedo)}>
+            <Show when={o.history.canUndo}>
+              <button type="button" role="menuitem" onClick={() => { close(); o.undo(); }}>
+                Отменить <Show when={!phone()}><span class="hint">{MOD}+Z</span></Show>
+                <UNDO />
+              </button>
+            </Show>
+            <Show when={o.history.canRedo}>
+              <button type="button" role="menuitem" onClick={() => { close(); o.redo(); }}>
+                Повторить <Show when={!phone()}><span class="hint">{MOD}+Shift+Z</span></Show>
+                <REDO />
+              </button>
+            </Show>
+            <div class="menu-sep" role="separator" />
           </Show>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>

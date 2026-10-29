@@ -138,7 +138,7 @@ const SETS: SubSet[] = [
       BOLD,
       ITALIC,
       REDO,
-      { label: 'Удалить', icon: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'], run: (o, h) => run(o, h, cmd.deleteNode) },
+      { label: 'Удалить', icon: ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'], run: (o, h) => o.deleteRows([h.id]) },
     ],
   },
 ];
