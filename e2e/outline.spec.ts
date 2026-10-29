@@ -2194,9 +2194,23 @@ test.describe('touch screen', () => {
   /** The on-screen keyboard shrinks the window (index.html: resizes-content); here, by ~40%. */
   const keyboard = (page: Page, up: boolean) => page.setViewportSize({ width: 412, height: up ? 540 : 915 });
 
-  test('quick capture comes first in the menu; the line sits at the bottom', async ({ page }) => {
+  test('"Перейти к пункту…" from the menu opens the places line at the top of a phone and goes there', async ({ page }) => {
     await page.getByRole('button', { name: 'Меню документа' }).tap();
-    await expect(page.getByRole('menuitem').first()).toHaveText('Записать в Inbox');
+    await page.getByRole('menuitem', { name: 'Перейти к пункту…' }).tap();
+    const input = page.locator('.goto-input');
+    await expect(input).toBeFocused();
+    expect((await page.locator('.goto').boundingBox())!.y).toBeLessThan(200);
+    await page.keyboard.type('Часть вторая');
+    // The places take the line's width (they once shared a class with the header's "Сегодня" and were 44px wide).
+    expect((await page.locator('.goto-place').first().boundingBox())!.width).toBeGreaterThan(300);
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+  });
+
+  test('quick capture and going to a place are in the menu; the capture line sits at the bottom', async ({ page }) => {
+    await page.getByRole('button', { name: 'Меню документа' }).tap();
+    await expect(page.getByRole('menuitem', { name: 'Перейти к пункту…' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Записать в Inbox' })).toBeVisible();
     await page.getByRole('menuitem', { name: 'Записать в Inbox' }).tap();
     const line = page.getByRole('dialog', { name: 'Запись в Inbox' });
     await expect(line.getByRole('textbox')).toBeFocused();
@@ -2580,9 +2594,11 @@ test.describe('touch screen', () => {
     expect(await page.locator('.editbar').evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
-  test('Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
+  test('with the on-screen keyboard, Backspace at the start never joins two bullets; an empty one still goes', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await expect(editing(page)).toBeFocused();
+    await keyboard(page, true);
+    await expect(bar(page)).toBeVisible(); // the app has seen the keyboard come up
     await page.keyboard.press('Control+Home');
     await page.keyboard.press('Backspace');
     await page.keyboard.press('Backspace');
@@ -3889,6 +3905,14 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     // The computer's menu: places by name, with the shortcut shown.
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.getByRole('menuitem', { name: /Перейти к пункту/ })).toBeVisible();
-    await expect(page.getByRole('menuitem', { name: /Горячие клавиши/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Жесты и клавиши/ })).toBeVisible();
+  });
+
+  test('with a hardware keyboard (no on-screen one) its keys work as a computer\'s: Backspace joins bullets', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('Backspace');
+    expect((await outline(page)).at(-1)).toBe('  Часть втораяТом второй');
   });
 });

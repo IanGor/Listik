@@ -1,6 +1,6 @@
 import { For, Show, createEffect, on } from 'solid-js';
 import type { Outliner } from './outliner';
-import { ALT, MOD, phone, touch } from './screen';
+import { ALT, MOD, touch } from './screen';
 
 /** What a finger does on a touch screen: [gesture, what it does]. */
 const GESTURES: [gesture: string, action: string][] = [
@@ -85,7 +85,8 @@ const GROUPS: [title: string, rows: [keys: string | Said, action: string][]][] =
  */
 export function Shortcuts(props: { o: Outliner }) {
   let dialog!: HTMLDialogElement;
-  const title = () => (phone() ? 'Жесты и клавиши' : 'Горячие клавиши');
+  // Named by what it holds: gestures come with any touch screen (an iPad too), not with a narrow one.
+  const title = () => (touch() ? 'Жесты и клавиши' : 'Горячие клавиши');
   createEffect(on(props.o.helpRequests, () => {
     if (!dialog.open) dialog.showModal();
   }, { defer: true }));

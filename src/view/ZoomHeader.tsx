@@ -7,6 +7,7 @@ import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCar
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces, pasteLink } from './Row';
+import { ALT, MOD } from './screen';
 import { plural } from '../util/plural';
 
 /**
@@ -146,7 +147,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
               <button
                 type="button"
                 class="day-step"
-                title={step < 0 ? 'Предыдущий день (Ctrl+Alt+←)' : 'Следующий день (Ctrl+Alt+→)'}
+                title={step < 0 ? `Предыдущий день (${MOD}+${ALT}+←)` : `Следующий день (${MOD}+${ALT}+→)`}
                 aria-label={step < 0 ? 'Предыдущий день' : 'Следующий день'}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => o.stepDay(step)}

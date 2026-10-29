@@ -1,9 +1,8 @@
 import { For, Show, createEffect, createSignal, on } from 'solid-js';
 import { normalize } from '../model/search';
 import type { Outliner } from './outliner';
-import { narrow } from './screen';
+import { MOD, narrow } from './screen';
 
-const IS_MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
 /** A five-pointed star: outlined, or filled for a saved search. */
 const STAR = 'M12 3.6l2.55 5.2 5.75.84-4.16 4.05.98 5.72L12 16.7l-5.12 2.7.98-5.72L3.7 9.64l5.75-.84z';
@@ -94,7 +93,7 @@ export function SearchBar(props: { o: Outliner }) {
       />
       <Show
         when={o.query().trim()}
-        fallback={<kbd aria-hidden="true">{IS_MAC ? '⌘ F' : 'Ctrl F'}</kbd>}
+        fallback={<kbd aria-hidden="true">{`${MOD} F`}</kbd>}
       >
         <button
           type="button"

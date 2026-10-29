@@ -2670,8 +2670,9 @@ body.is-dragging * {
   border-top: 1px solid var(--hairline);
 }
 
-/* A place: its title, and the path to it after, giving way to the title. */
-.place {
+/* A place: its title, and the path to it after, giving way to the title. (Its own class: the header's
+   "Сегодня" and Inbox are `.place`, and a phone's rule for them squeezed these rows to 44px.) */
+.goto-place {
   display: flex;
   gap: 12px;
   align-items: center;
@@ -2683,12 +2684,12 @@ body.is-dragging * {
   -webkit-tap-highlight-color: transparent;
 }
 
-.place-title {
+.goto-place-title {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.place-path {
+.goto-place-path {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 50%;
@@ -2700,7 +2701,7 @@ body.is-dragging * {
 }
 
 /* The place Enter takes (↑/↓ move it; the pointer too). */
-.place[data-active] {
+.goto-place[data-active] {
   background: var(--surface);
 }
 
@@ -2710,7 +2711,7 @@ body.is-dragging * {
     max-height: min(calc(8.5 * 44px + 28px), 40dvh);
   }
 
-  .place {
+  .goto-place {
     height: 44px;
   }
 }

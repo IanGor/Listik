@@ -6,7 +6,7 @@ import { plural } from '../util/plural';
 import { dateStamp, download, pickFile } from './files';
 import { KINDS, KIND_TITLES, availableFonts, fontStack, setFont } from './fonts';
 import type { Outliner } from './outliner';
-import { MOD, phone } from './screen';
+import { MOD, phone, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
@@ -128,13 +128,11 @@ export function DocumentMenu(props: { o: Outliner }) {
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
-          {/* Going to a place by its name is a computer's (a tablet too): a phone has its search. */}
-          <Show when={!phone()}>
-            <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
-              Перейти к пункту… <span class="hint">Ctrl+K</span>
-              <GO />
-            </button>
-          </Show>
+          {/* Going to a place by its name: on a phone too, the line at the top of the screen as for "Куда…". */}
+          <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
+            Перейти к пункту… <Show when={!phone()}><span class="hint">{MOD}+K</span></Show>
+            <GO />
+          </button>
           {/* Undo for a mouse, and for a phone out of editing (its bar has undo only while a bullet is edited). */}
           <Show when={!o.readOnly && (o.history.canUndo || o.history.canRedo)}>
             <Show when={o.history.canUndo}>
@@ -154,7 +152,7 @@ export function DocumentMenu(props: { o: Outliner }) {
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
-              <Show when={!phone()}><span class="hint">Ctrl+Shift+Space</span></Show>
+              <Show when={!phone()}><span class="hint">{MOD}+Shift+Space</span></Show>
               <WRITE />
             </button>
             <div class="menu-sep" role="separator" />
@@ -168,7 +166,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <SAVE />
           </button>
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
-            <Show when={phone()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
+            <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
             <KEYS />
           </button>
           {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}

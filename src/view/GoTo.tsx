@@ -207,16 +207,16 @@ function Line(props: { o: Outliner }) {
                 {(p, i) => (
                   <div
                     role="option"
-                    class="place"
+                    class="goto-place"
                     aria-selected={i() === active()}
                     data-active={i() === active() ? '' : undefined}
                     title={p.today ? `${p.title}, ${p.path[0]}` : [...p.path, p.title].join(' › ')}
                     onPointerMove={() => i() !== active() && setActive(i())}
                     onClick={() => take(p, false)}
                   >
-                    <span class="place-title">{p.title}</span>
+                    <span class="goto-place-title">{p.title}</span>
                     <Show when={p.path.length}>
-                      <span class="place-path">{shortPath(p)}</span>
+                      <span class="goto-place-path">{shortPath(p)}</span>
                     </Show>
                   </div>
                 )}

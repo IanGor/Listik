@@ -3,7 +3,7 @@ import { markdownOf } from '../model/outline-text';
 import { nodeOf, type RowKey } from '../model/rows';
 import { caretOnFirstLine, caretOnLastLine, caretX, focusIn, selectRange, selectionIn } from './caret';
 import type { Outliner } from './outliner';
-import { touch } from './screen';
+import { keyboard } from './screen';
 
 /**
  * Ctrl+B / Ctrl+I in a bullet's text or note (by physical key, any layout):
@@ -69,14 +69,16 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
     case 'Backspace':
       if (mod && e.shiftKey) return handle(() => o.deleteRows([id]));
       if (!collapsed || start !== 0) return;
-      // On a touch screen a held Backspace runs on into the bullet above:
-      // there it only removes an empty bullet, never joins two texts. (At a
-      // copy's start it takes out that copy, as it does with a keyboard.)
-      if (touch() && o.contentOf(id).text && !o.isCopy(id)) return;
+      // With the on-screen keyboard up a held Backspace runs on into the bullet
+      // above: there it only removes an empty bullet, never joins two texts.
+      // (At a copy's start it takes out that copy, as with a hardware one.)
+      // By the keyboard, not the screen: an iPad with a Magic Keyboard has a
+      // finger for its pointer but keys like a computer's (PRODUCT.md).
+      if (keyboard() && o.contentOf(id).text && !o.isCopy(id)) return;
       // An empty bullet with a note or bullets inside is selected first, to show
-      // what would go; the next Backspace takes it all out. (Not on a touch
-      // screen: there the keyboard would close with nothing to delete it by.)
-      if (!touch() && !o.contentOf(id).text && !o.isCopy(id) && (o.contentOf(id).note || o.contentOf(id).children.length)) {
+      // what would go; the next Backspace takes it all out. (Not with the
+      // on-screen keyboard: it would close with nothing to delete it by.)
+      if (!keyboard() && !o.contentOf(id).text && !o.isCopy(id) && (o.contentOf(id).note || o.contentOf(id).children.length)) {
         return handle(selectBullet);
       }
       return handle(() => o.mergeUp(id, here));
