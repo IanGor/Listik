@@ -957,26 +957,28 @@ test('a click on a guide line folds the bullet whose line it is; the line lights
   expect(await outline(page)).toEqual(DEMO);
 });
 
-test('the place\'s own crumb opens the first level a zoom folded; again, it folds it back, an overview', async ({ page }) => {
+test('the button at the path bar\'s end opens the first level a zoom folded; again, it folds it back; the place\'s own crumb does nothing', async ({ page }) => {
   await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
   expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
   const crumb = page.locator('.crumbs .crumb.current');
   await expect(crumb).toHaveText('Том первый');
   await crumb.click();
-  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
-  await crumb.click();
   expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
-  await crumb.click();
-  // At home, "Главная" does the same.
+  const level = page.getByRole('button', { name: 'Свернуть первый уровень' });
+  await level.click();
+  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  await level.click();
+  expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+  // At home, the same button.
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
-  const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
-  await home.click();
+  await level.click();
   expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
-  await home.click();
-  expect(await outline(page)).toEqual(DEMO);
+  await level.click();
+  // Opened again as they were: "Часть первая" stays as the zoom left it, folded.
+  expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
 });
 
-test('"Главная" goes home with the search, and there folds the top level: out of the search, one undo step', async ({ page }) => {
+test('"Главная" goes home with the search, and there leaves the search', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');
   await page.locator('.search').blur();
@@ -988,10 +990,7 @@ test('"Главная" goes home with the search, and there folds the top level:
   await expect(page.locator('.zoom-title')).toHaveCount(0);
   await expect(page.locator('.search')).toHaveValue('');
   expect(new URL(page.url()).hash).toBe('');
-  expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
-  await expect(page.locator('.row', { hasText: 'Том первый' }).locator('.bullet')).toHaveClass(/collapsed/);
-  await page.keyboard.press('Control+z');
-  expect(await outline(page)).toEqual(DEMO);
+  expect(await outline(page)).toEqual(DEMO); // out of the search, nothing folded
 });
 
 test.describe('structure and calendar', () => {
@@ -1100,11 +1099,12 @@ test.describe('structure and calendar', () => {
     await page.goto('/?db=e2e-calendar-fold');
     await expect(title(page)).toHaveText(today);
     const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
+    const level = page.getByRole('button', { name: 'Свернуть первый уровень' });
     await home.click();
-    // PARA comes open: folded, nothing at the top is open, and "Главная" opens every one.
+    // PARA comes open: folded, nothing at the top is open, and the button opens every one.
     await page.locator('.row', { hasText: 'PARA' }).locator('.toggle').click();
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => !t.startsWith(' ')));
-    await home.click();
+    await level.click();
     // The Kanban holds the Today that today's day mirrors.
     const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : t === '  Backlog' ? [t, '  Today'] : [t]));
     expect(await outline(page)).toEqual(QUARTERS);
@@ -1133,6 +1133,9 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Tab');
     await page.keyboard.type('write');
     await page.keyboard.press('Control+l');
+    // Not silently: the toast says it, with the way there.
+    await expect(page.locator('.toast')).toContainText('«Alpha #project» — в Backlog');
+    await expect(page.locator('.toast').getByRole('button', { name: 'Показать' })).toBeVisible();
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'Kanban' }).locator('.toggle').click();
     const rows = await outline(page);
@@ -3897,11 +3900,11 @@ test.describe('at scale', () => {
     await expect(page.locator('.row mark').first()).toBeVisible();
   });
 
-  test('200k bullets: "Главная" folds ~700 chapters in about a frame', async ({ page }) => {
+  test('200k bullets: the level button folds ~700 chapters in about a frame', async ({ page }) => {
     await page.goto('/?sample=200000');
     await expect(page.locator('.row').first()).toBeVisible();
     await page.waitForTimeout(1000);
-    const ms = await page.locator('.crumbs .crumb', { hasText: 'Главная' }).evaluate(async (el) => {
+    const ms = await page.getByRole('button', { name: 'Свернуть первый уровень' }).evaluate(async (el) => {
       const started = performance.now();
       (el as HTMLElement).click();
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));

@@ -25,6 +25,7 @@ const actions = (o: Outliner): Item[] => {
     act('Сегодня', '', () => o.goToday()),
     act('Inbox', '', () => o.goInbox()),
     act('Главная', '', () => o.goHome()),
+    act('Свернуть или развернуть первый уровень', '', () => o.toggleLevel()),
     ...(o.readOnly ? [] : [act('Записать в Inbox', `${MOD}+Shift+Space`, () => o.openCapture())]),
     ...(o.readOnly || !o.history.canUndo ? [] : [act('Отменить', `${MOD}+Z`, () => o.undo())]),
     ...(o.readOnly || !o.history.canRedo ? [] : [act('Повторить', `${MOD}+Shift+Z`, () => o.redo())]),

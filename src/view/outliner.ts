@@ -11,7 +11,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { projectTags } from '../model/projects';
-import { backlogTargets, fillDayToday, todayMirrorOf, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, findBacklog, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -590,9 +590,13 @@ export class Outliner {
     if (this.readOnly || readSetting(key)) return;
     const run = () => {
       const fixes = projectTags(this.doc);
-      if (fixes.length) this.scaffold((ctx) => {
-        for (const { id, field, to } of fixes) (field === 'text' ? setText : setNote)(ctx, id, to);
-      });
+      if (fixes.length) {
+        this.scaffold((ctx) => {
+          for (const { id, field, to } of fixes) (field === 'text' ? setText : setNote)(ctx, id, to);
+        });
+        // Said once: the app changed text nobody typed.
+        this.notify(`#project добавлен к ${fixes.length} ${plural(fixes.length, 'пункту', 'пунктам', 'пунктам')} с @work или @home: так их видит Backlog`);
+      }
       writeSetting(key, '1');
     };
     if (this.syncing() && !this.synced) this.afterSync.push(run);
@@ -1008,15 +1012,15 @@ export class Outliner {
   }
 
   /**
-   * "Главная" over the list, on the home page: back to the top of the whole outline with every top-level
-   * bullet folded, an overview at a glance. Search and zoom are left; the
-   * folding is one undo step.
+   * "Главная" on the home page (and the palette's «Главная»): back to the
+   * top of the whole outline, out of the search. Folding the top level is
+   * the path bar's own button now (`toggleLevel`): a crumb only leads
+   * somewhere (UX audit, 29 October 2026).
    */
   goHome(): void {
     batch(() => {
       this.setQuery('', true);
       this.zoomTo(null);
-      this.toggleLevel();
       this.setFocus(null);
       this.setHomeRequests((n) => n + 1);
     });
@@ -1572,6 +1576,7 @@ export class Outliner {
       this.history.record({ ops, before, after: target ?? null });
       this.moveFocus(target ?? null);
     });
+    this.tellBacklog();
     return ops;
   }
 
@@ -1585,7 +1590,28 @@ export class Outliner {
    */
   private fillBacklog(seen: Op[]): void {
     if (this.syncing() && !this.synced) return;
-    toBacklog(this.doc, backlogTargets(this.doc, seen));
+    const targets = backlogTargets(this.doc, seen);
+    this.backlogged = toBacklog(this.doc, targets) ? targets : [];
+  }
+
+  /** What the last command's `fillBacklog` mirrored into the Backlog: told once the command is done. */
+  private backlogged: NodeId[] = [];
+
+  /**
+   * The Backlog took a project on its own (a task in PARA): said, with the
+   * way there. A change the user did not ask for is not made silently (UX
+   * audit, 29 October 2026); Ctrl+Z takes it back with the task, one step.
+   */
+  private tellBacklog(): void {
+    const added = this.backlogged;
+    this.backlogged = [];
+    if (!added.length) return;
+    const name = plainText(this.doc.get(this.doc.origin(added[0])).text).trim() || 'пункт без названия';
+    const backlog = findBacklog(this.doc);
+    this.notify(
+      added.length > 1 ? `В Backlog: ${added.length} ${plural(added.length, 'проект', 'проекта', 'проектов')}` : `«${name.length > 40 ? `${name.slice(0, 39)}…` : name}» — в Backlog`,
+      backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
+    );
   }
 
   /** Bullets erased to nothing that the command just deleted take their text along into the trash (`erased`). */

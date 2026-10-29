@@ -118,13 +118,13 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
-        {/* Home; once there, every top-level bullet folded (`goHome`), an overview. */}
+        {/* Home. A crumb only leads somewhere: folding the level is the button at the bar's end (UX audit, 29 October 2026). */}
         <button
           type="button"
           class="crumb"
           classList={{ current: !path().length }}
           aria-current={path().length ? undefined : 'page'}
-          title={path().length ? 'На главную' : 'Свернуть весь первый уровень; ещё раз — развернуть'}
+          title={path().length ? 'На главную' : 'Главная'}
           onClick={() => (path().length ? o.zoomTo(null, true) : o.goHome())}
         >
           Главная
@@ -166,6 +166,20 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
       <Show when={o.filter()?.count}>
         {(n) => <span class="count">{n()} {plural(n(), 'пункт', 'пункта', 'пунктов')}</span>}
       </Show>
+      {/* The first level here folded, an overview; again, open (`toggleLevel`): once the place's own crumb did it, unseen. */}
+      <button
+        type="button"
+        class="level-toggle"
+        aria-label="Свернуть первый уровень"
+        title="Свернуть всё первого уровня; ещё раз — развернуть"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => o.toggleLevel()}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m7 20 5-5 5 5" />
+          <path d="m7 4 5 5 5-5" />
+        </svg>
+      </button>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
       <Show when={path().length}>
         <button
@@ -203,8 +217,8 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
     <Show
       when={!props.current}
       fallback={
-        // The place's own crumb: its first level folded, an overview; again — open.
-        <button type="button" class="crumb current" aria-current="page" title={`${text()} — свернуть всё внутри; ещё раз — развернуть`} onClick={() => o.toggleLevel()}>
+        // The place's own crumb: where you are, no action (the level's folding is the bar's button).
+        <button type="button" class="crumb current" aria-current="page" title={text()}>
           {text()}
         </button>
       }

@@ -108,6 +108,7 @@ body,
 .search-menu,
 .crumbs,
 .sketch-toggle,
+.level-toggle,
 .menu,
 .editbar,
 .toast,
@@ -319,8 +320,9 @@ button {
   outline: none;
 }
 
+/* --muted, not --faint: a placeholder is read (4.5:1 on its field; --faint gave 2.9:1). */
 .search::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .count {
@@ -2481,7 +2483,7 @@ body.is-dragging * {
 }
 
 .trash-filter::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .trash-filter:focus {
@@ -2708,7 +2710,7 @@ body.is-dragging * {
 }
 
 .goto-input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .goto-hint {
@@ -2870,7 +2872,7 @@ body.is-dragging * {
 }
 
 .capture-input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .capture-hint {
@@ -3068,7 +3070,8 @@ body.is-dragging * {
   }
 
   /* 44pt, Apple's least for a finger (Human Interface Guidelines). */
-  .sketch-toggle {
+  .sketch-toggle,
+  .level-toggle {
     width: 44px;
     height: 44px;
   }
@@ -3241,8 +3244,10 @@ body.is-dragging * {
 }
 
 /* In the path's bar, at its end: opens and puts away the sketch. Only its
-   colour speaks: the text's for none, coral when the bullet has one. */
-.sketch-toggle {
+   colour speaks: the text's for none, coral when the bullet has one. Beside
+   it, the same round button folds the first level here (and opens it again). */
+.sketch-toggle,
+.level-toggle {
   flex: none;
   display: grid;
   place-items: center;
@@ -3256,7 +3261,15 @@ body.is-dragging * {
   cursor: pointer;
 }
 
-:where(:root.mouse) .sketch-toggle:hover {
+/* The narrowest screens keep their room for the path: the level folds from the palette (">"). */
+@media (max-width: 380px) {
+  .level-toggle {
+    display: none;
+  }
+}
+
+:where(:root.mouse) .sketch-toggle:hover,
+:where(:root.mouse) .level-toggle:hover {
   background: var(--surface);
 }
 
