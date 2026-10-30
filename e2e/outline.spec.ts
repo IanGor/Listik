@@ -1143,6 +1143,33 @@ test.describe('structure and calendar', () => {
     expect(rows.slice(at, at + 5)).toEqual(['Kanban', '  Backlog', '    Alpha #project ', '  Today', '@q1']);
   });
 
+  test('at start-up, a project with an open task that is not on the board comes to the Backlog', async ({ page }) => {
+    await page.goto('/?db=e2e-sweep&empty');
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Projects' }).locator('.bullet').click();
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Alpha #project ');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('write');
+    await page.keyboard.press('Control+l');
+    await expect(page.locator('.toast')).toContainText('«Alpha #project» — в Backlog');
+    // Take the mirror off the board by hand.
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'Kanban' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Backlog' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Alpha #project' }).locator('.text').click();
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(page.locator('.row', { hasText: 'Alpha #project' })).toHaveCount(0);
+    // A reload brings it back, said once.
+    await page.reload();
+    await expect(page.locator('.toast')).toContainText('В Backlog: 1 проект с открытыми задачами');
+  });
+
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
     await create(page);
     // Creating the structure leaves in today's day.

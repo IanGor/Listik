@@ -11,7 +11,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { projectTags } from '../model/projects';
-import { backlogTargets, fillDayToday, findBacklog, findKanban, todayMirrorOf, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, findBacklog, findKanban, openProjects, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -601,6 +601,30 @@ export class Outliner {
     };
     if (this.syncing() && !this.synced) this.afterSync.push(run);
     else run();
+  }
+
+  /**
+   * At start-up (and a reload): every project in PARA with an open task is
+   * on the board (model/kanban.ts `openProjects`, `toBacklog`); what is not
+   * comes to the Backlog. One walk down PARA, ~60 ms at 200k bullets, run
+   * when the browser is idle and after the server has been heard from (as
+   * `tagYears`), after `tagProjects`. No undo step; said once.
+   */
+  sweepBacklog(): void {
+    if (this.readOnly) return;
+    const run = () => {
+      let added: NodeId[] = [];
+      this.scaffold(() => { added = toBacklog(this.doc, openProjects(this.doc)).added; });
+      if (!added.length) return;
+      const backlog = findBacklog(this.doc);
+      this.notify(
+        `В Backlog: ${added.length} ${plural(added.length, 'проект', 'проекта', 'проектов')} с открытыми задачами`,
+        backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
+      );
+    };
+    const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(run, { timeout: 5000 }) : setTimeout(run, 1000));
+    if (this.syncing() && !this.synced) this.afterSync.push(idle);
+    else idle();
   }
 
   keepRecent(name: string): void {

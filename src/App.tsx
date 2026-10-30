@@ -81,6 +81,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.watchSync();
   outliner.tagYears();
   outliner.tagProjects(name);
+  outliner.sweepBacklog();
   if (restored) outliner.notify(restored);
   else if (merged) {
     const handle = outliner.syncHandle;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backlogTargets, findBacklog, findKanban, toBacklog } from '../src/model/kanban';
+import { backlogTargets, findBacklog, findKanban, openProjects, toBacklog } from '../src/model/kanban';
 import type { Doc } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
 import { applyMerged } from '../src/model/merge';
@@ -131,6 +131,53 @@ describe('the Backlog of the Kanban', () => {
   it('a #secret project is not mirrored', () => {
     const doc = build(['PARA', '  Projects', '    Hidden #secret #project', '      t']);
     task(doc, 't');
+    expect(findKanban(doc)).toBeNull();
+  });
+
+  it('only done tasks bring nothing: a task made already done, or a project moved in with only done ones', () => {
+    const doc = build(['PARA', '  Projects', '  Beta #project', '    finished', 'Elsewhere', '  Gamma #project', '    ticked']);
+    doc.apply({ t: 'setTodo', id: 'finished', from: false, to: true });
+    doc.apply({ t: 'setDone', id: 'finished', from: false, to: true, at: 1 });
+    expect(findKanban(doc)).toBeNull();
+    doc.apply({ t: 'setTodo', id: 'ticked', from: false, to: true });
+    doc.apply({ t: 'setDone', id: 'ticked', from: false, to: true, at: 1 });
+    const ops = doc.transact(() => doc.apply({ t: 'move', id: 'Gamma #project', from: { parent: 'Elsewhere', order: doc.get('Gamma #project').order }, to: { parent: 'Projects', order: doc.orderAt('Projects', 0) } }));
+    expect(backlogTargets(doc, ops)).toEqual([]);
+  });
+});
+
+describe('the start-up check of the Backlog', () => {
+  const para = ['PARA', '  Projects', '    Alpha #project', '      one', '      two', '  Areas', '    solo #project'];
+  const open = (doc: Doc, id: string) => doc.apply({ t: 'setTodo', id, from: false, to: true });
+  const done = (doc: Doc, id: string) => doc.apply({ t: 'setDone', id, from: false, to: true, at: 1 });
+
+  it('finds the projects with an open task, the nearest #project of each, once', () => {
+    const doc = build(['PARA', '  Projects', '    Alpha #project', '      a1', '      a2', '      Inner #project', '        a3', '    Plain', '      p1', '    Beta #project', '      b1', 'Elsewhere #project', '  e1']);
+    for (const id of ['a1', 'a2', 'a3', 'p1', 'b1', 'e1']) open(doc, id);
+    done(doc, 'b1');
+    expect(openProjects(doc).sort()).toEqual(['Alpha #project', 'Inner #project']);
+  });
+
+  it('skips #secret, mirrors and a project with no tasks; no PARA, nothing', () => {
+    const doc = build(['PARA', '  Projects', '    Hidden #secret #project', '      t', '    Empty #project', '      x']);
+    open(doc, 't');
+    expect(openProjects(doc)).toEqual([]);
+    expect(openProjects(build(['Elsewhere #project', '  t']))).toEqual([]);
+  });
+
+  it('brings the missing ones to the Backlog and leaves those on the board', () => {
+    const doc = build([...para, 'Kanban', '  Backlog']);
+    open(doc, 'one');
+    open(doc, 'solo #project');
+    const first = toBacklog(doc, openProjects(doc));
+    expect(first.added.sort()).toEqual(['Alpha #project', 'solo #project']);
+    expect(toBacklog(doc, openProjects(doc))).toEqual({ added: [], known: ['Alpha #project', 'solo #project'].sort() });
+    expect(doc.get('Backlog').children).toHaveLength(2);
+  });
+
+  it('with nothing to bring, no Kanban is made', () => {
+    const doc = build(para);
+    expect(toBacklog(doc, openProjects(doc))).toEqual({ added: [], known: [] });
     expect(findKanban(doc)).toBeNull();
   });
 });

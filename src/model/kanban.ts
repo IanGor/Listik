@@ -3,7 +3,7 @@ import type { Ctx } from './commands';
 import { clock } from './clock';
 import { newId, type Doc } from './doc';
 import { titleOf } from './links';
-import { content, parseTags, searchable } from './tags';
+import { content, isSecret, parseTags, searchable } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
@@ -55,7 +55,8 @@ function findPara(doc: Doc): NodeId | null {
  * The bullets to mirror after `ops`: for each task they added or made that
  * lies inside PARA, the nearest bullet at or above it tagged `#project`
  * (Projects → Work → Group → PBR #project → timeline → day → task gives PBR);
- * a task under no project is left. Each only once.
+ * a task under no project is left. Done tasks do not count: a project with
+ * only those has nothing to do on the board. Each only once.
  */
 export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const para = findPara(doc);
@@ -66,7 +67,7 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
       if (op.to) tasks.add(op.id);
     } else if (op.t === 'insert' || op.t === 'move') {
       const id = op.t === 'insert' ? op.node.id : op.id;
-      if (doc.has(id) && doc.inOutline(id)) doc.walk(id, (n) => n.todo && !n.mirrorOf && tasks.add(n.id));
+      if (doc.has(id) && doc.inOutline(id)) doc.walk(id, (n) => n.todo && !n.done && !n.mirrorOf && tasks.add(n.id));
     }
   }
   const out: NodeId[] = [];
@@ -79,6 +80,30 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
     out.push(cur);
   }
   return out;
+}
+
+/**
+ * The projects in PARA that have an open task (a checkbox not yet ticked)
+ * anywhere inside, one walk down the tree: the nearest `#project` above each
+ * task, as in `backlogTargets`. For the check at start-up, which makes sure
+ * the Backlog holds them (`toBacklog`). Mirrors and `#secret` are not walked.
+ */
+export function openProjects(doc: Doc): NodeId[] {
+  const para = findPara(doc);
+  if (para === null || isSecret(doc.get(para))) return [];
+  const out = new Set<NodeId>();
+  const walk = (id: NodeId, project: NodeId | null): void => {
+    const n = doc.get(id);
+    if (n.mirrorOf) return;
+    const text = content(n);
+    const tagged = text.includes('#');
+    if (tagged && isSecret(n)) return;
+    const here = tagged && parseTags(text).includes(PROJECT) ? id : project;
+    if (n.todo && !n.done && here !== null) out.add(here);
+    for (const c of n.children) walk(c, here);
+  };
+  for (const c of doc.get(para).children) walk(c, null);
+  return [...out];
 }
 
 /**
