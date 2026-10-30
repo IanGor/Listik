@@ -85,19 +85,24 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
  * Mirrors the bullets into the Backlog, last, collapsed (a project shows its
  * next task under it), making the Kanban and the Backlog if they are missing.
  * A bullet with a mirror anywhere in the Kanban (a column, deeper) is left:
- * it is on the board already, wherever it was moved to. Returns how many came.
+ * it is on the board already, wherever it was moved to, and is reported as
+ * `known`, so the caller can say so. `added` are the ones that came.
  */
-export function toBacklog(doc: Doc, targets: readonly NodeId[]): number {
+export function toBacklog(doc: Doc, targets: readonly NodeId[]): { added: NodeId[]; known: NodeId[] } {
   const kanban = findKanban(doc);
-  const fresh = targets.map((t) => doc.origin(t)).filter((origin) => kanban === null || !doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)));
-  if (!fresh.length) return 0;
+  const added: NodeId[] = [];
+  const known: NodeId[] = [];
+  for (const origin of new Set(targets.map((t) => doc.origin(t)))) {
+    (kanban !== null && doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)) ? known : added).push(origin);
+  }
+  if (!added.length) return { added, known };
   let backlog = findBacklog(doc);
   if (backlog === null) {
     const board = kanban ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
     backlog = addChild(doc, board, 'Backlog', undefined, '', undefined, false, `${board}~backlog`);
   }
-  for (const origin of fresh) addChild(doc, backlog, '', origin, '', undefined, false, `${backlog}~${origin}`);
-  return fresh.length;
+  for (const origin of added) addChild(doc, backlog, '', origin, '', undefined, false, `${backlog}~${origin}`);
+  return { added, known };
 }
 
 /**

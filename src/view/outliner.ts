@@ -11,7 +11,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { projectTags } from '../model/projects';
-import { backlogTargets, fillDayToday, findBacklog, todayMirrorOf, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, findBacklog, findKanban, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -1591,8 +1591,13 @@ export class Outliner {
   private fillBacklog(seen: Op[]): void {
     if (this.syncing() && !this.synced) return;
     const targets = backlogTargets(this.doc, seen);
-    this.backlogged = toBacklog(this.doc, targets) ? targets : [];
+    const { added, known } = toBacklog(this.doc, targets);
+    this.backlogged = added;
+    this.onBoard = known;
   }
+
+  /** The projects of the last command that the Kanban held already: told once the command is done. */
+  private onBoard: NodeId[] = [];
 
   /** What the last command's `fillBacklog` mirrored into the Backlog: told once the command is done. */
   private backlogged: NodeId[] = [];
@@ -1604,12 +1609,25 @@ export class Outliner {
    */
   private tellBacklog(): void {
     const added = this.backlogged;
+    const known = this.onBoard;
     this.backlogged = [];
-    if (!added.length) return;
-    const name = plainText(this.doc.get(this.doc.origin(added[0])).text).trim() || 'пункт без названия';
+    this.onBoard = [];
+    const short = (id: NodeId) => {
+      const name = plainText(this.doc.get(this.doc.origin(id)).text).trim() || 'пункт без названия';
+      return name.length > 40 ? `${name.slice(0, 39)}…` : name;
+    };
+    if (!added.length) {
+      if (!known.length) return;
+      const kanban = findKanban(this.doc);
+      this.notify(
+        known.length > 1 ? `${known.length} ${plural(known.length, 'проект', 'проекта', 'проектов')} уже в Kanban` : `«${short(known[0])}» уже в Kanban`,
+        kanban ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(kanban); } } : null,
+      );
+      return;
+    }
     const backlog = findBacklog(this.doc);
     this.notify(
-      added.length > 1 ? `В Backlog: ${added.length} ${plural(added.length, 'проект', 'проекта', 'проектов')}` : `«${name.length > 40 ? `${name.slice(0, 39)}…` : name}» — в Backlog`,
+      added.length > 1 ? `В Backlog: ${added.length} ${plural(added.length, 'проект', 'проекта', 'проектов')}` : `«${short(added[0])}» — в Backlog`,
       backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
     );
   }

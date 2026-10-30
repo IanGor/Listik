@@ -7,9 +7,9 @@ import { deserialize, serialize } from '../src/persist/serialize';
 import { build } from './helpers';
 
 /** Makes the bullet a task, as the command does, and lets the Backlog follow. */
-function task(doc: Doc, id: string): void {
+function task(doc: Doc, id: string) {
   const ops = doc.transact(() => doc.apply({ t: 'setTodo', id, from: false, to: true }));
-  toBacklog(doc, backlogTargets(doc, ops));
+  return toBacklog(doc, backlogTargets(doc, ops));
 }
 
 
@@ -52,6 +52,13 @@ describe('the Backlog of the Kanban', () => {
     expect(doc.get('Backlog').children).toHaveLength(0);
     task(doc, 'solo #project');
     expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo #project']);
+  });
+
+  it('a project already on the board is reported as known, not mirrored again', () => {
+    const doc = build(para);
+    expect(task(doc, 'one')).toEqual({ added: ['Alpha #project'], known: [] });
+    expect(task(doc, 'two')).toEqual({ added: [], known: ['Alpha #project'] });
+    expect(doc.get(findBacklog(doc)!).children).toHaveLength(1);
   });
 
   it('after a reload (a snapshot), the mirror already in the Backlog keeps it from coming again', () => {
