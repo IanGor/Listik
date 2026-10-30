@@ -622,7 +622,7 @@ export class Outliner {
         backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
       );
     };
-    const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(run, { timeout: 5000 }) : setTimeout(run, 1000));
+    const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 1000));
     if (this.syncing() && !this.synced) this.afterSync.push(idle);
     else idle();
   }
@@ -1617,10 +1617,13 @@ export class Outliner {
     const targets = backlogTargets(this.doc, seen);
     const { added, known } = toBacklog(this.doc, targets);
     this.backlogged = added;
-    this.onBoard = known;
+    // Said only for a task that appeared (a checkbox set, a task inserted), not
+    // for one moved about inside its project: Tab or Alt+Shift+↑ would say it each time.
+    const appeared = known.length ? new Set(backlogTargets(this.doc, seen.filter((op) => op.t !== 'move')).map((t) => this.doc.origin(t))) : null;
+    this.onBoard = appeared ? known.filter((k) => appeared.has(k)) : [];
   }
 
-  /** The projects of the last command that the Kanban held already: told once the command is done. */
+  /** The projects of the last command's new tasks that the Kanban held already: told once the command is done. */
   private onBoard: NodeId[] = [];
 
   /** What the last command's `fillBacklog` mirrored into the Backlog: told once the command is done. */

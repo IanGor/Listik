@@ -72,7 +72,7 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   }
   const out: NodeId[] = [];
   for (const task of tasks) {
-    if (!doc.has(task) || !doc.inOutline(task) || !searchable(doc, task)) continue;
+    if (!doc.has(task) || !doc.inOutline(task) || !doc.get(task).todo || doc.get(task).done || !searchable(doc, task)) continue;
     // Up from the task to the nearest `#project`, which must lie inside PARA.
     let cur: NodeId | null = task;
     while (cur !== null && cur !== para && cur !== doc.root && !isProject(doc, cur)) cur = doc.get(cur).parent;

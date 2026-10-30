@@ -136,9 +136,11 @@ describe('the Backlog of the Kanban', () => {
 
   it('only done tasks bring nothing: a task made already done, or a project moved in with only done ones', () => {
     const doc = build(['PARA', '  Projects', '  Beta #project', '    finished', 'Elsewhere', '  Gamma #project', '    ticked']);
-    doc.apply({ t: 'setTodo', id: 'finished', from: false, to: true });
-    doc.apply({ t: 'setDone', id: 'finished', from: false, to: true, at: 1 });
-    expect(findKanban(doc)).toBeNull();
+    const made = doc.transact(() => {
+      doc.apply({ t: 'setTodo', id: 'finished', from: false, to: true });
+      doc.apply({ t: 'setDone', id: 'finished', from: false, to: true, at: 1 });
+    });
+    expect(backlogTargets(doc, made)).toEqual([]);
     doc.apply({ t: 'setTodo', id: 'ticked', from: false, to: true });
     doc.apply({ t: 'setDone', id: 'ticked', from: false, to: true, at: 1 });
     const ops = doc.transact(() => doc.apply({ t: 'move', id: 'Gamma #project', from: { parent: 'Elsewhere', order: doc.get('Gamma #project').order }, to: { parent: 'Projects', order: doc.orderAt('Projects', 0) } }));
