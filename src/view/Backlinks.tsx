@@ -87,7 +87,7 @@ export function Backlinks(props: { o: Outliner; id: NodeId }) {
         <span class="backlinks-label">Ссылки сюда</span>
         <For each={shown()}>
           {(p) => (
-            <button
+            <button data-action="Backlinks.1"
               type="button"
               class="backlink"
               classList={{ back: p.back }}
@@ -103,7 +103,7 @@ export function Backlinks(props: { o: Outliner; id: NodeId }) {
           )}
         </For>
         <Show when={!all() && places().length > SHOWN}>
-          <button type="button" class="backlink more" onClick={() => setAll(true)}>
+          <button data-action="Backlinks.2" type="button" class="backlink more" onClick={() => setAll(true)}>
             ещё {places().length - SHOWN}
           </button>
         </Show>

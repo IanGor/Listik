@@ -4,10 +4,12 @@ import './index.css'
 import App from './App.tsx'
 import { watchPointer, watchTablet } from './view/screen'
 import { followSystemSize } from './view/textsize'
+import { watchUsage } from './view/analytics'
 
 const root = document.getElementById('root')
 
 followSystemSize()
+watchUsage()
 
 render(() => <App />, root!)
 watchPointer()

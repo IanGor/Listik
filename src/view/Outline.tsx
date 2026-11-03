@@ -396,7 +396,7 @@ export function Outline(props: { o: Outliner }) {
               {(link) => (
                 <>
                   {' '}
-                  <button type="button" class="toast-link" onMouseDown={(e) => e.preventDefault()} onClick={() => link().run()}>
+                  <button data-action="Outline.1" type="button" class="toast-link" onMouseDown={(e) => e.preventDefault()} onClick={() => link().run()}>
                     {link().label}
                   </button>
                 </>
@@ -404,7 +404,7 @@ export function Outline(props: { o: Outliner }) {
             </Show>
             <Show when={o.toastAction()}>
               {(action) => (
-                <button type="button" class="toast-action" onMouseDown={(e) => e.preventDefault()} onClick={() => action().run()}>
+                <button data-action="Outline.2" type="button" class="toast-action" onMouseDown={(e) => e.preventDefault()} onClick={() => action().run()}>
                   {action().label}
                 </button>
               )}
@@ -453,7 +453,7 @@ export function Outline(props: { o: Outliner }) {
               </Show>
               <Show when={showAdd()}>
                 {/* Sits right under the last row: the rows above it end at `total`. */}
-                <button
+                <button data-action="Outline.3"
                   type="button"
                   class="add"
                   style={{ top: `${top() + total()}px` }}

@@ -119,7 +119,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
         {/* Home. A crumb only leads somewhere: folding the level is the button at the bar's end (UX audit, 29 October 2026). */}
-        <button
+        <button data-action="ZoomHeader.1"
           type="button"
           class="crumb"
           classList={{ current: !path().length }}
@@ -145,7 +145,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
         <div class="day-steps">
           <For each={[-1, 1] as const}>
             {(step) => (
-              <button
+              <button data-action="ZoomHeader.2"
                 type="button"
                 class="day-step"
                 title={step < 0 ? `Предыдущий день (${MOD}+${ALT}+←)` : `Следующий день (${MOD}+${ALT}+→)`}
@@ -167,7 +167,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
         {(n) => <span class="count">{n()} {plural(n(), 'пункт', 'пункта', 'пунктов')}</span>}
       </Show>
       {/* The first level here folded, an overview; again, open (`toggleLevel`): once the place's own crumb did it, unseen. */}
-      <button
+      <button data-action="ZoomHeader.3"
         type="button"
         class="level-toggle"
         aria-label="Свернуть первый уровень"
@@ -182,7 +182,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
       </button>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
       <Show when={path().length}>
-        <button
+        <button data-action="ZoomHeader.4"
           type="button"
           class="sketch-toggle"
           classList={{ has: o.hasSketch() }}
@@ -218,12 +218,12 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
       when={!props.current}
       fallback={
         // The place's own crumb: where you are, no action (the level's folding is the bar's button).
-        <button type="button" class="crumb current" aria-current="page" title={text()}>
+        <button data-action="ZoomHeader.5" type="button" class="crumb current" aria-current="page" title={text()}>
           {text()}
         </button>
       }
     >
-      <button type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id, true)}>
+      <button data-action="ZoomHeader.6" type="button" class="crumb" title={text()} onClick={() => o.zoomTo(id, true)}>
         {text()}
       </button>
     </Show>

@@ -33,7 +33,7 @@ export function Unlock(props: { opened: Opened; onUnlocked: () => void }) {
         </p>
         <label class="field">
           <span>Пароль</span>
-          <input
+          <input data-action="Unlock.1"
             type="password"
             autocomplete="current-password"
             autofocus
@@ -42,11 +42,11 @@ export function Unlock(props: { opened: Opened; onUnlocked: () => void }) {
           />
         </label>
         <label class="check">
-          <input type="checkbox" checked={remember()} onChange={(e) => setRemember(e.currentTarget.checked)} />
+          <input data-action="Unlock.2" type="checkbox" checked={remember()} onChange={(e) => setRemember(e.currentTarget.checked)} />
           Запомнить на этом устройстве
         </label>
         <Show when={error()}>{(m) => <p class="form-error" role="alert">{m()}</p>}</Show>
-        <button type="submit" class="button primary" disabled={busy() || !passphrase()}>
+        <button data-action="Unlock.3" type="submit" class="button primary" disabled={busy() || !passphrase()}>
           {busy() ? 'Открываю…' : 'Открыть'}
         </button>
       </form>

@@ -209,7 +209,7 @@ function Line(props: { o: Outliner }) {
               <path d="M19 5v14" />
             </svg>
           </Show>
-          <input
+          <input data-action="GoTo.1"
             ref={input}
             class="goto-input"
             type="text"
@@ -224,7 +224,7 @@ function Line(props: { o: Outliner }) {
             onBlur={() => o.closePlaceLine()}
           />
           <Show when={phone()} fallback={<span class="goto-hint" aria-hidden="true">{moving() ? (moving()!.mirror ? 'Enter — поставить · Esc' : 'Enter — переместить · Esc') : 'Enter — перейти · Esc'}</span>}>
-            <button type="button" class="goto-close" aria-label="Закрыть" onClick={() => o.closePlaceLine()}>
+            <button data-action="GoTo.2" type="button" class="goto-close" aria-label="Закрыть" onClick={() => o.closePlaceLine()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
                 <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
               </svg>

@@ -117,7 +117,7 @@ export function Trash(props: { o: Outliner; onTyping?: (typing: boolean) => void
         <Show when={items().length}>
           <span class="trash-count">{items().length}</span>
         </Show>
-        <button
+        <button data-action="Trash.1"
           type="button"
           class="trash-close"
           title="Закрыть корзину"
@@ -131,7 +131,7 @@ export function Trash(props: { o: Outliner; onTyping?: (typing: boolean) => void
         </button>
       </div>
       <Show when={items().length}>
-        <input
+        <input data-action="Trash.2"
           class="trash-filter"
           type="search"
           placeholder="Найти в удалённом"
@@ -168,7 +168,7 @@ export function Trash(props: { o: Outliner; onTyping?: (typing: boolean) => void
                         {' · '}
                         <span classList={{ gone: it.gone }}>{it.where}</span>
                       </div>
-                      <button
+                      <button data-action="Trash.3"
                         type="button"
                         class="trash-restore"
                         disabled={o.readOnly}

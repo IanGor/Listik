@@ -94,7 +94,7 @@ export function SearchBar(props: { o: Outliner }) {
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.5-3.5" />
       </svg>
-      <input
+      <input data-action="SearchBar.1"
         ref={input}
         class="search"
         type="text"
@@ -119,7 +119,7 @@ export function SearchBar(props: { o: Outliner }) {
         when={o.query().trim()}
         fallback={<kbd aria-hidden="true">{`${MOD} F`}</kbd>}
       >
-        <button
+        <button data-action="SearchBar.2"
           type="button"
           class="star"
           classList={{ saved: saved() }}
@@ -132,7 +132,7 @@ export function SearchBar(props: { o: Outliner }) {
           <Star filled={saved()} size={17} />
         </button>
         {/* Apple's clear button: a white × in a grey disc. */}
-        <button type="button" class="clear" title="Сбросить (Esc)" aria-label="Сбросить поиск" onClick={() => o.setQuery('', true)}>
+        <button data-action="SearchBar.3" type="button" class="clear" title="Сбросить (Esc)" aria-label="Сбросить поиск" onClick={() => o.setQuery('', true)}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <circle cx="9" cy="9" r="8" fill="currentColor" />
             <path d="M6.2 6.2l5.6 5.6M11.8 6.2l-5.6 5.6" stroke="var(--canvas)" stroke-width="1.6" stroke-linecap="round" />
@@ -147,7 +147,7 @@ export function SearchBar(props: { o: Outliner }) {
               <span class="search-menu-label">Как искать</span>
               <For each={SYNTAX}>
                 {(s) => (
-                  <button type="button" class="search-token" title={`${s.token.trim()} — ${s.hint}`} onClick={() => putIn(s.token)}>
+                  <button data-action="SearchBar.4" type="button" class="search-token" title={`${s.token.trim()} — ${s.hint}`} onClick={() => putIn(s.token)}>
                     <code>{s.token.trim() === '""' ? '"…"' : s.token.trim() === '-' ? '-слово' : s.token.trim() === '#' ? '#тег' : s.token.trim()}</code>
                     <span>{s.hint}</span>
                   </button>
@@ -161,11 +161,11 @@ export function SearchBar(props: { o: Outliner }) {
           <For each={offered()}>
             {(q) => (
               <div class="saved-search" role="listitem">
-                <button type="button" class="saved-search-run" title={q} onClick={() => run(q)}>
+                <button data-action="SearchBar.5" type="button" class="saved-search-run" title={q} onClick={() => run(q)}>
                   <Star filled size={14} />
                   <span>{q}</span>
                 </button>
-                <button type="button" class="saved-search-remove" title="Убрать из избранного" aria-label={`Убрать «${q}» из избранного`} onClick={() => o.toggleSaved(q)}>
+                <button data-action="SearchBar.6" type="button" class="saved-search-remove" title="Убрать из избранного" aria-label={`Убрать «${q}» из избранного`} onClick={() => o.toggleSaved(q)}>
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
                     <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
                   </svg>

@@ -1,3 +1,4 @@
+import { trackUsage } from './analytics';
 import { createSignal, type Accessor } from 'solid-js';
 import { moveManyTo } from '../model/commands';
 import type { RowKey } from '../model/rows';
@@ -196,7 +197,10 @@ export function createDrag(o: Outliner, el: () => Elements) {
       }
       // Picked up by a finger and let go where it was: not a move but a wish to act on it (Apple's long press).
       if (drop && finger && !strayed) return o.openRowMenu(id, pointer.x, pointer.y);
-      if (drop && t) o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));
+      if (drop && t) {
+        trackUsage('action.dragMove');
+        o.run((ctx) => moveManyTo(ctx, ids, t.parent, t.after));
+      }
     };
     const onUp = () => finish(true);
     const onCancel = () => finish(false);

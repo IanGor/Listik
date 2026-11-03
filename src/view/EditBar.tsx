@@ -5,7 +5,7 @@ import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
 import { formatSelection } from './keymap';
 import type { Outliner } from './outliner';
-import { keyboard, touch } from './screen';
+import { keyboard, touchCapable } from './screen';
 
 /** Which set the bar shows: the main one, or one of the sets it leads to. */
 type SetName = 'main' | 'move' | 'extra';
@@ -222,7 +222,7 @@ export function EditBar(props: { o: Outliner }) {
   const groups = () => (inTitle() ? TITLE_MAIN : ROW_MAIN);
 
   const button = (a: Action | Item, onClick: () => void, cls?: string) => (
-    <button type="button" tabIndex={-1} class={cls} title={a.label} aria-label={a.label} onClick={onClick}>
+    <button data-action={`editbar.${a.label}`} type="button" tabIndex={-1} class={cls} title={a.label} aria-label={a.label} onClick={onClick}>
       {a.glyph ? <span class="editbar-glyph" aria-hidden="true">{a.glyph}</span> : <Icon paths={a.icon!} />}
     </button>
   );
@@ -245,7 +245,7 @@ export function EditBar(props: { o: Outliner }) {
   };
 
   return (
-    <Show when={touch() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
+    <Show when={touchCapable() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <div ref={(el) => scrolling(el, 'main')} class="editbar-set editbar-main" inert={shown() !== 'main'}>
           <For each={groups()}>
@@ -275,7 +275,7 @@ export function EditBar(props: { o: Outliner }) {
                   <Show when={item.destructive}>
                     <span class="editbar-sep" aria-hidden="true" />
                   </Show>
-                  <button
+                  <button data-action={`editbar.${item.label}`}
                     type="button"
                     tabIndex={-1}
                     class="editbar-labelled"

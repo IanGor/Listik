@@ -20,6 +20,9 @@ export const narrow = query('(max-width: 640px)');
  */
 export const touch = query('(pointer: coarse)');
 
+/** A trackpad can be the primary pointer on an iPad; touch capability remains. */
+export const touchCapable = () => touch() || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+
 /** The shorter side of the device's screen at least this is a tablet, px (iPad mini: 744). */
 const TABLET_MIN = 700;
 
@@ -79,14 +82,14 @@ export const keyboard: Accessor<boolean> = (() => {
   const [up, setUp] = createSignal(false);
   const viewport = window.visualViewport;
   const update = () => {
-    // Pinch zoom also shrinks visualViewport; it is not a keyboard opening.
-    if (viewport && Math.abs(viewport.scale - 1) > 0.01) return;
     if (innerWidth !== width) {
       width = innerWidth;
       full = innerHeight;
     }
     full = Math.max(full, innerHeight);
-    const height = Math.min(innerHeight, viewport?.height ?? innerHeight);
+    // Compare in layout pixels: zoom alone must not look like a keyboard,
+    // but must not prevent detecting a keyboard opened while zoomed in.
+    const height = Math.min(innerHeight, viewport ? viewport.height * viewport.scale : innerHeight);
     const visible = full - height > KEYBOARD_MIN;
     setUp(visible);
     const root = document.documentElement;

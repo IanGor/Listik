@@ -182,7 +182,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
   };
 
   const button = (t: Tool, label: string, icon: string) => (
-    <button
+    <button data-action="Sketch.1"
       type="button"
       class="sketch-tool"
       classList={{ on: tool() === t }}
@@ -226,8 +226,8 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
           {button('mark', 'Маркер', MARK_ICON)}
           {button('eraser', 'Ластик', ERASER_ICON)}
           <span class="sketch-sep" />
-          <button type="button" class="sketch-tool" title="Отменить" aria-label="Отменить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.undo()} innerHTML={UNDO_ICON} />
-          <button type="button" class="sketch-tool" title="Повторить" aria-label="Повторить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.redo()} innerHTML={REDO_ICON} />
+          <button data-action="Sketch.2" type="button" class="sketch-tool" title="Отменить" aria-label="Отменить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.undo()} innerHTML={UNDO_ICON} />
+          <button data-action="Sketch.3" type="button" class="sketch-tool" title="Повторить" aria-label="Повторить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.redo()} innerHTML={REDO_ICON} />
         </div>
       </Show>
     </section>

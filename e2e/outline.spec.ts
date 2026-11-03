@@ -2226,6 +2226,27 @@ test.describe('export and import', () => {
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
   const item = (page: Page, name: string | RegExp) => page.getByRole('menuitem', { name });
 
+  test('usage export survives reload and contains actions but no note or query text', async ({ page }) => {
+    await page.goto('/?db=e2e-usage&empty');
+    await page.getByRole('button', { name: 'Записать в Inbox' }).click();
+    await page.getByRole('dialog', { name: 'Запись в Inbox' }).getByRole('textbox').fill('PRIVATE-NOTE-94832');
+    await page.keyboard.press('Enter');
+    await page.locator('input.search').fill('PRIVATE-QUERY-76543');
+    await page.waitForTimeout(1800);
+    await page.reload();
+    await menu(page).click();
+    await item(page, 'Файлы и резервные копии').click();
+    const [file] = await Promise.all([page.waitForEvent('download'), item(page, 'Скачать аналитику использования').click()]);
+    const text = await readFile((await file.path())!, 'utf8');
+    expect(text).not.toContain('PRIVATE-NOTE');
+    expect(text).not.toContain('PRIVATE-QUERY');
+    const data = JSON.parse(text);
+    expect(data.events.some((e: { action: string }) => e.action === 'action.openCapture')).toBe(true);
+    expect(new Set(data.events.map((e: { session: string }) => e.session)).size).toBe(2);
+    expect(new Set(data.events.map((e: { device: string }) => e.device)).size).toBe(1);
+    expect(data.events.every((e: { platform: string }) => e.platform === 'laptop')).toBe(true);
+  });
+
   test('downloads the outline as Markdown and as OPML', async ({ page }) => {
     await menu(page).click();
     await item(page, 'Файлы и резервные копии').click();
@@ -4378,6 +4399,31 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await expect(bar).toBeVisible();
     await visualViewport(page, 834);
     await expect(bar).toHaveCount(0);
+  });
+
+  test('iPad with a primary trackpad still gets quick keys with the software keyboard', async ({ page }) => {
+    await page.addInitScript(() => {
+      const match = window.matchMedia.bind(window);
+      window.matchMedia = (q: string) => {
+        const result = match(q);
+        if (q === '(pointer: coarse)') Object.defineProperty(result, 'matches', { value: false });
+        return result;
+      };
+    });
+    await page.reload();
+    await page.locator('.row .text').first().tap();
+    await visualViewport(page, 780);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
+    await visualViewport(page, 1194);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toHaveCount(0);
+  });
+
+  test('iPad keyboard can open while the page is pinch zoomed', async ({ page }) => {
+    await page.locator('.row .text').first().tap();
+    await visualViewport(page, 597, 2);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toHaveCount(0);
+    await visualViewport(page, 350, 2);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
   });
 
   for (const pointer of ['touch', 'pen'] as const) {

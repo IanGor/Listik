@@ -10,6 +10,7 @@ import { MOD, phone, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
 import { theme, toggleTheme } from './theme';
+import { exportUsage } from './analytics';
 
 /**
  * A menu item's symbol, at the end of its line as in Apple's menus: thin
@@ -112,7 +113,7 @@ export function DocumentMenu(props: { o: Outliner }) {
 
   return (
     <div class="menu-anchor" ref={root}>
-      <button
+      <button data-action="Menu.1"
         type="button"
         class="icon-button menu-button"
         title={o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
@@ -132,18 +133,18 @@ export function DocumentMenu(props: { o: Outliner }) {
         <div class="menu" role="menu">
           {/* Grouped by what for (UX audit, 29 October 2026): going and writing; undo; the look; the document; files; help. */}
           {/* Going to a place by its name: on a phone too, the line at the top of the screen as for "Куда…". */}
-          <button type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
+          <button data-action="Menu.2" type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
             Перейти к пункту… <Show when={!phone()}><span class="hint">{MOD}+K</span></Show>
             <GO />
           </button>
           <Show when={!o.readOnly}>
-            <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
+            <button data-action="Menu.3" type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
               <Show when={!phone()}><span class="hint">{MOD}+Shift+Space</span></Show>
               <WriteIcon />
             </button>
           </Show>
-          <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
+          <button data-action="Menu.4" type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
             {o.trashOpen() ? 'Скрыть корзину' : 'Корзина'}
             <Show when={!o.trashOpen() && o.deleted().length}>
               <span class="hint">{o.deleted().length}</span>
@@ -154,13 +155,13 @@ export function DocumentMenu(props: { o: Outliner }) {
           {/* Undo for a mouse, and for a phone out of editing (its bar has undo only while a bullet is edited). */}
           <Show when={!o.readOnly && (o.history.canUndo || o.history.canRedo)}>
             <Show when={o.history.canUndo}>
-              <button type="button" role="menuitem" onClick={() => { close(); o.undo(); }}>
+              <button data-action="Menu.5" type="button" role="menuitem" onClick={() => { close(); o.undo(); }}>
                 Отменить <Show when={!phone()}><span class="hint">{MOD}+Z</span></Show>
                 <UNDO />
               </button>
             </Show>
             <Show when={o.history.canRedo}>
-              <button type="button" role="menuitem" onClick={() => { close(); o.redo(); }}>
+              <button data-action="Menu.6" type="button" role="menuitem" onClick={() => { close(); o.redo(); }}>
                 Повторить <Show when={!phone()}><span class="hint">{MOD}+Shift+Z</span></Show>
                 <REDO />
               </button>
@@ -168,7 +169,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <div class="menu-sep" role="separator" />
           </Show>
           {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}
-          <button
+          <button data-action="Menu.7"
             type="button"
             role="menuitemcheckbox"
             aria-checked={theme() === 'dark'}
@@ -187,7 +188,7 @@ export function DocumentMenu(props: { o: Outliner }) {
           {/* Steps keep the menu open: the outline behind shows each size at once. */}
           <div class="menu-stepper" role="group" aria-label="Размер текста">
             <span class="menu-stepper-label">Размер текста</span>
-            <button
+            <button data-action="Menu.8"
               type="button"
               class="step"
               aria-label="Мельче"
@@ -201,7 +202,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <span class="step-value" aria-live="polite" aria-atomic="true" ref={(el) => createRenderEffect(() => {
               el.textContent = `${Math.round(textScale() * 100)}%`;
             })} />
-            <button
+            <button data-action="Menu.9"
               type="button"
               class="step"
               aria-label="Крупнее"
@@ -212,7 +213,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             </button>
           </div>
           {/* The font: the list is probed when first opened, and picks keep the menu open like the size's steps. */}
-          <button type="button" role="menuitem" aria-expanded={fontsOpen()} onClick={() => setFontsOpen(!fontsOpen())}>
+          <button data-action="Menu.10" type="button" role="menuitem" aria-expanded={fontsOpen()} onClick={() => setFontsOpen(!fontsOpen())}>
             Шрифт
             <span class="hint">{Object.values(availableFonts()).flat().find((f) => f.stack === fontStack())?.name}</span>
             <CHEVRON />
@@ -225,7 +226,7 @@ export function DocumentMenu(props: { o: Outliner }) {
                     <div class="menu-fonts-title">{KIND_TITLES[kind]}</div>
                     <For each={availableFonts()[kind]}>
                       {(f) => (
-                        <button
+                        <button data-action="Menu.11"
                           type="button"
                           role="menuitemradio"
                           aria-checked={fontStack() === f.stack}
@@ -247,19 +248,19 @@ export function DocumentMenu(props: { o: Outliner }) {
             <Show when={o.syncing()}>
               <p class="menu-note">{describeSync(o.syncStatus())}</p>
             </Show>
-            <button type="button" role="menuitem" onClick={() => { close(); o.showSync(); }}>
+            <button data-action="Menu.12" type="button" role="menuitem" onClick={() => { close(); o.showSync(); }}>
               Синхронизация…
               <CLOUD />
             </button>
           </Show>
           <Show when={!o.readOnly}>
-            <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
+            <button data-action="Menu.13" type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
               Создать структуру <span class="hint">PARA и календарь</span>
               <CALENDAR />
             </button>
           </Show>
           <div class="menu-sep" role="separator" />
-          <button type="button" role="menuitem" aria-expanded={filesOpen()} onClick={() => setFilesOpen(!filesOpen())}>
+          <button data-action="Menu.14" type="button" role="menuitem" aria-expanded={filesOpen()} onClick={() => setFilesOpen(!filesOpen())}>
             Файлы и резервные копии
             <Show when={backup()?.state === 'paused' || backup()?.state === 'error'}>
               <span class="hint attention">Автокопия требует внимания</span>
@@ -268,16 +269,20 @@ export function DocumentMenu(props: { o: Outliner }) {
           </button>
           <Show when={filesOpen()}>
             <div class="menu-files" role="group" aria-label="Файлы и резервные копии">
-              <button type="button" role="menuitem" onClick={() => exportAs('md')}>
+              <button data-action="analytics.export" type="button" role="menuitem" onClick={() => { close(); void exportUsage().catch(() => o.notify('Не удалось выгрузить аналитику')); }}>
+                Скачать аналитику использования
+                <SAVE />
+              </button>
+              <button data-action="Menu.15" type="button" role="menuitem" onClick={() => exportAs('md')}>
                 Скачать как Markdown
                 <SAVE />
               </button>
-              <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
+              <button data-action="Menu.16" type="button" role="menuitem" onClick={() => exportAs('opml')}>
                 Скачать как OPML <span class="hint">для Workflowy</span>
                 <SAVE />
               </button>
               <Show when={!o.readOnly}>
-                <button type="button" role="menuitem" onClick={() => void importFile()}>
+                <button data-action="Menu.17" type="button" role="menuitem" onClick={() => void importFile()}>
                   Импорт из файла…
                   <OPEN />
                 </button>
@@ -290,7 +295,7 @@ export function DocumentMenu(props: { o: Outliner }) {
                         <p class="menu-note">Автокопия в папку работает в Chrome и Edge</p>
                       </Match>
                       <Match when={b().state === 'off'}>
-                        <button type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>
+                        <button data-action="Menu.18" type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>
                           Автокопия в папку…
                           <FOLDER />
                         </button>
@@ -300,18 +305,18 @@ export function DocumentMenu(props: { o: Outliner }) {
                           Автокопия: <b>{b().folder}</b>
                           <Show when={b().last}>, последняя в {time(b().last)}</Show>
                         </p>
-                        <button type="button" role="menuitem" onClick={act(() => o.backup?.write())}>
+                        <button data-action="Menu.19" type="button" role="menuitem" onClick={act(() => o.backup?.write())}>
                           Сохранить копию сейчас
                         </button>
-                        <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
+                        <button data-action="Menu.20" type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
                           Отключить автокопию
                         </button>
                       </Match>
                       <Match when={b().state === 'paused' || b().state === 'error'}>
-                        <button type="button" role="menuitem" class="attention" onClick={act(() => o.backup?.resume())}>
+                        <button data-action="Menu.21" type="button" role="menuitem" class="attention" onClick={act(() => o.backup?.resume())}>
                           {b().state === 'paused' ? 'Автокопия на паузе — продолжить' : 'Автокопия не удалась — повторить'}
                         </button>
-                        <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
+                        <button data-action="Menu.22" type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
                           Отключить автокопию
                         </button>
                       </Match>
@@ -322,7 +327,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             </div>
           </Show>
           <div class="menu-sep" role="separator" />
-          <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
+          <button data-action="Menu.23" type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>
             <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
             <KEYS />
           </button>

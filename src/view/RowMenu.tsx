@@ -82,7 +82,7 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
         }}
       />
       <div ref={menu} class="menu row-menu" role="menu" style={{ left: `${place().left}px`, top: `${place().top}px` }} onMouseDown={(e) => e.preventDefault()}>
-        <button type="button" role="menuitem" onClick={act(() => o.zoomTo(key))}>
+        <button data-action="RowMenu.1" type="button" role="menuitem" onClick={act(() => o.zoomTo(key))}>
           Открыть
           <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>
         </button>
@@ -90,41 +90,41 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
           <Show
             when={n().todo}
             fallback={
-              <button type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
+              <button data-action="RowMenu.2" type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
                 Сделать задачей
                 <Symbol><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></Symbol>
               </button>
             }
           >
-            <button type="button" role="menuitem" onClick={act(() => o.toggleDone([key]))}>
+            <button data-action="RowMenu.3" type="button" role="menuitem" onClick={act(() => o.toggleDone([key]))}>
               {n().done ? 'Снять отметку' : 'Отметить выполненной'}
               <Symbol><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></Symbol>
             </button>
-            <button type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
+            <button data-action="RowMenu.4" type="button" role="menuitem" onClick={act(() => o.toggleTask([key]))}>
               Убрать чекбокс
               <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></Symbol>
             </button>
           </Show>
-          <button type="button" role="menuitem" onClick={act(() => o.setFocus({ id: key, caret: n().note.length, note: true }))}>
+          <button data-action="RowMenu.5" type="button" role="menuitem" onClick={act(() => o.setFocus({ id: key, caret: n().note.length, note: true }))}>
             Заметка
             <Symbol><path d="M5 7h14M5 12h14M5 17h8" /></Symbol>
           </button>
-          <button type="button" role="menuitem" onClick={act(() => o.openMove([key]))}>
+          <button data-action="RowMenu.6" type="button" role="menuitem" onClick={act(() => o.openMove([key]))}>
             Переместить в…
             <Symbol><path d="M3 7h6l2 2h10v10H3z" /><path d="M10 14h6M13 11l3 3-3 3" /></Symbol>
           </button>
-          <button type="button" role="menuitem" onClick={act(() => o.openMirrorInto([key]))}>
+          <button data-action="RowMenu.7" type="button" role="menuitem" onClick={act(() => o.openMirrorInto([key]))}>
             Зеркало в…
             <Symbol><path d="m12 4 5 5-5 5-5-5z" /><path d="M5 19h14" /></Symbol>
           </button>
         </Show>
-        <button type="button" role="menuitem" onClick={act(() => void navigator.clipboard?.writeText(markdownOf(o.doc, [nodeOf(key)])).then(() => o.notify('Скопировано'), () => o.notify('Не удалось скопировать')))}>
+        <button data-action="RowMenu.8" type="button" role="menuitem" onClick={act(() => void navigator.clipboard?.writeText(markdownOf(o.doc, [nodeOf(key)])).then(() => o.notify('Скопировано'), () => o.notify('Не удалось скопировать')))}>
           Копировать
           <Symbol><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></Symbol>
         </button>
         <Show when={!o.readOnly}>
           <div class="menu-sep" role="separator" />
-          <button type="button" role="menuitem" class="destructive" onClick={act(() => o.swipeDelete(key))}>
+          <button data-action="RowMenu.9" type="button" role="menuitem" class="destructive" onClick={act(() => o.swipeDelete(key))}>
             {deletionLabel(o.doc, nodeOf(key))}
             <Symbol><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Symbol>
           </button>

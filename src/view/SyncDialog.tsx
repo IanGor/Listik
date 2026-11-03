@@ -143,7 +143,7 @@ export function SyncDialog(props: { o: Outliner }) {
       <div class="sheet-body">
         <div class="sheet-head">
           <h2>Синхронизация</h2>
-          <button type="button" class="icon-button" aria-label="Закрыть" onClick={() => dialog.close()}>
+          <button data-action="SyncDialog.1" type="button" class="icon-button" aria-label="Закрыть" onClick={() => dialog.close()}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
           </button>
         </div>
@@ -156,33 +156,33 @@ export function SyncDialog(props: { o: Outliner }) {
                   <dt>Код документа</dt>
                   <dd>
                     <code class="doc-code">{h().config.docId}</code>
-                    <button type="button" class="button small" onClick={() => void copyCode()}>{copied() ? 'Скопировано' : 'Копировать'}</button>
+                    <button data-action="SyncDialog.2" type="button" class="button small" onClick={() => void copyCode()}>{copied() ? 'Скопировано' : 'Копировать'}</button>
                   </dd>
                   <dt>Состояние</dt><dd>{describeSync(o.syncStatus())}</dd>
                 </dl>
                 <Show when={o.syncStatus().refused}>
                   <form class="form sync-relogin" onSubmit={(e) => void signIn(e)}>
                     <p class="form-note">Пароль сменили на другом устройстве. Введите новый: правки, ещё не отправленные с этого, сохранятся.</p>
-                    <label class="field"><span>Новый пароль</span><input type="password" autocomplete="current-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
-                    <button type="submit" class="button primary" disabled={busy() || !pass()}>{busy() ? 'Проверяю…' : 'Продолжить'}</button>
+                    <label class="field"><span>Новый пароль</span><input data-action="SyncDialog.3" type="password" autocomplete="current-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
+                    <button data-action="SyncDialog.4" type="submit" class="button primary" disabled={busy() || !pass()}>{busy() ? 'Проверяю…' : 'Продолжить'}</button>
                   </form>
                 </Show>
                 <p class="form-note">
                   На другом устройстве откройте Listik, выберите «Синхронизация → Подключиться» и введите адрес сервера, код документа и пароль.
                 </p>
                 <div class="button-row">
-                  <button type="button" class="button" disabled={busy()} onClick={() => void h().engine.sync().catch(() => {})}>Синхронизировать сейчас</button>
-                  <button type="button" class="button" onClick={() => setMode(mode() === 'change' ? 'create' : 'change')}>Сменить пароль</button>
-                  <button type="button" class="button" disabled={busy()} onClick={(e) => void forget(e)}>Забыть пароль здесь</button>
-                  <button type="button" class="button" disabled={busy()} onClick={(e) => void restore(e)}>Загрузить с сервера</button>
-                  <button type="button" class="button danger" disabled={busy()} onClick={(e) => void disconnect(e)}>Отключить</button>
+                  <button data-action="SyncDialog.5" type="button" class="button" disabled={busy()} onClick={() => void h().engine.sync().catch(() => {})}>Синхронизировать сейчас</button>
+                  <button data-action="SyncDialog.6" type="button" class="button" onClick={() => setMode(mode() === 'change' ? 'create' : 'change')}>Сменить пароль</button>
+                  <button data-action="SyncDialog.7" type="button" class="button" disabled={busy()} onClick={(e) => void forget(e)}>Забыть пароль здесь</button>
+                  <button data-action="SyncDialog.8" type="button" class="button" disabled={busy()} onClick={(e) => void restore(e)}>Загрузить с сервера</button>
+                  <button data-action="SyncDialog.9" type="button" class="button danger" disabled={busy()} onClick={(e) => void disconnect(e)}>Отключить</button>
                 </div>
                 <Show when={mode() === 'change' && !o.syncStatus().refused}>
                   <form class="form" onSubmit={(e) => void change(e)}>
-                    <label class="field"><span>Новый пароль</span><input type="password" autocomplete="new-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
-                    <label class="field"><span>Ещё раз</span><input type="password" autocomplete="new-password" value={pass2()} onInput={(e) => setPass2(e.currentTarget.value)} /></label>
+                    <label class="field"><span>Новый пароль</span><input data-action="SyncDialog.10" type="password" autocomplete="new-password" value={pass()} onInput={(e) => setPass(e.currentTarget.value)} /></label>
+                    <label class="field"><span>Ещё раз</span><input data-action="SyncDialog.11" type="password" autocomplete="new-password" value={pass2()} onInput={(e) => setPass2(e.currentTarget.value)} /></label>
                     <p class="form-note">Другие устройства попросят новый пароль при следующем открытии.</p>
-                    <button type="submit" class="button primary" disabled={busy() || !passOk()}>{busy() ? 'Меняю…' : 'Сменить пароль'}</button>
+                    <button data-action="SyncDialog.12" type="submit" class="button primary" disabled={busy() || !passOk()}>{busy() ? 'Меняю…' : 'Сменить пароль'}</button>
                   </form>
                 </Show>
               </>
@@ -190,28 +190,28 @@ export function SyncDialog(props: { o: Outliner }) {
           </Match>
           <Match when={!handle()}>
             <div class="tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={mode() === 'create'} onClick={() => setMode('create')}>Новый документ на сервере</button>
-              <button type="button" role="tab" aria-selected={mode() === 'join'} onClick={() => setMode('join')}>Подключиться к существующему</button>
+              <button data-action="SyncDialog.13" type="button" role="tab" aria-selected={mode() === 'create'} onClick={() => setMode('create')}>Новый документ на сервере</button>
+              <button data-action="SyncDialog.14" type="button" role="tab" aria-selected={mode() === 'join'} onClick={() => setMode('join')}>Подключиться к существующему</button>
             </div>
             <form class="form" onSubmit={(e) => void (mode() === 'create' ? create(e) : join(e))}>
               <label class="field">
                 <span>Сервер</span>
-                <input type="url" placeholder="https://sync.example.com" value={server()} onInput={(e) => setServer(e.currentTarget.value)} />
+                <input data-action="SyncDialog.15" type="url" placeholder="https://sync.example.com" value={server()} onInput={(e) => setServer(e.currentTarget.value)} />
               </label>
               <Show when={mode() === 'join'}>
                 <label class="field">
                   <span>Код документа</span>
-                  <input type="text" autocomplete="off" spellcheck={false} value={code()} onInput={(e) => setCode(e.currentTarget.value)} />
+                  <input data-action="SyncDialog.16" type="text" autocomplete="off" spellcheck={false} value={code()} onInput={(e) => setCode(e.currentTarget.value)} />
                 </label>
               </Show>
               <label class="field">
                 <span>Пароль</span>
-                <input type="password" autocomplete={mode() === 'create' ? 'new-password' : 'current-password'} value={pass()} onInput={(e) => setPass(e.currentTarget.value)} />
+                <input data-action="SyncDialog.17" type="password" autocomplete={mode() === 'create' ? 'new-password' : 'current-password'} value={pass()} onInput={(e) => setPass(e.currentTarget.value)} />
               </label>
               <Show when={mode() === 'create'}>
                 <label class="field">
                   <span>Ещё раз</span>
-                  <input type="password" autocomplete="new-password" value={pass2()} onInput={(e) => setPass2(e.currentTarget.value)} />
+                  <input data-action="SyncDialog.18" type="password" autocomplete="new-password" value={pass2()} onInput={(e) => setPass2(e.currentTarget.value)} />
                 </label>
                 <p class="form-note">
                   Этот документ будет зашифрован паролем и отправлен на сервер. Сервер видит только шифротекст; пароль и ключ его не покидают.
@@ -224,7 +224,7 @@ export function SyncDialog(props: { o: Outliner }) {
                 </p>
               </Show>
               <Show when={error()}>{(m) => <p class="form-error" role="alert">{m()}</p>}</Show>
-              <button type="submit" class="button primary" disabled={busy() || !validServer() || (mode() === 'create' ? !passOk() : !code() || !pass())}>
+              <button data-action="SyncDialog.19" type="submit" class="button primary" disabled={busy() || !validServer() || (mode() === 'create' ? !passOk() : !code() || !pass())}>
                 {busy() ? 'Подождите…' : mode() === 'create' ? 'Создать и включить' : 'Подключиться'}
               </button>
             </form>

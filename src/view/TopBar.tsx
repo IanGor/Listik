@@ -21,7 +21,7 @@ export function TopBar(props: { o: Outliner }) {
   return (
     <header class="topbar">
       <nav class="places" aria-label="Места">
-        <button
+        <button data-action="TopBar.1"
           type="button"
           class="place today-button"
           title="Сегодняшний день в календаре"
@@ -37,7 +37,7 @@ export function TopBar(props: { o: Outliner }) {
           </svg>
           <span class="place-label">Сегодня</span>
         </button>
-        <button
+        <button data-action="TopBar.2"
           type="button"
           class="place home-button"
           title="На главную"
@@ -55,7 +55,7 @@ export function TopBar(props: { o: Outliner }) {
       <SearchBar o={props.o} />
       <div class="topbar-actions">
         <Show when={!props.o.readOnly}>
-          <button type="button" class="icon-button" title="Записать в Inbox" aria-label="Записать в Inbox" onPointerDown={(e) => e.preventDefault()} onClick={() => props.o.openCapture()}>
+          <button data-action="TopBar.3" type="button" class="icon-button" title="Записать в Inbox" aria-label="Записать в Inbox" onPointerDown={(e) => e.preventDefault()} onClick={() => props.o.openCapture()}>
             <WriteIcon />
           </button>
         </Show>

@@ -35,7 +35,7 @@ export function Restore(props: { opened: Opened }) {
           Сервер: <code>{props.opened.config?.server}</code>, код документа: <code>{props.opened.config?.docId}</code>
         </p>
         <Show when={error()}>{(m) => <p class="form-error" role="alert">{m()}</p>}</Show>
-        <button type="button" class="button primary" disabled={busy()} onClick={() => void restore()}>
+        <button data-action="Restore.1" type="button" class="button primary" disabled={busy()} onClick={() => void restore()}>
           {busy() ? 'Загружаю…' : 'Загрузить с сервера'}
         </button>
       </div>

@@ -1,3 +1,4 @@
+import { trackUsage } from './analytics';
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
@@ -439,6 +440,7 @@ export class Outliner {
 
   /** The star: saves the search, first in the list, or takes it out again. Beyond SAVED_MAX the oldest goes. */
   toggleSaved(query: string): void {
+    trackUsage('action.toggleSaved');
     const q = query.trim();
     if (!q) return;
     const list = this.savedSearches();
@@ -457,6 +459,7 @@ export class Outliner {
 
   /** A click on a tag: search for it. */
   filterByTag(tag: string): void {
+    trackUsage('action.filterByTag');
     this.setQuery(tagText(tag), true);
   }
 
@@ -468,6 +471,7 @@ export class Outliner {
    * makes its bullet, last in the structure's Inbox (one undo step).
    */
   followLink(title: string, from?: RowKey): void {
+    trackUsage('action.followLink');
     this.settleTitle();
     let id = resolveLink(this.doc, this.text, title);
     const inbox = id ? null : findInbox(this.doc);
@@ -490,6 +494,7 @@ export class Outliner {
    * right after the link.
    */
   goToBacklink(id: NodeId, target: NodeId): void {
+    trackUsage('action.goToBacklink');
     if (!this.doc.has(id)) return;
     const n = this.doc.get(id);
     const end = linkEnd(n.text, this.doc.get(target).text);
@@ -513,6 +518,7 @@ export class Outliner {
    * as it was.
    */
   zoomTo(key: RowKey | null, keepSearch = false, keepFolds = false): void {
+    trackUsage('action.zoomTo');
     this.settleTitle();
     let id = key && nodeOf(key);
     // A mirror has no inside of its own: zooming into it leads to the original (model/mirrors.ts).
@@ -672,6 +678,7 @@ export class Outliner {
    * read-only too: it only goes.
    */
   openGoTo(): void {
+    trackUsage('action.openGoTo');
     if (this.placeLine()) return;
     this.settleTitle();
     this.placeBack = this.caretNow();
@@ -683,6 +690,7 @@ export class Outliner {
    * "Переместить в…" for these rows (GoTo.tsx). The outline stays as it is.
    */
   openMove(keys: RowKey[], mirror = false): void {
+    trackUsage('action.openMove');
     if (this.readOnly || !keys.length) return;
     this.settleTitle();
     this.placeBack = this.caretNow();
@@ -698,6 +706,7 @@ export class Outliner {
 
   /** «Зеркало в…» (the row menu): the places line, the rows staying where they are and a copy of each going last into the place. */
   openMirrorInto(keys: RowKey[]): void {
+    trackUsage('action.openMirrorInto');
     this.openMove(keys, true);
   }
 
@@ -762,6 +771,7 @@ export class Outliner {
    * next one can go too; the toast names the place and leads there.
    */
   moveInto(target: NodeId): void {
+    trackUsage('action.moveInto');
     const m = this.moving();
     if (!m || this.readOnly) return;
     if (m.mirror) return this.mirrorInto(m.keys, target);
@@ -816,6 +826,7 @@ export class Outliner {
    * its first bullet, or its title, as Alt+→ does.
    */
   goToPlace(id: NodeId, edit: boolean): void {
+    trackUsage('action.goToPlace');
     if (!this.doc.has(id) || !searchable(this.doc, id)) return;
     this.setPlaceLine(null);
     this.placeBack = null;
@@ -890,6 +901,7 @@ export class Outliner {
    * no structure or no such day.
    */
   goToday(quiet = false): void {
+    trackUsage('action.goToday');
     const now = new Date();
     const today = dayOf(now);
     if (!this.structure()) return quiet ? undefined : this.notify('Структуры ещё нет: меню «⋯» → «Создать структуру»');
@@ -917,6 +929,7 @@ export class Outliner {
    * caret stays out, as after "Сегодня".
    */
   goInbox(): void {
+    trackUsage('action.goInbox');
     let inbox = findInbox(this.doc);
     if (inbox === null) {
       if (this.readOnly) return this.notify('Inbox ещё нет');
@@ -992,6 +1005,7 @@ export class Outliner {
    * Ctrl+Alt+←/→ (Outline.tsx). Returns whether the zoom is in a day.
    */
   stepDay(step: -1 | 1): boolean {
+    trackUsage('action.stepDay');
     const date = this.zoomDay();
     if (!date) return false;
     this.goToDate(addDays(date, step));
@@ -1061,6 +1075,7 @@ export class Outliner {
    * somewhere (UX audit, 29 October 2026).
    */
   goHome(): void {
+    trackUsage('action.goHome');
     batch(() => {
       this.setQuery('', true);
       this.zoomTo(null);
@@ -1080,6 +1095,7 @@ export class Outliner {
    * undo step each.
    */
   toggleLevel(): void {
+    trackUsage('action.toggleLevel');
     const parent = this.zoom() ?? this.doc.root;
     const kids = this.doc.get(parent).children.filter((c) => (this.doc.host(c)?.children.length ?? 0) > 0);
     const open = kids.filter((c) => !this.doc.get(c).collapsed);
@@ -1108,6 +1124,7 @@ export class Outliner {
    * is there already (one undo step), and the app goes to today in it.
    */
   createStructure(): void {
+    trackUsage('action.createStructure');
     if (this.readOnly) return;
     this.run((ctx) => void createStructure(ctx, new Date().getFullYear()));
     this.goToday();
@@ -1171,6 +1188,7 @@ export class Outliner {
 
   /** The menu: opens the trash panel beside the outline, or closes it; remembered per browser. */
   showTrash(open = !this.trashOpen()): void {
+    trackUsage('action.showTrash');
     this.setTrashOpen(open);
     writeSetting(TRASH_OPEN, open ? '1' : null);
   }
@@ -1187,6 +1205,7 @@ export class Outliner {
    * If that place is not on the screen, the view goes to it first.
    */
   restoreDeleted(id: NodeId): void {
+    trackUsage('action.restoreDeleted');
     if (this.readOnly) return;
     const landed: { home: boolean }[] = [];
     batch(() => {
@@ -1271,21 +1290,25 @@ export class Outliner {
    * "Отметить выполненной" in the row menu (`toggleDone`).
    */
   toggleTask(ids: RowKey[], keep?: Focus): void {
+    trackUsage('action.toggleTask');
     this.changeTasks((ctx) => toggleTask(ctx, ids), ids, keep);
   }
 
   /** Ctrl+Shift+L: tasks become plain bullets again. */
   untask(ids: RowKey[], keep?: Focus): void {
+    trackUsage('action.untask');
     this.changeTasks((ctx) => untask(ctx, ids), ids, keep);
   }
 
   /** A swipe to the right (swipe.ts): `toggleTask`, the caret staying. */
   swipeCheck(key: RowKey): void {
+    trackUsage('action.swipeCheck');
     this.toggleTask([key], this.keepFocus());
   }
 
   /** The checkbox, Ctrl+Enter, the row menu: tasks checked, or unchecked if all are. */
   toggleDone(ids: RowKey[], keep?: Focus): void {
+    trackUsage('action.toggleDone');
     this.changeTasks((ctx) => toggleDone(ctx, ids), ids, keep);
   }
 
@@ -1295,6 +1318,7 @@ export class Outliner {
    * it back. A caret in another row stays there.
    */
   swipeDelete(key: RowKey): void {
+    trackUsage('action.swipeDelete');
     this.deleteRows([key], true);
   }
 
@@ -1308,6 +1332,7 @@ export class Outliner {
    * being edited (a swipe, the menu), so a caret outside them stays.
    */
   deleteRows(keys: RowKey[], elsewhere = false): void {
+    trackUsage('action.deleteRows');
     const rows = keys.filter((k) => this.rows.indexOf(k) >= 0);
     if (this.readOnly || !rows.length) return;
     const sources = new Set<NodeId>();
@@ -1466,6 +1491,7 @@ export class Outliner {
    * typing has moved on since), to go back there when the line closes.
    */
   openCapture(): void {
+    trackUsage('action.openCapture');
     if (this.readOnly) return;
     if (this.captureOpen()) return;
     this.captureBack = this.caretNow();
@@ -1488,6 +1514,7 @@ export class Outliner {
    * back.
    */
   capture(text: string): void {
+    trackUsage('action.capture');
     const t = text.trim();
     if (!t || this.readOnly) return;
     let made: NodeId | null = null;
@@ -1519,6 +1546,7 @@ export class Outliner {
 
   /** `?` or Ctrl+/: shows the keyboard shortcuts. */
   showHelp(): void {
+    trackUsage('action.showHelp');
     this.setHelpRequests((n) => n + 1);
   }
 
@@ -1529,6 +1557,7 @@ export class Outliner {
 
   /** The menu or the cloud icon: opens the sync dialog. */
   showSync(): void {
+    trackUsage('action.showSync');
     this.setSyncRequests((n) => n + 1);
   }
 
@@ -1559,6 +1588,7 @@ export class Outliner {
 
   /** Ctrl+F: put the caret into the search box. */
   requestSearch(): void {
+    trackUsage('action.requestSearch');
     this.setSearchRequests((n) => n + 1);
   }
 
@@ -1586,6 +1616,7 @@ export class Outliner {
    * bullet in the document, as an undoable command.
    */
   fold(key: RowKey, folded?: boolean, keep?: Focus): void {
+    trackUsage('action.fold');
     const id = nodeOf(key);
     if (this.rows.onPath(id)) {
       batch(() => {
@@ -1730,6 +1761,7 @@ export class Outliner {
    * the title.
    */
   mergeUp(key: RowKey, keep: Focus): void {
+    trackUsage('action.mergeUp');
     const first = this.zoom() !== null && this.rows.indexOf(key) === 0;
     this.run((ctx) => mergeUp(ctx, key), keep);
     if (first && !this.doc.inOutline(nodeOf(key))) {
@@ -1762,6 +1794,7 @@ export class Outliner {
    * selection goes, inside the markers, for the editor to select again.
    */
   format(at: Omit<Focus, 'caret'>, start: number, end: number, marker: '**' | '*'): { start: number; end: number } | null {
+    trackUsage('action.format');
     if (this.readOnly) return null;
     const n = this.contentOf(at.id);
     const next = toggleFormat(at.note ? n.note : n.text, start, end, marker);
@@ -1779,6 +1812,7 @@ export class Outliner {
    * `target`, or a mirror goes in below it when the bullet holds other text.
    */
   makeMirror(id: RowKey, target: NodeId, start: number, end: number): void {
+    trackUsage('action.makeMirror');
     this.run((ctx) => makeMirror(ctx, id, target, start, end), { id, caret: start });
   }
 
@@ -1789,6 +1823,7 @@ export class Outliner {
    * `[[`, `#`, `@`), the rest take the token out and act on the bullet.
    */
   slash(id: RowKey, note: boolean, start: number, end: number, name: string): void {
+    trackUsage('action.slash');
     if (this.readOnly) return;
     const at = (caret: number): Focus => (note ? { id, caret, note: true } : { id, caret });
     const starts: Record<string, [string, number]> = {
@@ -1811,6 +1846,7 @@ export class Outliner {
 
   /** A template taken from the `/` suggestions (model/templates.ts): what is inside it comes in, one undo step. */
   insertTemplate(id: RowKey, template: NodeId, start: number, end: number): void {
+    trackUsage('action.insertTemplate');
     let empty = false;
     this.run((ctx) => {
       const f = insertTemplate(ctx, id, template, start, end);
@@ -1828,6 +1864,7 @@ export class Outliner {
    * not without such a bullet and an Inbox, nor of the bullet itself.
    */
   mirrorTitled(id: RowKey, title: string, start: number, end: number): boolean {
+    trackUsage('action.mirrorTitled');
     const name = title.trim();
     if (!name || this.readOnly) return false;
     const target = resolveLink(this.doc, this.text, name);
@@ -1923,6 +1960,7 @@ export class Outliner {
 
   /** Opens the row's menu of actions at (x, y), px in the window. */
   openRowMenu(key: RowKey, x: number, y: number): void {
+    trackUsage('action.openRowMenu');
     if (this.rows.indexOf(key) >= 0) this.setRowMenu({ key, x, y });
   }
 
@@ -1932,6 +1970,7 @@ export class Outliner {
 
   /** Shows or hides the zoomed-in bullet's sketch (the "Скетч" button). */
   toggleSketch(): void {
+    trackUsage('action.toggleSketch');
     const z = this.zoom();
     if (!z) return;
     const next = new Map(this.sketchToggled());
@@ -1952,10 +1991,12 @@ export class Outliner {
   }
 
   undo(): void {
+    trackUsage('action.undo');
     this.replay((doc) => this.history.undo(doc), false);
   }
 
   redo(): void {
+    trackUsage('action.redo');
     this.replay((doc) => this.history.redo(doc), true);
   }
 

@@ -291,7 +291,7 @@ export function Row(props: RowProps) {
       </Show>
       <div class="body">
         <Show when={(o.rowsVersion(), o.rows.retainedEditor(id))}>
-          <button type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => {
+          <button data-action="Row.1" type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => {
             const focus = o.caretNow();
             const today = findToday(o.doc);
             if (today) {
@@ -318,12 +318,12 @@ export function Row(props: RowProps) {
           <Editable o={o} id={id} />
         </Show>
         <Show when={project()}>
-          {(p) => <button type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => o.zoomTo(p())} title="Открыть проект">Проект: {projectName()}</button>}
+          {(p) => <button data-action="Row.2" type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => o.zoomTo(p())} title="Открыть проект">Проект: {projectName()}</button>}
         </Show>
         <Show when={pending()}>
           {(p) => (
             <div class="pending" title={`Незавершённая задача внутри${p().more ? ` (и ещё ${p().more})` : ''}`}>
-              <button
+              <button data-action="Row.3"
                 type="button"
                 class="pending-box"
                 aria-label={`Отметить выполненной: ${pendingText()}`}
