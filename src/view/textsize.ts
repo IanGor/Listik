@@ -8,7 +8,7 @@ import { createSignal } from 'solid-js';
  * on <html> (index.css); index.html applies a saved one before the first
  * paint, so the outline never jumps from one size to another.
  */
-export const TEXT_SCALES = [0.85, 1, 1.15, 1.3, 1.5] as const;
+export const TEXT_SCALES = Array.from({ length: 21 }, (_, i) => (50 + i * 5) / 100);
 const KEY = 'listik-text-scale';
 
 function saved(): number {

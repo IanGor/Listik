@@ -2163,8 +2163,7 @@ test.describe('text size', () => {
     expect(await fontSize(page)).toBe('17px');
     await menu(page).click();
     const larger = page.getByRole('button', { name: 'Крупнее' });
-    await larger.click();
-    await larger.click();
+    for (let i = 0; i < 6; i++) await larger.click();
     await expect(page.locator('.menu')).toBeVisible();
     await expect(page.locator('.step-value')).toHaveText('130%');
     expect(await fontSize(page)).toBe('22.1px');
@@ -2178,12 +2177,43 @@ test.describe('text size', () => {
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
     expect(await fontSize(page)).toBe('22.1px');
     await menu(page).click();
+    const smaller = page.getByRole('button', { name: 'Мельче' });
+    for (let percent = 125; percent >= 50; percent -= 5) {
+      await smaller.click();
+      await expect(page.locator('.step-value')).toHaveText(`${percent}%`);
+    }
+    await expect(smaller).toBeDisabled();
+    expect(await fontSize(page)).toBe('8.5px');
+    await page.reload();
+    await expect(page.locator('.row')).toHaveCount(DEMO.length);
+    expect(await fontSize(page)).toBe('8.5px');
+    await menu(page).click();
+    for (let percent = 55; percent <= 150; percent += 5) {
+      await larger.click();
+      await expect(page.locator('.step-value')).toHaveText(`${percent}%`);
+    }
+    await expect(larger).toBeDisabled();
+    expect(await fontSize(page)).toBe('25.5px');
+  });
+
+  test('the chosen scale belongs to this device, independently of another browser', async ({ page, browser }) => {
+    await menu(page).click();
     await page.getByRole('button', { name: 'Мельче' }).click();
-    await page.getByRole('button', { name: 'Мельче' }).click();
-    await page.getByRole('button', { name: 'Мельче' }).click();
-    await expect(page.locator('.step-value')).toHaveText('85%');
-    await expect(page.getByRole('button', { name: 'Мельче' })).toBeDisabled();
-    expect(await fontSize(page)).toBe('14.45px');
+    await expect(page.locator('.step-value')).toHaveText('95%');
+    const other = await browser.newContext();
+    try {
+      const second = await other.newPage();
+      await second.goto('/?demo');
+      await menu(second).click();
+      await expect(second.locator('.step-value')).toHaveText('100%');
+      await second.getByRole('button', { name: 'Крупнее' }).click();
+      await expect(second.locator('.step-value')).toHaveText('105%');
+      await page.reload();
+      await menu(page).click();
+      await expect(page.locator('.step-value')).toHaveText('95%');
+    } finally {
+      await other.close();
+    }
   });
 
   test("the system's text size (Dynamic Type on an iPad) scales the outline under the menu's", async ({ page }) => {
@@ -2192,7 +2222,7 @@ test.describe('text size', () => {
     expect(await fontSize(page)).toBe('20px');
     await menu(page).click();
     await page.getByRole('button', { name: 'Крупнее' }).click();
-    expect(await fontSize(page)).toBe('23px');
+    expect(await fontSize(page)).toBe('21px');
     expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('15px');
   });
 });
