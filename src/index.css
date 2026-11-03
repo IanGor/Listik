@@ -3085,10 +3085,10 @@ body.is-dragging * {
     font-size: 16px;
   }
 
-  /* The bullet, a tap's way into the bullet: wider to hit by --bullet-reach
-     into the gutter on its left, drawn where it was (the dot and its halo
-     shift back by half of it). Not taller: rows are 30px apart. */
-  .bullet {
+  /* On phones the arrow is on the right, so the dot can extend into the
+     left gutter. On tablets that extension would cover the fold arrow.
+     The dot and its halo stay in place; rows are 30px apart. */
+  :where(:root:not(.tablet)) .bullet {
     --bullet-reach: 18px;
     box-sizing: content-box;
     padding-left: var(--bullet-reach);

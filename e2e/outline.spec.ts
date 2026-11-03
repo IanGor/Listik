@@ -4029,6 +4029,32 @@ test.describe('#secret', () => {
 test.describe('tablet (an iPad: a finger on a wide screen)', () => {
   test.use({ viewport: { width: 834, height: 1194 }, isMobile: true, hasTouch: true });
 
+  for (const pointer of ['touch', 'pen'] as const) {
+    test(`the fold arrow receives ${pointer} presses; the dot still zooms`, async ({ page }) => {
+      const row = page.locator('.row', { hasText: 'Том первый' });
+      const arrow = row.locator('.toggle');
+      const dot = row.locator('.bullet');
+      const a = (await arrow.boundingBox())!;
+      const b = (await dot.boundingBox())!;
+      expect(a.x + a.width).toBeLessThanOrEqual(b.x);
+      const cdp = await page.context().newCDPSession(page);
+      const press = async (x: number, y: number) => {
+        if (pointer === 'touch') return page.touchscreen.tap(x, y);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, pointerType: 'pen' });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, pointerType: 'pen' });
+      };
+      // Use screen coordinates: a locator tap would retry if the dot covered the arrow.
+      await press(a.x + a.width / 2, a.y + a.height / 2);
+      await expect(page.locator('.zoom-title')).toHaveCount(0);
+      expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
+      await press(a.x + a.width / 2, a.y + a.height / 2);
+      expect(await outline(page)).toEqual(DEMO);
+      await press(b.x + b.width / 2, b.y + b.height / 2);
+      await expect(page.locator('.zoom-title')).toHaveText('Том первый');
+      await cdp.detach();
+    });
+  }
+
   test('it has the computer\'s layout: arrows by the bullets, the full menu', async ({ page }) => {
     await expect(page.locator('html')).toHaveClass(/\btablet\b/);
     // The fold arrow stands left of its bullet, in view without a hover.
