@@ -1,5 +1,6 @@
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 import { nanoid } from 'nanoid';
+import { plainText } from './format';
 import type { NodeId, NodeSnapshot, Op, OutlineNode } from './types';
 
 export const newId = (): NodeId => nanoid();
@@ -59,7 +60,7 @@ export function invert(op: Op): Op {
     case 'setNote':
       return { t: 'setNote', id: op.id, from: op.to, to: op.from, at: op.at };
     case 'setMirror':
-      return { t: 'setMirror', id: op.id, from: op.to, to: op.from };
+      return { t: 'setMirror', id: op.id, from: op.to, to: op.from, ...(op.source ? { source: { from: op.source.to, to: op.source.from } } : {}) };
     case 'addStrokes':
       return { t: 'removeStrokes', id: op.id, strokes: op.strokes };
     case 'removeStrokes':
@@ -260,8 +261,20 @@ export class Doc {
       ...(n.doneAt !== undefined ? { doneAt: n.doneAt } : {}),
       created: n.created, updated: n.updated, ...(n.mirrorOf ? { mirrorOf: n.mirrorOf } : {}),
       ...(n.strokes ? { strokes: n.strokes } : {}),
+      paraOrigin: n.paraOrigin ?? null,
       children: n.children.map((c) => this.snapshot(c)),
     };
+  }
+
+  /** Physical placement inside the first top-level PARA, not a projection through a mirror. */
+  inPara(id: NodeId): boolean {
+    let top = this.get(id);
+    while (top.parent !== null && top.parent !== this.root) top = this.get(top.parent);
+    if (top.parent !== this.root) return false;
+    const namedPara = (c: NodeId) => plainText(this.content(c).text).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}_]+/u)?.[0] === 'para';
+    if (!namedPara(top.id)) return false;
+    const para = this.get(this.root).children.find(namedPara);
+    return top.id === para;
   }
 
   /**
@@ -354,6 +367,12 @@ export class Doc {
         const n = this.get(op.id);
         if (n.mirrorOf !== op.from) throw new Error(`setMirror: stale target for ${op.id}`);
         if (op.to === op.id) throw new Error(`setMirror: ${op.id} cannot mirror itself`);
+        if (!op.source) {
+          const from = n.paraOrigin ?? null;
+          const to = op.to === null ? from : this.nodes.get(this.origin(op.to))?.paraOrigin ?? null;
+          if (from !== to) op.source = { from, to };
+        }
+        if (op.source) n.paraOrigin = op.source.to;
         this.unlinkMirror(n);
         n.mirrorOf = op.to;
         this.linkMirror(n);
@@ -395,6 +414,9 @@ export class Doc {
       };
       if (s.strokes?.length) n.strokes = s.strokes;
       if (s.done && s.doneAt !== undefined) n.doneAt = s.doneAt;
+      // Capture birthplace on the insert itself, so replay, undo and other devices keep it.
+      if (s.paraOrigin === undefined) s.paraOrigin = s.mirrorOf ? this.nodes.get(this.origin(s.mirrorOf))?.paraOrigin ?? null : this.inPara(p) ? s.id : null;
+      n.paraOrigin = s.paraOrigin;
       this.nodes.set(n.id, n);
       this.attach(n);
       this.linkMirror(n);

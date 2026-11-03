@@ -65,7 +65,8 @@ function mergeOp(doc: Doc, op: Exclude<Op, { t: 'insert' }>): Op[] {
     }
     case 'setMirror': {
       const n = doc.nodes.get(op.id);
-      return n && n.mirrorOf !== op.to && op.to !== op.id ? [{ ...op, from: n.mirrorOf }] : [];
+      return n && (n.mirrorOf !== op.to || (op.source && (n.paraOrigin ?? null) !== op.source.to)) && op.to !== op.id
+        ? [{ ...op, from: n.mirrorOf, ...(op.source ? { source: { from: n.paraOrigin ?? null, to: op.source.to } } : {}) }] : [];
     }
     case 'addStrokes': {
       // Lines are added and erased whole, by id: drawing on two devices at once just adds up.

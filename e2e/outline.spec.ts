@@ -1167,6 +1167,58 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.row').filter({ has: page.locator('.text', { hasText: /^write$/ }) }).locator('.check')).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('deleting a Kanban card keeps its PARA source; deleting the source removes its cards, and one undo restores both', async ({ page }) => {
+    await page.goto('/?db=e2e-para-cascade&empty');
+    await create(page);
+    const home = () => page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    const enter = (text: string | RegExp) => page.locator('.row').filter({ has: page.locator('.text', { hasText: typeof text === 'string' ? new RegExp(`^${text}$`) : text }) }).locator('.bullet').click();
+    await home();
+    await enter('PARA');
+    await enter('Projects');
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Source #project ');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('owned');
+    await page.keyboard.press('Control+l');
+    await page.locator('.toast').getByRole('button', { name: 'Показать' }).click();
+    await expect(title(page)).toHaveText('Backlog');
+    await edit(page, 'owned');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
+    await home();
+    await enter('PARA');
+    await enter('Projects');
+    await enter(/^Source #project/);
+    await edit(page, 'owned');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(0);
+    await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
+    await home();
+    await enter('Kanban');
+    await enter('Backlog');
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
+    await page.reload();
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
+    await home();
+    await enter('PARA');
+    await enter('Projects');
+    await enter(/^Source #project/);
+    await edit(page, 'owned');
+    await page.keyboard.press('Control+Shift+Backspace');
+    await home();
+    await enter('Kanban');
+    await enter('Backlog');
+    await page.reload();
+    await expect(title(page)).toHaveText('Backlog');
+    await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(0);
+  });
+
   test('a dated project task goes straight to Today; adding @today to a Backlog task moves its existing mirror immediately', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();

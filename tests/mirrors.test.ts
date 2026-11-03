@@ -14,6 +14,169 @@ import { VisibleRows, keepSet, nodeOf } from '../src/model/rows';
 import type { Focus, NodeId, Op } from '../src/model/types';
 import { dump, dumpRows, rng, setup, viewRows } from './helpers';
 
+describe('deleting original nodes born in PARA', () => {
+  const lines = ['PARA', '  Project', '    task', '      child', 'Kanban', '  Backlog', '    deep', '      card', '  Today', '    project-card', 'Elsewhere', '  copy', '  unrelated'];
+  const fixture = () => mirrored(lines, { card: 'task', copy: 'task', 'project-card': 'Project' });
+
+  it('deletes every physical copy at any depth, including completed tasks; a mirrored project just stops showing the child', () => {
+    const { doc, ctx, rows, run } = fixture();
+    run(() => cmd.toggleTask(ctx, ['task']));
+    run(() => cmd.toggleDone(ctx, ['task']));
+    const before = serialize(doc);
+    const ops = doc.transact(() => { cmd.deleteNode(ctx, 'task'); });
+    for (const id of ['task', 'child', 'card', 'copy']) expect(doc.inOutline(id)).toBe(false);
+    expect(doc.inOutline('project-card')).toBe(true);
+    expect(doc.get('Project').children).toEqual([]);
+    expect(doc.origin('project-card')).toBe('Project');
+    expect(viewRows(rows, doc).some((row) => row.includes('task'))).toBe(false);
+    checkInvariants(doc);
+    run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(serialize(doc)).toBe(before);
+    run(() => ops.forEach((op) => doc.apply(op)));
+    for (const id of ['task', 'card', 'copy']) expect(doc.inOutline(id)).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('deletes all descendant originals and their copies when a project or PARA is deleted', () => {
+    for (const target of ['Project', 'PARA']) {
+      const { doc, ctx, run } = fixture();
+      run(() => cmd.deleteNode(ctx, target));
+      for (const id of ['Project', 'task', 'child', 'card', 'copy', 'project-card']) expect(doc.inOutline(id)).toBe(false);
+      checkInvariants(doc);
+    }
+  });
+
+  it('deleting copies in Kanban, elsewhere, or inside PARA leaves the first original and its other copies', () => {
+    const { doc, ctx, run } = fixture();
+    run(() => cmd.deleteNode(ctx, 'card'));
+    run(() => cmd.deleteNode(ctx, 'copy'));
+    run(() => cmd.deleteNode(ctx, 'project-card'));
+    expect(doc.inOutline('task')).toBe(true);
+    expect(doc.get('task').children).toEqual(['child']);
+    const inside = mirrored(['PARA', '  original', '  copy', 'other'], { copy: 'original', other: 'original' });
+    inside.run(() => cmd.deleteNode(inside.ctx, 'copy'));
+    expect(inside.doc.inOutline('original')).toBe(true);
+    expect(inside.doc.inOutline('other')).toBe(true);
+    checkInvariants(inside.doc);
+  });
+
+  it('keeps the old handover for originals born outside PARA, even after moving into it', () => {
+    const { doc, run } = mirrored(['outside', '  child', 'PARA', '  place', 'copy'], { copy: 'outside' });
+    run(() => doc.apply({ t: 'move', id: 'outside', from: { parent: doc.root, order: doc.get('outside').order }, to: { parent: 'PARA', order: doc.orderAt('PARA', 0) } }));
+    const loaded = deserialize(serialize(doc));
+    const rows = new VisibleRows(loaded);
+    loaded.transact(() => { cmd.deleteNode({ doc: loaded, rows }, 'outside'); });
+    expect(loaded.inOutline('copy')).toBe(true);
+    expect(loaded.get('copy').mirrorOf).toBeNull();
+    expect(loaded.get('copy').children).toEqual(['child']);
+    expect(loaded.get('copy').paraOrigin).toBeNull();
+    checkInvariants(loaded);
+  });
+
+  it('a copy promoted inside PARA never becomes the remembered first original', () => {
+    const { doc, ctx, run } = mirrored(['outside', 'PARA', '  heir', 'other'], { heir: 'outside', other: 'outside' });
+    run(() => cmd.deleteNode(ctx, 'outside'));
+    expect(doc.get('heir').mirrorOf).toBeNull();
+    expect(doc.get('heir').paraOrigin).toBeNull();
+    run(() => cmd.deleteNode(ctx, 'heir'));
+    expect(doc.inOutline('other')).toBe(true);
+    expect(doc.get('other').mirrorOf).toBeNull();
+    checkInvariants(doc);
+  });
+
+  it('deletes PARA-born descendants before an outside-born parent hands over its surviving subtree', () => {
+    const { doc, ctx, run } = mirrored(['project', '  old-child', 'PARA', 'project-copy', 'task-copy'], { 'project-copy': 'project' });
+    run(() => doc.apply({ t: 'move', id: 'project', from: { parent: doc.root, order: doc.get('project').order }, to: { parent: 'PARA', order: doc.orderAt('PARA', 0) } }));
+    run(() => cmd.appendTrees(ctx, 'project', [{ text: 'new-task', id: 'new-task', children: [] }]));
+    run(() => doc.apply({ t: 'setMirror', id: 'task-copy', from: null, to: 'new-task' }));
+    const before = dump(doc);
+    const ops = doc.transact(() => { cmd.deleteNode(ctx, 'project'); });
+    expect(doc.inOutline('project-copy')).toBe(true);
+    expect(doc.get('project-copy').children).toEqual(['old-child']);
+    expect(doc.inOutline('new-task')).toBe(false);
+    expect(doc.inOutline('task-copy')).toBe(false);
+    checkInvariants(doc);
+    run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(dump(doc)).toEqual(before);
+    expect(doc.get('new-task').paraOrigin).toBe('new-task');
+    expect(doc.get('project-copy').paraOrigin).toBeNull();
+  });
+
+  it('remembers the first PARA node across handover outside, restore, and a later snapshot', () => {
+    const { doc, ctx, run } = mirrored(['PARA', '  first', 'heir', 'other'], { heir: 'first', other: 'first' });
+    run(() => doc.apply({ t: 'move', id: 'first', from: { parent: 'PARA', order: doc.get('first').order }, to: { parent: doc.root, order: doc.orderAt(doc.root, 0) } }));
+    run(() => cmd.deleteNode(ctx, 'first'));
+    expect(doc.get('heir').paraOrigin).toBe('first');
+    run(() => doc.apply({ t: 'move', id: 'first', from: { parent: TRASH, order: doc.get('first').order }, to: { parent: 'PARA', order: doc.orderAt('PARA', 0) } }));
+    const loaded = deserialize(serialize(doc));
+    loaded.transact(() => { cmd.deleteNode({ doc: loaded, rows: new VisibleRows(loaded) }, 'first'); });
+    for (const id of ['first', 'heir', 'other']) expect(loaded.inOutline(id)).toBe(false);
+    checkInvariants(loaded);
+  });
+
+  it('deduplicates a selection containing both a source and its external mirrors', () => {
+    const { doc, ctx, run } = fixture();
+    const before = serialize(doc);
+    const ops = doc.transact(() => { cmd.deleteMany(ctx, ['task', 'card', 'copy', 'project-card/task']); });
+    for (const id of ['task', 'card', 'copy']) expect(doc.inOutline(id)).toBe(false);
+    checkInvariants(doc);
+    run(() => [...ops].reverse().forEach((op) => doc.apply(invert(op))));
+    expect(serialize(doc)).toBe(before);
+  });
+
+  it('also cascades descendant copies after a restored first project has handed its data outside PARA', () => {
+    const { doc, ctx, run } = mirrored(['PARA', '  project', '    task', 'heir', 'task-copy'], { heir: 'project', 'task-copy': 'task' });
+    run(() => doc.apply({ t: 'move', id: 'project', from: { parent: 'PARA', order: doc.get('project').order }, to: { parent: doc.root, order: doc.orderAt(doc.root, 0) } }));
+    run(() => cmd.deleteNode(ctx, 'project'));
+    expect(doc.get('task').parent).toBe('heir');
+    run(() => doc.apply({ t: 'move', id: 'project', from: { parent: TRASH, order: doc.get('project').order }, to: { parent: 'PARA', order: doc.orderAt('PARA', 0) } }));
+    run(() => cmd.deleteNode(ctx, 'project'));
+    for (const id of ['project', 'task', 'heir', 'task-copy']) expect(doc.inOutline(id)).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('persists birthplace on inserts and restores it when mirror creation is undone', () => {
+    const { doc, run } = setup(['outside', 'PARA', '  first']);
+    const op: Op = { t: 'setMirror', id: 'first', from: null, to: 'outside' };
+    run(() => doc.apply(op));
+    expect(doc.get('first').paraOrigin).toBeNull();
+    run(() => doc.apply(invert(op)));
+    expect(doc.get('first').paraOrigin).toBe('first');
+    expect(deserialize(serialize(doc)).get('first').paraOrigin).toBe('first');
+  });
+
+  it('adopts current originals for legacy snapshots, never treats their copies as sources', () => {
+    const { doc } = fixture();
+    const legacy = JSON.parse(serialize(doc));
+    legacy.v = 7;
+    for (const row of legacy.rows) row.length = Math.min(row.length, 13);
+    const loaded = deserialize(JSON.stringify(legacy));
+    expect(loaded.get('task').paraOrigin).toBe('task');
+    expect(loaded.get('card').paraOrigin).toBe('task');
+    loaded.transact(() => { cmd.deleteNode({ doc: loaded, rows: new VisibleRows(loaded) }, 'task'); });
+    expect(loaded.inOutline('card')).toBe(false);
+    expect(loaded.inOutline('copy')).toBe(false);
+    checkInvariants(loaded);
+  });
+
+  it('keeps source identity and cascaded deletions when operations are replayed on another device', () => {
+    const a = setup(['PARA', '  source', 'copy']);
+    const b = deserialize(serialize(a.doc));
+    const mirror = a.doc.transact(() => a.doc.apply({ t: 'setMirror', id: 'copy', from: null, to: 'source' }));
+    for (const op of mirror) applyMerged(b, op);
+    expect(b.get('copy').paraOrigin).toBe('source');
+    const deletion = a.doc.transact(() => { cmd.deleteNode(a.ctx, 'source'); });
+    for (const op of deletion) applyMerged(b, op);
+    expect(b.inOutline('source')).toBe(false);
+    expect(b.inOutline('copy')).toBe(false);
+    for (const op of [...deletion].reverse()) applyMerged(b, invert(op));
+    expect(b.inOutline('source')).toBe(true);
+    expect(b.inOutline('copy')).toBe(true);
+    expect(deserialize(serialize(b)).get('copy').paraOrigin).toBe('source');
+    checkInvariants(b);
+  });
+});
+
 describe('(( token and pair', () => {
   it('finds the mirror token the caret is in, through its closing brackets', () => {
     expect(mirrorBefore('(())', 2)).toEqual({ start: 0, end: 4, query: '' });

@@ -47,7 +47,7 @@ function fromNow(doc: Doc, op: Op): Op | null {
     case 'setCollapsed': return { ...op, from: n.collapsed };
     case 'setTodo': return { ...op, from: n.todo };
     case 'setDone': return { ...op, from: n.done };
-    case 'setMirror': return { ...op, from: n.mirrorOf ?? null };
+    case 'setMirror': return { ...op, from: n.mirrorOf ?? null, ...(op.source ? { source: { from: n.paraOrigin ?? null, to: op.source.to } } : {}) };
     case 'move': return doc.nodes.has(op.to.parent) && n.parent !== null ? { ...op, from: { parent: n.parent, order: n.order } } : null;
   }
 }

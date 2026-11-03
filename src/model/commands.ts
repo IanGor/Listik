@@ -81,12 +81,41 @@ function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
 /**
  * Deleting a bullet moves it into the trash, keyed by the time and the place
  * it leaves (`deletedKey`, see TRASH in doc.ts), for "Вернуть". Copies
- * elsewhere of a bullet in it stay whole (`handOver`).
+ * elsewhere stay whole (`handOver`), except for first sources born in PARA:
+ * deleting those from PARA removes every physical copy, at any depth.
  */
 function remove(doc: Doc, id: NodeId): void {
-  handOver(doc, id);
-  const n = doc.get(id);
-  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: deletedKey(clock.now(), n.parent!, n.order) } });
+  if (!doc.inOutline(id)) return;
+  // Collect physical copies before changing the tree; projections under project mirrors are not nodes.
+  const targets = new Set<NodeId>();
+  const scan: [NodeId, boolean][] = [[id, false]];
+  const inspected = new Map<NodeId, boolean>();
+  while (scan.length) {
+    const [cur, cascade] = scan.pop()!;
+    if (inspected.has(cur) && (inspected.get(cur) || !cascade)) continue;
+    inspected.set(cur, cascade);
+    const n = doc.get(cur);
+    for (const child of n.children) scan.push([child, cascade]);
+    if (n.paraOrigin !== n.id || (!cascade && !doc.inPara(cur))) continue;
+    for (const copy of doc.copies(cur)) if (!targets.has(copy)) {
+      targets.add(copy);
+      scan.push([copy, true]);
+    }
+  }
+  const roots = [...targets].filter((target) => {
+    for (let p = doc.get(target).parent; p !== null; p = doc.get(p).parent) if (targets.has(p)) return false;
+    return true;
+  });
+  const deleting = new Set<NodeId>();
+  doc.walk(id, (n) => deleting.add(n.id));
+  for (const root of roots) doc.walk(root, (n) => deleting.add(n.id));
+  // Remove PARA sources before an outside-born parent can hand its children to a surviving copy.
+  for (const root of [...roots, id]) {
+    if (!doc.inOutline(root)) continue;
+    handOver(doc, root, deleting);
+    const n = doc.get(root);
+    doc.apply({ t: 'move', id: root, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: deletedKey(clock.now(), n.parent!, n.order) } });
+  }
 }
 
 /**
@@ -98,7 +127,7 @@ function remove(doc: Doc, id: NodeId): void {
  * brought back, it is a copy again. Whichever copy goes, the rest stay as
  * they were.
  */
-function handOver(doc: Doc, id: NodeId): void {
+function handOver(doc: Doc, id: NodeId, deleting: ReadonlySet<NodeId>): void {
   const origins: NodeId[] = [];
   doc.walk(id, (n) => {
     if (!n.mirrorOf && doc.hasMirrors(n.id)) origins.push(n.id);
@@ -106,7 +135,7 @@ function handOver(doc: Doc, id: NodeId): void {
   for (const o of origins) {
     // An origin inside another one went out with its children to that one's heir: it stays.
     if (!doc.within(o, id)) continue;
-    const rest = doc.copies(o).filter((c) => !doc.within(c, id));
+    const rest = doc.copies(o).filter((c) => !doc.within(c, id) && !deleting.has(c));
     if (!rest.length) continue;
     const heir = rest.reduce((a, b) => (compareOrder(doc, b, a) < 0 ? b : a));
     const from = doc.get(o);
