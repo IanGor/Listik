@@ -4,6 +4,16 @@ import { TextIndex, decorate, findMatches, normalize, parseQuery, type Clause } 
 import { TagIndex } from '../src/model/tags';
 import { rng, setup } from './helpers';
 
+describe('unordered words', () => {
+  it.each(['Касса Финтех', 'Финтех Касса', 'кАсСа фИнТеХ', '  ФИНТЕХ   касса  '])('finds every word regardless of order and case: %s', (query) => {
+    const { doc } = setup(['Касса х Финтех', 'ФИНТЕХ рядом с КАССА', 'Касса', 'Финтех']);
+    const tags = new TagIndex(doc);
+    const text = new TextIndex(doc);
+    expect([...findMatches(parseQuery(query), tags, text, doc)].sort()).toEqual(['Касса х Финтех', 'ФИНТЕХ рядом с КАССА'].sort());
+    expect([...findMatches(parseQuery('"Касса Финтех"'), tags, text, doc)]).toEqual([]);
+  });
+});
+
 describe('normalize', () => {
   it('ignores case and ё, keeping the length', () => {
     expect(normalize('Ёлка ПЬЕР Елена')).toBe('елка пьер елена');

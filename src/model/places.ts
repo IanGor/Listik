@@ -7,8 +7,8 @@ import type { NodeId } from './types';
 /**
  * Places: bullets to go to (or move bullets into) by their title, the
  * places line's list (view/GoTo.tsx). Found as links are
- * (`findTargets`: titles that start with what is typed first, then a word
- * in them, then the rest; shorter, then edited last, first), but every
+ * (`findTargets`: all query words in any order and case; contiguous matches
+ * first, then shorter titles and the ones edited last), but every
  * bullet on its own: many share a title (each day's "todo"), and the path
  * shown tells them apart.
  */

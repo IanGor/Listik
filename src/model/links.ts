@@ -185,7 +185,7 @@ export interface Target {
 
 interface Candidate {
   id: NodeId;
-  /** 0: the title starts with the query, 1: a word in it does, 2: it merely contains it. */
+  /** 0: title starts with the query, 1: a word does, 2: substring, 3: separate words. */
   rank: number;
   /** The title's length; 0 when nothing is typed, so only recency counts. */
   length: number;
@@ -217,12 +217,14 @@ const shifts = (text: string, i: number) => {
  * So the query is found in the raw text, where formatting markers may stand
  * between its words.
  *
- * `every`: each bullet on its own, a title many share as many times (a
+ * `every`: all query words anywhere in a title, in any order; each bullet
+ * on its own, a title many share as many times (a
  * place to go to, model/places.ts: every day's "todo"), not where a link
  * with it would lead.
  */
 export function findTargets(doc: Doc, index: TextIndex, query: string, self: NodeId, limit: number, every = false): Target[] {
   const q = normalize(query.trim());
+  const words = every ? q.split(/\s+/u) : [q];
   const best: Candidate[] = [];
   const updated = (c: Candidate) => (c.updated ??= doc.get(c.id).updated);
   const better = (a: Candidate, b: Candidate) =>
@@ -248,25 +250,34 @@ export function findTargets(doc: Doc, index: TextIndex, query: string, self: Nod
   const texts: string[] = [];
   if (q) {
     for (const [id, t] of index.entries()) {
-      const at = t.indexOf(q);
+      const at = t.indexOf(words[0]);
       if (at < 0) continue;
       const nl = t.indexOf('\n');
       const end = nl < 0 ? t.length : nl;
-      if (at + q.length > end) continue;
+      if (at + words[0].length > end) continue;
+      if (words.length > 1 && words.some((word) => {
+        const pos = t.indexOf(word);
+        return pos < 0 || pos + word.length > end;
+      })) continue;
       ids.push(id);
       texts.push(nl < 0 ? t : t.slice(0, end));
       if (id === self) continue;
       let pos = at;
+      const rawPhrase = words.length === 1 ? at : t.indexOf(q);
+      let phrase = rawPhrase;
+      let before = t[rawPhrase - 1];
       let length = end;
       if (shifts(t, 0) || (at > 0 && shifts(t, at - 1))) {
         const key = titleOf(t.slice(0, end));
-        pos = key.indexOf(q);
+        pos = key.indexOf(words[0]);
+        phrase = words.length === 1 ? pos : key.indexOf(q);
+        before = key[phrase - 1];
         length = key.length;
-        if (pos < 0) continue;
+        if (pos < 0 || (words.length > 1 && words.some((word) => !key.includes(word)))) continue;
       }
       // Cheap test first: with the best few all starting with the query, nothing else gets in.
       if (pos > 0 && best.length === limit && best[limit - 1].rank === 0) continue;
-      const rank = pos === 0 ? 0 : WORD_START.test(t[at - 1]) ? 1 : 2;
+      const rank = phrase < 0 ? 3 : phrase === 0 ? 0 : WORD_START.test(before) ? 1 : 2;
       offer({ id, rank, length, updated: null, key: '' }, () => t.slice(0, end));
     }
   } else {

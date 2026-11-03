@@ -281,6 +281,42 @@ test.describe('saved searches', () => {
 });
 
 test.describe('go to a place', () => {
+  test('search, Ctrl+K and move find title words in either order and case, with words between', async ({ page }) => {
+    await page.goto('/?db=e2e-unordered-places&empty');
+    await page.locator('.row .text').click();
+    await editing(page).evaluate(el => {
+      const data = new DataTransfer();
+      data.setData('text/plain', 'Касса х Финтех\nКасса\nФинтех\nПеремести меня');
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    const queries = ['Касса Финтех', 'Финтех Касса', 'кАсСа фИнТеХ'];
+    const search = page.locator('.search');
+    for (const query of queries) {
+      await search.fill(query);
+      await expect(page.locator('.row .text')).toHaveText(['Касса х Финтех']);
+    }
+    await search.fill('');
+    await expect(page.locator('.row')).toHaveCount(4);
+    for (const query of queries) {
+      await page.keyboard.press('Control+k');
+      await page.locator('.goto-input').fill(query);
+      await expect(page.getByRole('listbox', { name: 'Места' }).getByRole('option')).toHaveText(['Касса х Финтех']);
+      await page.keyboard.press('Escape');
+    }
+    await edit(page, 'Перемести меня');
+    await page.keyboard.press('Control+Shift+m');
+    for (const query of queries) {
+      await page.locator('.goto-input').fill(query);
+      await expect(page.getByRole('listbox', { name: 'Куда переместить' }).getByRole('option')).toHaveText(['Касса х Финтех']);
+    }
+    await page.keyboard.press('Enter');
+    expect(await outline(page)).toEqual(['Касса х Финтех', '  Перемести меня', 'Касса', 'Финтех']);
+    await page.keyboard.press('Control+k');
+    await page.locator('.goto-input').fill('фИнТеХ кАсСа');
+    await page.keyboard.press('Enter');
+    await expect(title(page)).toHaveText('Касса х Финтех');
+  });
+
   test('> lists the document\'s actions by name: the trash, the help, undo; Enter runs the first', async ({ page }) => {
     await page.keyboard.press('Control+k');
     await expect(page.locator('.goto-input')).toHaveAttribute('placeholder', /> действие/);

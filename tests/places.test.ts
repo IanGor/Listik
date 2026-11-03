@@ -4,6 +4,19 @@ import { TextIndex } from '../src/model/search';
 import { build } from './helpers';
 
 describe('places', () => {
+  it.each(['Касса Финтех', 'Финтех Касса', 'кАсСа фИнТеХ', '  ФИНТЕХ   касса  '])('finds all title words in any order and case: %s', (query) => {
+    const d = build(['Касса х Финтех', 'ФИНТЕХ рядом с КАССА', 'Касса', 'Финтех', 'Only notes']);
+    d.apply({ t: 'setNote', id: 'Only notes', from: '', to: 'Касса Финтех' });
+    expect(findPlaces(d, new TextIndex(d), query, 10).map((p) => p.id).sort()).toEqual(['Касса х Финтех', 'ФИНТЕХ рядом с КАССА'].sort());
+  });
+
+  it('keeps contiguous matches before scattered words, and applies move exclusions', () => {
+    const d = build(['Касса х Финтех', 'длинное название Касса Финтех']);
+    const i = new TextIndex(d);
+    expect(findPlaces(d, i, 'касса финтех', 2).map((p) => p.id)).toEqual(['длинное название Касса Финтех', 'Касса х Финтех']);
+    expect(findPlaces(d, i, 'финтех касса', 1, (id) => id === 'Касса х Финтех').map((p) => p.id)).toEqual(['длинное название Касса Финтех']);
+  });
+
   const doc = build(['Projects', '  **Listik**', '    Listik promo', '  Дача', 'Inbox', '  идея для листика']);
   const index = new TextIndex(doc);
 
