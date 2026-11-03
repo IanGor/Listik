@@ -72,12 +72,11 @@ export function Row(props: RowProps) {
   let el!: HTMLDivElement;
   let bullet!: HTMLSpanElement;
   onMount(() => onCleanup(props.observe(el)));
-  // A finger that picked the row up (drag.ts: by its bullet or its text)
-  // moves it instead of scrolling the list. Must be a non-passive listener
-  // of its own.
+  // After a drag or swipe takes over, the browser must not scroll or move
+  // the caret. This needs its own non-passive touch listener.
   onMount(() => {
     const hold = (e: TouchEvent) => {
-      if (o.dragged().size && e.cancelable) e.preventDefault();
+      if ((o.dragged().size || el.classList.contains('swiping')) && e.cancelable) e.preventDefault();
     };
     el.addEventListener('touchmove', hold, { passive: false });
     onCleanup(() => el.removeEventListener('touchmove', hold));
@@ -100,8 +99,8 @@ export function Row(props: RowProps) {
     e.preventDefault();
     o.openRowMenu(id, e.clientX, e.clientY);
   };
-  // A finger sideways across the row: left deletes, right stars (swipe.ts).
-  onMount(() => onCleanup(swipe(o, el, id, focused)));
+  // A finger sideways across any row: left deletes, right toggles its checkbox (swipe.ts).
+  onMount(() => onCleanup(swipe(o, el, id)));
   o.nodes.acquire(nid);
   onCleanup(() => o.nodes.release(nid));
 

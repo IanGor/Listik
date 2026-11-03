@@ -2856,16 +2856,46 @@ test.describe('touch screen', () => {
     await expect(row.locator('.check')).toHaveCount(0);
   });
 
-  test('no swipe when the finger goes up or down, starts at the screen edge, or is in the edited row', async ({ page }) => {
+  test('no swipe when the finger goes up or down or starts at the screen edge', async ({ page }) => {
     await swipeRow(page, 'Часть вторая', 0.8, 0.6, { dy: 80 });
     // The system's back gesture lives at the right edge.
     await swipeRow(page, 'Часть вторая', 412 - 10, 0.2);
     expect(await outline(page)).toEqual(DEMO);
-    await page.locator('.row .text', { hasText: 'Том второй' }).tap();
-    await expect(editing(page)).toBeFocused();
-    await swipeRow(page, 'Том второй', 0.8, 0.2);
-    expect(await outline(page)).toEqual(DEMO);
   });
+
+  for (const width of [412, 834]) {
+    test.describe(`${width}px touch screen`, () => {
+      test.use({ viewport: { width, height: 1194 }, screen: { width, height: 1194 } });
+      test(`swiping an edited row keeps its caret, and other rows can be swiped too (${width}px)`, async ({ page }) => {
+        await expect(page.locator('html')).toHaveClass(width === 834 ? /tablet/ : /^(?!.*tablet)/);
+        const row = page.locator('.row', { hasText: 'Том второй' });
+        await row.locator('.text').tap();
+        await page.keyboard.press('Home');
+        await page.keyboard.press('ArrowRight');
+        const caret = await editing(page).evaluate(() => getSelection()!.anchorOffset);
+        await swipeRow(page, 'Том второй', 0.3, 0.85);
+        await expect(row.locator('.check')).toHaveCount(1);
+        await expect(row).not.toHaveClass(/settling/);
+        await expect(editing(page)).toBeFocused();
+        expect(await editing(page).evaluate(() => getSelection()!.anchorOffset)).toBe(caret);
+        await swipeRow(page, 'Том второй', 0.8, 0.65);
+        await expect(row).not.toHaveClass(/settling/);
+        await expect(editing(page)).toBeFocused();
+        expect(await editing(page).evaluate(() => getSelection()!.anchorOffset)).toBe(caret);
+        await swipeRow(page, 'Часть вторая', 0.8, 0.3);
+        await expect(page.locator('.row', { hasText: 'Часть вторая' })).toHaveCount(0);
+        await expect(editing(page)).toBeFocused();
+        await expect(editing(page)).toHaveText('Том второй');
+        expect(await editing(page).evaluate(() => getSelection()!.anchorOffset)).toBe(caret);
+        await page.keyboard.type('!');
+        await expect(editing(page)).toHaveText('Т!ом второй');
+        await swipeRow(page, 'Т!ом второй', 0.8, 0.3);
+        await expect(page.locator('.row', { hasText: 'Т!ом второй' })).toHaveCount(0);
+        await expect(editing(page)).toHaveCount(0);
+        await expect(page.locator('.toast')).toContainText('Удалено');
+      });
+    });
+  }
 
   test('a tapped button does not stay lit: no hover on a touch screen', async ({ page }) => {
     // A stored document opens on today, its path above the list.

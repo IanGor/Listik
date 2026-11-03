@@ -10,8 +10,7 @@ import type { Outliner } from './outliner';
  * width (or flicked past FLICK), it happens, back under it nothing does.
  *
  * Up and down is the list's scrolling: the direction is decided once, after
- * SLOP px. Not from the bullet (a hold there drags, drag.ts), not in the row
- * being edited (the finger moves the caret there), not within EDGE px of the
+ * SLOP px. Not from the bullet (a hold there drags, drag.ts), not within EDGE px of the
  * screen's sides (the system's back gesture).
  */
 
@@ -38,9 +37,9 @@ const UNCHECK = ['M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18z', 'M8 12h8'];
 const TRASH = ['M4 7h16', 'M10 11v6', 'M14 11v6', 'M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12', 'M9 7V4h6v3'];
 
 /** Lets the row be swiped (a tablet too, by a finger); returns the function that stops it. */
-export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () => boolean): () => void {
+export function swipe(o: Outliner, row: HTMLElement, key: RowKey): () => void {
   const down = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch' || !e.isPrimary || o.readOnly || editing() || o.dragged().size) return;
+    if (e.pointerType !== 'touch' || !e.isPrimary || o.readOnly || o.dragged().size) return;
     if (row.classList.contains('settling') || (e.target as Element).closest('.bullet, .check')) return;
     if (e.clientX < EDGE || e.clientX > innerWidth - EDGE) return;
     track(e);
@@ -49,6 +48,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
   return () => row.removeEventListener('pointerdown', down);
 
   function track(e: PointerEvent): void {
+    const focus = o.caretNow();
     const pointer = e.pointerId;
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -69,7 +69,7 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
         // Held long enough to be picked up (drag.ts): the finger moves the row, not its content.
         if (o.dragged().size) return stop();
         if (Math.hypot(mx, my) < SLOP) return;
-        if (ev.timeStamp - t0 > HOLD || Math.abs(mx) < SIDEWAYS * Math.abs(my) || editing()) return stop();
+        if (ev.timeStamp - t0 > HOLD || Math.abs(mx) < SIDEWAYS * Math.abs(my)) return stop();
         swiping = true;
         width = row.clientWidth;
         row.setPointerCapture(pointer);
@@ -109,6 +109,8 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
       stop();
       if (!swiping) return;
       swallowClicks();
+      // The focus request can be older than the actual caret; keep where the gesture began.
+      if (focus) o.setFocus(focus);
       const flick = Math.abs(dx) >= FLICK * width && Math.abs(speed) >= FLICK_SPEED && Math.sign(speed) === Math.sign(dx);
       if (dx < 0 && (armed || flick)) {
         return settle(-width, () => {
@@ -123,7 +125,10 @@ export function swipe(o: Outliner, row: HTMLElement, key: RowKey, editing: () =>
     const cancel = (ev: PointerEvent) => {
       if (ev.pointerId !== pointer) return;
       stop();
-      if (swiping) settle(0, clear);
+      if (swiping) {
+        if (focus) o.setFocus(focus);
+        settle(0, clear);
+      }
     };
 
     const stop = () => {

@@ -1923,12 +1923,10 @@ mark,
 
 /* --- Swipe (swipe.ts) -------------------------------------------------------- */
 
-/* Up and down scrolls the list; sideways is the row's own (left deletes, right
-   checks off). */
-@media (pointer: coarse) {
-  :where(:root:not(.tablet)) .row {
-    touch-action: pan-y pinch-zoom;
-  }
+/* On every touch screen, up and down scrolls; sideways belongs to the row
+   (left deletes, right toggles its checkbox), including while editing. */
+.row {
+  touch-action: pan-y pinch-zoom;
 }
 
 /* The content follows the finger; the row clips it (the list must not scroll

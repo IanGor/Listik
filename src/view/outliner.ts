@@ -646,7 +646,7 @@ export class Outliner {
    * is where editing began, and typing has moved on since. A line over the
    * outline (quick capture, places) puts it back there as it closes.
    */
-  private caretNow(): FocusRequest | null {
+  caretNow(): FocusRequest | null {
     const el = document.activeElement as HTMLElement | null;
     const f = this.focus();
     const offset = f && el?.isContentEditable && el.closest('.row') ? selectionIn(el)?.[0] : undefined;
