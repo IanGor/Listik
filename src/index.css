@@ -45,6 +45,8 @@
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
   /* The marker of a sketch (Sketch.tsx): amber, like a found word, drawn under the lines. */
   --marker: light-dark(rgb(240 178 80 / 0.5), rgb(232 165 90 / 0.32));
+  /* Cornell cue column: visible against the sheet, with contrasting pen ink. */
+  --sketch-margin: light-dark(#dcebe7, #344e49);
   /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
   --danger: light-dark(#c0392b, #ff6b5e);
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
@@ -3129,7 +3131,7 @@ body.is-dragging * {
 .sketch {
   position: relative;
   flex: none;
-  width: 62%;
+  width: 75%;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--hairline);
@@ -3160,6 +3162,7 @@ body.is-dragging * {
 }
 
 .sketch-sheet {
+  --sketch-cell: 24px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -3168,8 +3171,10 @@ body.is-dragging * {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
-  /* Dots to draw by, scrolling with the sheet. */
-  background: radial-gradient(var(--guide) 1.2px, transparent 1.4px) 12px 12px / 24px 24px local;
+  /* Dots over a five-cell Cornell cue column, scrolling with the sheet. */
+  background:
+    radial-gradient(var(--guide) 1.2px, transparent 1.4px) 12px 12px / var(--sketch-cell) var(--sketch-cell) local,
+    linear-gradient(to right, var(--sketch-margin) calc(5 * var(--sketch-cell)), transparent calc(5 * var(--sketch-cell))) 0 0 / 100% 100% local;
   scrollbar-color: var(--halo) transparent;
 }
 
