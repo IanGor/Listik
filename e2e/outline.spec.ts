@@ -1044,37 +1044,33 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('"Inbox" in the header goes into the Inbox in one click, lit while there, counting what waits; "Сегодня" lit in today', async ({ page }) => {
+  test('"Главная" in the header returns home and clears search; "Сегодня" opens today', async ({ page }) => {
     const todayButton = page.locator('.today-button');
-    const inbox = page.locator('.inbox-button');
+    const home = page.locator('.home-button');
     await expect(todayButton.locator('.place-label')).toHaveText('Сегодня');
     await expect(todayButton).toHaveAccessibleName('Сегодня');
     await expect(todayButton.locator('text')).toHaveText(String(new Date().getDate()));
-    // No structure yet: the Inbox is made last at the top level, and there it goes.
-    await expect(inbox.locator('.place-count')).toHaveCount(0);
-    await inbox.click();
-    await expect(title(page)).toHaveText('Inbox');
-    await expect(inbox).toHaveAttribute('aria-current', 'page');
-    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
-    expect((await outline(page)).at(-1)).toBe('Inbox');
-    await expect(inbox).not.toHaveAttribute('aria-current', 'page');
-    await page.keyboard.press('Control+Shift+Space');
-    await page.keyboard.type('мысль');
-    await page.keyboard.press('Enter');
-    await expect(inbox.locator('.place-count')).toHaveText('1');
-    await expect(inbox).toHaveAttribute('title', 'Inbox: 1 в ожидании');
-    await inbox.click();
-    await expect(title(page)).toHaveText('Inbox');
-    await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['мысль']);
-    // The search goes, as with "Сегодня".
+    await expect(home.locator('.place-label')).toHaveText('Главная');
+    await expect(home).toHaveAccessibleName('Главная');
+    await expect(home).toHaveAttribute('aria-current', 'page');
+    await page.locator('.row .bullet').first().click();
+    await expect(home).not.toHaveAttribute('aria-current', 'page');
     await page.locator('.search').fill('Том');
-    await inbox.click();
+    await home.click();
+    await expect(page.locator('.search')).toHaveValue('');
+    await expect(page.locator('.row[data-depth="0"] .text')).toHaveText(['Том первый', 'Том второй']);
+    await expect(home).toHaveAttribute('aria-current', 'page');
+    await expect(caret(page)).toHaveCount(0);
+    await page.locator('.search').fill('Том');
+    await home.click();
     await expect(page.locator('.search')).toHaveValue('');
     await create(page);
+    await home.click();
+    await expect(home).toHaveAttribute('aria-current', 'page');
+    await todayButton.click();
     await expect(title(page)).toHaveText(today);
     await expect(todayButton).toHaveAttribute('aria-current', 'page');
-    await expect(inbox).not.toHaveAttribute('aria-current', 'page');
+    await expect(home).not.toHaveAttribute('aria-current', 'page');
   });
 
   test('"Сегодня" opens today, folded but for its todo list; nothing comes in twice', async ({ page }) => {
@@ -1431,7 +1427,7 @@ test.describe('quick capture', () => {
     await page.keyboard.type('дописать потом');
     await page.keyboard.press('Enter');
     await page.locator('.toast').getByRole('button', { name: 'Inbox' }).click();
-    await expect(page.locator('.zoom-title')).toHaveText('Inbox');
+    await expect(page.locator('.crumb.current')).toHaveText('Главная');
     await expect(page.locator('.toast')).toHaveCount(0);
     await expect(editing(page)).toHaveText('дописать потом');
     await page.keyboard.type(': подробности');
@@ -2893,14 +2889,16 @@ test.describe('touch screen', () => {
   test('the places are symbols on a phone, named for a screen reader; a tap goes there', async ({ page }) => {
     await expect(page.locator('.today-button .place-label')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Сегодня' })).toBeVisible();
-    await page.getByRole('button', { name: 'Inbox' }).tap();
-    await expect(page.locator('.zoom-title')).toHaveText('Inbox');
-    await expect(page.locator('.inbox-button')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.home-button')).toHaveAccessibleName('Главная');
+    await page.locator('.row .bullet').first().tap();
+    await page.locator('.home-button').tap();
+    await expect(page.locator('.crumb.current')).toHaveText('Главная');
+    await expect(page.locator('.home-button')).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('.editbar')).toHaveCount(0);
   });
 
   test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
-    for (const place of ['.today-button', '.inbox-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
     // The bullet reaches into the gutter on its left; its dot stays where the row's guide line meets it.
     const bullet = page.locator('.row .bullet').first();

@@ -217,7 +217,7 @@ button {
   border-bottom: 1px solid var(--hairline);
 }
 
-/* The places (TopBar.tsx): today's day and the Inbox, named, side by side at
+/* The places (TopBar.tsx): today's day and home, named, side by side at
    the leading edge; the one the view is in stays lit (aria-current), the way
    a sidebar marks where you are. */
 .places {
@@ -266,18 +266,6 @@ button {
 /* Today's calendar is the mark's colour: the app's own place. */
 .today-button .place-icon {
   color: var(--primary);
-}
-
-.place-count {
-  min-width: 20px;
-  padding: 1px 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  background: var(--surface-2);
-  border-radius: 10px;
 }
 
 .searchbar {
@@ -1288,7 +1276,7 @@ mark,
     padding: 0 12px 0 calc(12px + var(--controls-left, 0px));
   }
 
-  /* A phone: the places are their symbols, 44px each, the count a badge on the tray. */
+  /* A phone: the places are their symbols, 44px each. */
   .places {
     gap: 0;
     margin-left: -8px;
@@ -1304,17 +1292,6 @@ mark,
 
   .place-label {
     display: none;
-  }
-
-  .place-count {
-    position: absolute;
-    top: 2px;
-    right: 0;
-    min-width: 18px;
-    padding: 0 4px;
-    font-size: 11px;
-    line-height: 16px;
-    border: 1.5px solid var(--canvas);
   }
 
   .searchbar {
