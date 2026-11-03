@@ -4296,6 +4296,54 @@ test.describe('#secret', () => {
 test.describe('tablet (an iPad: a finger on a wide screen)', () => {
   test.use({ viewport: { width: 834, height: 1194 }, isMobile: true, hasTouch: true });
 
+  async function visualViewport(page: Page, height: number, scale = 1, offsetTop = 0) {
+    await page.evaluate(({ height, scale, offsetTop }) => {
+      const viewport = window.visualViewport!;
+      Object.defineProperties(viewport, {
+        height: { configurable: true, value: height },
+        scale: { configurable: true, value: scale },
+        offsetTop: { configurable: true, value: offsetTop },
+      });
+      viewport.dispatchEvent(new Event('resize'));
+    }, { height, scale, offsetTop });
+  }
+
+  test('iPad software keyboard shows the quick keys above it; hardware keyboard and hiding software keyboard leave no bar', async ({ page }) => {
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
+    await expect(bar).toHaveCount(0);
+    const layout = await page.evaluate(() => innerHeight);
+    await visualViewport(page, 780, 1, 20);
+    expect(await page.evaluate(() => innerHeight)).toBe(layout);
+    await expect(bar).toBeVisible();
+    const box = (await bar.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(801);
+    await bar.getByRole('button', { name: 'Задача', exact: true }).tap();
+    await expect(editing(page)).toBeFocused();
+    await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
+    // Connecting hardware / dismissing the software keyboard restores the visual viewport.
+    await visualViewport(page, layout);
+    await expect(bar).toHaveCount(0);
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type(' с клавиатуры');
+    await expect(editing(page)).toContainText('с клавиатуры');
+  });
+
+  test('iPad pinch zoom is not a keyboard; landscape software keyboard is detected', async ({ page }) => {
+    await page.locator('.row .text').first().tap();
+    const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
+    await visualViewport(page, 597, 2);
+    await expect(bar).toHaveCount(0);
+    await visualViewport(page, 1194);
+    await page.setViewportSize({ width: 1194, height: 834 });
+    await visualViewport(page, 834);
+    await expect(bar).toHaveCount(0);
+    await visualViewport(page, 500);
+    await expect(bar).toBeVisible();
+    await visualViewport(page, 834);
+    await expect(bar).toHaveCount(0);
+  });
+
   for (const pointer of ['touch', 'pen'] as const) {
     test(`the fold arrow receives ${pointer} presses; the dot still zooms`, async ({ page }) => {
       const row = page.locator('.row', { hasText: 'Том первый' });
