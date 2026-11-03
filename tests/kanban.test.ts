@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { backlogTargets, findBacklog, findKanban, migrateProjectCards, openProjectTasks, projectOf, toBacklog } from '../src/model/kanban';
+import { backlogTargets, dueToday, findBacklog, findKanban, findToday, migrateProjectCards, moveTodayMirrors, openProjectTasks, projectOf, toBacklog } from '../src/model/kanban';
+import { dateText } from '../src/model/dates';
 import type { Doc } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
 import { applyMerged } from '../src/model/merge';
@@ -11,6 +12,92 @@ function task(doc: Doc, id: string) {
   const ops = doc.transact(() => doc.apply({ t: 'setTodo', id, from: false, to: true }));
   return toBacklog(doc, backlogTargets(doc, ops));
 }
+
+describe('dated Kanban tasks', () => {
+  const now = new Date(2026, 10, 3, 12);
+  const today = dateText('today', now)!;
+  const tomorrow = dateText('tomorrow', now)!;
+  const fixture = () => build(['PARA', '  Alpha #project', '    task', '    later', '    finished', 'Elsewhere', '  outside', 'Kanban', '  Backlog', '  Doing', '  Done', '  Today']);
+  const date = (doc: Doc, id: string, value: string, note = false) => {
+    doc.apply({ t: 'setTodo', id, from: false, to: true });
+    doc.apply(note ? { t: 'setNote', id, from: '', to: value } : { t: 'setText', id, from: doc.get(id).text, to: `${id} ${value}` });
+  };
+  const mirror = (doc: Doc, id: string, parent: string, origin: string) => doc.apply({
+    t: 'insert', parent, node: { id, order: doc.orderAt(parent, doc.get(parent).children.length), text: '', note: '', todo: false, done: false, collapsed: true, created: 0, updated: 0, children: [], mirrorOf: origin },
+  });
+
+  it('sends today directly to Today, tomorrow to Backlog; text and notes use the full date', () => {
+    const doc = fixture();
+    date(doc, 'task', today, true);
+    date(doc, 'later', tomorrow);
+    expect(toBacklog(doc, ['task', 'later'], now).added).toEqual(['task', 'later']);
+    expect(doc.get('Today').children.map((id) => doc.origin(id))).toEqual(['task']);
+    expect(doc.get('Backlog').children.map((id) => doc.origin(id))).toEqual(['later']);
+    expect(dueToday(doc, 'later', now)).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('requires all the tags produced by the date-word replacement', () => {
+    for (const missing of today.split(' ')) {
+      const doc = fixture();
+      date(doc, 'task', today.split(' ').filter((t) => t !== missing).join(' '));
+      expect(dueToday(doc, 'task', now)).toBe(false);
+    }
+  });
+
+  it('creates a missing Today once, without making an unused Backlog or duplicate mirrors', () => {
+    const doc = build(['PARA', '  Alpha #project', '    task']);
+    date(doc, 'task', today);
+    toBacklog(doc, ['task'], now);
+    const destination = findToday(doc)!;
+    expect(doc.get(destination).children).toHaveLength(1);
+    expect(findBacklog(doc)).toBeNull();
+    expect(toBacklog(doc, ['task'], now)).toEqual({ added: [], known: ['task'] });
+  });
+
+  it('moves the same mirror from any other column, including nested cards and non-PARA tasks; skips completed tasks and Today', () => {
+    const doc = fixture();
+    for (const id of ['task', 'outside', 'finished']) date(doc, id, today);
+    date(doc, 'later', tomorrow);
+    doc.apply({ t: 'setDone', id: 'finished', from: false, to: true, at: 1 });
+    mirror(doc, 'a', 'Backlog', 'task');
+    mirror(doc, 'b', 'Done', 'outside');
+    mirror(doc, 'c', 'Doing', 'finished');
+    mirror(doc, 'd', 'Doing', 'later');
+    mirror(doc, 'already', 'Today', 'task');
+    expect(moveTodayMirrors(doc, now).sort()).toEqual(['a', 'b']);
+    expect(doc.get('a').parent).toBe('Today');
+    expect(doc.get('b').parent).toBe('Today');
+    expect(doc.get('c').parent).toBe('Doing');
+    expect(doc.get('d').parent).toBe('Doing');
+    expect(moveTodayMirrors(doc, now)).toEqual([]);
+    expect(doc.get('Today').children).toEqual(['already', 'a', 'b']);
+    checkInvariants(doc);
+  });
+
+  it('checks only changed originals on edits, and catches tomorrow on the next day', () => {
+    const doc = fixture();
+    date(doc, 'task', today);
+    date(doc, 'later', tomorrow);
+    mirror(doc, 'a', 'Doing', 'task');
+    mirror(doc, 'b', 'Backlog', 'later');
+    expect(moveTodayMirrors(doc, now, ['later'])).toEqual([]);
+    expect(moveTodayMirrors(doc, now, ['task'])).toEqual(['a']);
+    expect(moveTodayMirrors(doc, new Date(2026, 10, 4, 0, 1))).toEqual(['b']);
+    checkInvariants(doc);
+  });
+
+  it('recognizes changed dates and reopened tasks without recreating cards for ordinary typing', () => {
+    const doc = fixture();
+    date(doc, 'task', dateText('today')!);
+    const from = doc.get('task').text;
+    const to = `${from} more words`;
+    doc.apply({ t: 'setText', id: 'task', from, to });
+    expect(backlogTargets(doc, [{ t: 'setText', id: 'task', from, to }])).toEqual([]);
+    expect(backlogTargets(doc, [{ t: 'setText', id: 'task', from: 'task', to }])).toEqual(['task']);
+    expect(backlogTargets(doc, [{ t: 'setDone', id: 'task', from: true, to: false, at: 1 }])).toEqual(['task']);
+  });
+});
 
 
 describe('the Backlog of the Kanban', () => {

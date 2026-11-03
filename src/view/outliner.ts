@@ -11,7 +11,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { projectTags } from '../model/projects';
-import { backlogTargets, fillDayToday, findBacklog, findKanban, migrateProjectCards, openProjectTasks, todayMirrorOf, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, findBacklog, findKanban, findToday, migrateProjectCards, moveTodayMirrors, openProjectTasks, todayMirrorOf, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -310,7 +310,7 @@ export class Outliner {
     doc.subscribe(this.nodes);
     doc.subscribe({
       op: (o) => void this.collected?.push(o),
-      commit: () => {
+      commit: (ops) => {
         if (this.tasks.version !== this.tasksVersion()) this.setTasksVersion(this.tasks.version);
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
         const z = this.zoom();
@@ -319,6 +319,14 @@ export class Outliner {
         // A change from another device may have hidden the edited row.
         const cur = this.focus();
         if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
+        // Remote date edits do not pass through run/type. Wait until this commit is finished.
+        if (!this.readOnly && !this.collected && (!this.syncing() || this.synced)) {
+          const dated = ops.flatMap((op) => (op.t === 'setText' || op.t === 'setNote') && (op.from.includes('@') || op.to.includes('@')) ? [op.id] : []);
+          if (dated.length) queueMicrotask(() => {
+            this.scaffold(() => { this.backlogged = moveTodayMirrors(this.doc, new Date(), dated).map((id) => this.doc.origin(id)); });
+            this.tellBacklog();
+          });
+        }
       },
     });
     // Ready before the first search in practice, without blocking input meanwhile.
@@ -606,21 +614,20 @@ export class Outliner {
   /**
    * At start-up (and a reload): every open project task in PARA is
    * on the board (model/kanban.ts `openProjectTasks`, `toBacklog`); what is not
-   * comes to the Backlog. One walk down PARA, ~60 ms at 200k bullets, run
+   * comes to Backlog or Today by date; existing dated mirrors move to Today.
+   * Also runs on a day change. One walk down PARA, ~60 ms at 200k bullets, run
    * when the browser is idle and after the server has been heard from (as
    * `tagYears`), after `tagProjects`. No undo step; said once.
    */
   sweepBacklog(): void {
     if (this.readOnly) return;
     const run = () => {
-      let added: NodeId[] = [];
-      this.scaffold(() => { migrateProjectCards(this.doc); added = toBacklog(this.doc, openProjectTasks(this.doc)).added; });
-      if (!added.length) return;
-      const backlog = findBacklog(this.doc);
-      this.notify(
-        `В Backlog: ${added.length} ${plural(added.length, 'задача', 'задачи', 'задач')}`,
-        backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
-      );
+      this.scaffold(() => {
+        migrateProjectCards(this.doc);
+        this.backlogged = toBacklog(this.doc, openProjectTasks(this.doc)).added;
+        this.backlogged.push(...moveTodayMirrors(this.doc).map((id) => this.doc.origin(id)));
+      });
+      this.tellBacklog(true);
     };
     const idle = () => (typeof requestIdleCallback === 'function' ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 1000));
     if (this.syncing() && !this.synced) this.afterSync.push(idle);
@@ -1011,6 +1018,7 @@ export class Outliner {
     const now = new Date().toDateString();
     if (this.date() !== now) {
       this.setDate(now);
+      this.sweepBacklog();
     }
     const t = this.today;
     if (t && t.date !== new Date().toDateString() && this.zoom() === t.day) this.goToday(true);
@@ -1026,6 +1034,11 @@ export class Outliner {
     let timer: ReturnType<typeof setTimeout>;
     const arm = (ms: number) => {
       timer = setTimeout(() => {
+        // Route dated tasks even if an editor keeps yesterday's calendar page open.
+        if (this.date() !== new Date().toDateString()) {
+          this.setDate(new Date().toDateString());
+          this.sweepBacklog();
+        }
         if (this.focus()) return arm(MIDNIGHT_RETRY);
         this.resumed();
         arm(untilMidnight());
@@ -1609,14 +1622,16 @@ export class Outliner {
 
   /**
    * The tasks the command made or brought into PARA come to the Kanban's
-   * Backlog (model/kanban.ts), inside the same undo step. Not before the
+   * Backlog or Today by date (model/kanban.ts), inside the same undo step. Not before the
    * server has been heard from: two devices would each make a Kanban.
    */
   private fillBacklog(seen: Op[]): void {
     if (this.syncing() && !this.synced) return;
     const targets = backlogTargets(this.doc, seen);
     const { added, known } = toBacklog(this.doc, targets);
-    this.backlogged = added;
+    const changed = seen.flatMap((op) => op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone' ? [op.id] : []);
+    const moved = moveTodayMirrors(this.doc, new Date(), changed);
+    this.backlogged = [...new Set([...added, ...moved.map((id) => this.doc.origin(id))])];
     // Said only for a task that appeared (a checkbox set, a task inserted), not
     // for one moved about inside its project: Tab or Alt+Shift+↑ would say it each time.
     const appeared = known.length ? new Set(backlogTargets(this.doc, seen.filter((op) => op.t !== 'move')).map((t) => this.doc.origin(t))) : null;
@@ -1626,7 +1641,7 @@ export class Outliner {
   /** The last command's new tasks already held by the Kanban: told once the command is done. */
   private onBoard: NodeId[] = [];
 
-  /** What the last command's `fillBacklog` mirrored into the Backlog: told once the command is done. */
+  /** Tasks added to the board or moved to Today: told once the command is done. */
   private backlogged: NodeId[] = [];
 
   /**
@@ -1634,7 +1649,7 @@ export class Outliner {
    * way there. A change the user did not ask for is not made silently (UX
    * audit, 29 October 2026); Ctrl+Z takes it back with the task, one step.
    */
-  private tellBacklog(): void {
+  private tellBacklog(summary = false): void {
     const added = this.backlogged;
     const known = this.onBoard;
     this.backlogged = [];
@@ -1652,10 +1667,14 @@ export class Outliner {
       );
       return;
     }
-    const backlog = findBacklog(this.doc);
+    const today = findToday(this.doc);
+    const inToday = added.filter((id) => today !== null && this.doc.copies(id).some((c) => c !== id && this.doc.within(c, today)));
+    const inBacklog = added.filter((id) => !inToday.includes(id));
+    const groups = [{ name: 'Today', ids: inToday }, { name: 'Backlog', ids: inBacklog }].filter((g) => g.ids.length);
+    const destination = groups.length > 1 ? findKanban(this.doc) : inToday.length ? today : findBacklog(this.doc);
     this.notify(
-      added.length > 1 ? `В Backlog: ${added.length} ${plural(added.length, 'задача', 'задачи', 'задач')}` : `«${short(added[0])}» — в Backlog`,
-      backlog ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(backlog); } } : null,
+      groups.map(({ name, ids }) => summary || ids.length > 1 ? `В ${name}: ${ids.length} ${plural(ids.length, 'задача', 'задачи', 'задач')}` : `«${short(ids[0])}» — в ${name}`).join('; '),
+      destination ? { label: 'Показать', run: () => { this.hideToast(); this.zoomTo(destination); } } : null,
     );
   }
 
@@ -1822,18 +1841,29 @@ export class Outliner {
       if (!this.erased.has(n.id)) this.erased.set(n.id, n.text);
     } else if (text.length > n.text.length) this.erased.delete(n.id);
     batch(() => {
-      const ops = this.doc.transact(() => setText(this.ctx, id, text));
+      const from = n.text;
+      const ops = this.doc.transact(() => {
+        setText(this.ctx, id, text);
+        this.fillBacklog([{ t: 'setText', id: n.id, from, to: text }]);
+      });
       this.history.record({ ops, before: null, after: null }, { typing: true });
     });
+    this.tellBacklog();
   }
 
   /** Typing in a bullet's note: grouped into undo steps like `type`. */
   typeNote(id: RowKey, note: string): void {
     if (this.readOnly) return;
     batch(() => {
-      const ops = this.doc.transact(() => setNote(this.ctx, id, note));
+      const n = this.doc.content(nodeOf(id));
+      const from = n.note;
+      const ops = this.doc.transact(() => {
+        setNote(this.ctx, id, note);
+        this.fillBacklog([{ t: 'setNote', id: n.id, from, to: note }]);
+      });
       this.history.record({ ops, before: null, after: null }, { typing: true });
     });
+    this.tellBacklog();
   }
 
   /**

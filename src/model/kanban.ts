@@ -1,13 +1,15 @@
 import { TODO_NOTE, firstWord, fillDay } from './calendar';
 import type { Ctx } from './commands';
 import { clock } from './clock';
+import { dateText } from './dates';
 import { newId, type Doc } from './doc';
 import { compareOrder, titleOf } from './links';
 import { content, isSecret, parseTags, searchable } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
- * Open tasks under `#project` in PARA are mirrored into the Kanban Backlog.
+ * Open tasks under `#project` in PARA are mirrored into Kanban:
+ * today's complete date goes to Today, other tasks to Backlog.
  * Each checkbox has its own mirror, sharing its text and completion state.
  * Both are found by place and name as the Inbox is: a top-level bullet with
  * the word "kanban" in its title, and in it one with "backlog"; emoji and
@@ -20,6 +22,14 @@ const KANBAN = 'kanban';
 const BACKLOG = 'backlog';
 const TODAY = 'today';
 const PROJECT = 'project';
+
+/** Only the complete date written by @today and its aliases, including weekday. */
+export function dueToday(doc: Doc, id: NodeId, now = new Date()): boolean {
+  const n = doc.content(id);
+  if (!n.todo || n.done) return false;
+  const tags = new Set(parseTags(content(n)));
+  return parseTags(dateText('today', now)!).every((tag) => tags.has(tag));
+}
 
 /** A bullet tagged `#project`, in its text or note. */
 const isProject = (doc: Doc, id: NodeId): boolean => {
@@ -71,6 +81,9 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   for (const op of ops) {
     if (op.t === 'setTodo') {
       if (op.to) tasks.add(op.id);
+    } else if (op.t === 'setText' || op.t === 'setNote' || (op.t === 'setDone' && !op.to)) {
+      if ((op.t === 'setText' || op.t === 'setNote') && parseTags(op.from).join(' ') === parseTags(op.to).join(' ')) continue;
+      if (doc.has(op.id) && dueToday(doc, op.id)) tasks.add(doc.origin(op.id));
     } else if (op.t === 'insert' || op.t === 'move') {
       const id = op.t === 'insert' ? op.node.id : op.id;
       if (doc.has(id) && doc.inOutline(id)) doc.walk(id, (n) => n.todo && !n.done && !n.mirrorOf && tasks.add(n.id));
@@ -128,13 +141,13 @@ export function migrateProjectCards(doc: Doc): void {
 }
 
 /**
- * Mirrors tasks into the Backlog, last and collapsed, making the board and
- * Backlog if missing.
+ * Mirrors tasks last and collapsed into Today for today's date, otherwise
+ * Backlog, making the board and destination if missing.
  * A bullet with a mirror anywhere in the Kanban (a column, deeper) is left:
  * it is on the board already, wherever it was moved to, and is reported as
  * `known`, so the caller can say so. `added` are the ones that came.
  */
-export function toBacklog(doc: Doc, targets: readonly NodeId[]): { added: NodeId[]; known: NodeId[] } {
+export function toBacklog(doc: Doc, targets: readonly NodeId[], now = new Date()): { added: NodeId[]; known: NodeId[] } {
   const kanban = findKanban(doc);
   const added: NodeId[] = [];
   const known: NodeId[] = [];
@@ -142,13 +155,49 @@ export function toBacklog(doc: Doc, targets: readonly NodeId[]): { added: NodeId
     (kanban !== null && doc.copies(origin).some((c) => c !== origin && doc.within(c, kanban)) ? known : added).push(origin);
   }
   if (!added.length) return { added, known };
-  let backlog = findBacklog(doc);
-  if (backlog === null) {
-    const board = kanban ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
-    backlog = addChild(doc, board, 'Backlog', undefined, '', undefined, false, `${board}~backlog`);
+  for (const origin of added) {
+    let destination: NodeId;
+    if (dueToday(doc, origin, now)) destination = ensureToday(doc);
+    else {
+      let backlog = findBacklog(doc);
+      if (backlog === null) {
+        const board = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
+        backlog = addChild(doc, board, 'Backlog', undefined, '', undefined, false, `${board}~backlog`);
+      }
+      destination = backlog;
+    }
+    addChild(doc, destination, '', origin, '', undefined, false, `${destination}~${origin}`);
   }
-  for (const origin of added) addChild(doc, backlog, '', origin, '', undefined, false, `${backlog}~${origin}`);
   return { added, known };
+}
+
+/** Move existing open, dated mirrors from every other column; never traverse Today. */
+export function moveTodayMirrors(doc: Doc, now = new Date(), origins?: readonly NodeId[]): NodeId[] {
+  const board = findKanban(doc);
+  if (board === null) return [];
+  let today = findToday(doc);
+  const targets: NodeId[] = [];
+  const consider = (id: NodeId) => {
+    if (doc.get(id).mirrorOf && dueToday(doc, id, now)) targets.push(id);
+  };
+  if (origins) {
+    for (const origin of new Set(origins)) {
+      if (!doc.has(origin)) continue;
+      for (const id of doc.copies(doc.origin(origin))) {
+        if (doc.within(id, board) && (today === null || !doc.within(id, today))) consider(id);
+      }
+    }
+  } else {
+    for (const id of doc.get(board).children) {
+      if (id !== today) doc.walk(id, (n) => consider(n.id));
+    }
+  }
+  for (const id of targets) {
+    today ??= ensureToday(doc);
+    const n = doc.get(id);
+    doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: today, order: doc.orderAt(today, doc.get(today).children.length) } });
+  }
+  return targets;
 }
 
 /**
@@ -179,6 +228,13 @@ export function findToday(doc: Doc): NodeId | null {
   return kanban === null ? null : findChild(doc, kanban, TODAY);
 }
 
+function ensureToday(doc: Doc): NodeId {
+  const today = findToday(doc);
+  if (today !== null) return today;
+  const kanban = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
+  return addChild(doc, kanban, 'Today', undefined, TODO_NOTE, undefined, false, `${kanban}~today`);
+}
+
 /**
  * A new day's template (model/calendar.ts `fillDay`) with a mirror of the
  * Kanban's Today where a list of its own used to be, after the notes, open.
@@ -188,11 +244,7 @@ export function findToday(doc: Doc): NodeId | null {
 export function fillDayToday(ctx: Ctx, day: NodeId): boolean {
   const { doc } = ctx;
   if (!fillDay(ctx, day)) return false;
-  let today = findToday(doc);
-  if (today === null) {
-    const kanban = findKanban(doc) ?? addChild(doc, doc.root, 'Kanban', undefined, '', undefined, false, KANBAN_ID);
-    today = addChild(doc, kanban, 'Today', undefined, TODO_NOTE, undefined, false, `${kanban}~today`);
-  }
+  const today = ensureToday(doc);
   addChild(doc, day, '', today, '', Math.min(1, doc.get(day).children.length), true, `${day}~today`);
   return true;
 }

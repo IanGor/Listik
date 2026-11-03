@@ -1167,6 +1167,88 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.row').filter({ has: page.locator('.text', { hasText: /^write$/ }) }).locator('.check')).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('a dated project task goes straight to Today; adding @today to a Backlog task moves its existing mirror immediately', async ({ page }) => {
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Projects' }).locator('.bullet').click();
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Dated #project ');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('first @today ');
+    await page.keyboard.press('Control+l');
+    await expect(page.locator('.toast')).toContainText('— в Today');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('second');
+    await page.keyboard.press('Control+l');
+    await expect(page.locator('.toast')).toContainText('— в Backlog');
+    await page.keyboard.type(' @today ');
+    await expect(page.locator('.toast')).toContainText('— в Today');
+    await expect(editing(page)).toBeFocused();
+    await page.locator('.toast').getByRole('button', { name: 'Показать' }).click();
+    await expect(title(page)).toHaveText('Today');
+    await expect(page.locator('.row .text')).toHaveCount(2);
+    await expect(page.locator('.row .text').first()).toContainText('first');
+    await expect(page.locator('.row .text').last()).toContainText('second');
+  });
+
+  test('Kanban dates are checked at startup, on note edits, at midnight while editing, and when resuming on a new day', async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 10, 3, 23, 59) });
+    const fixture = await page.evaluateHandle(async () => {
+      const load = (path: string) => import(/* @vite-ignore */ path);
+      const { build } = (await load('/tests/helpers.ts')) as typeof import('../tests/helpers');
+      const { Outliner } = (await load('/src/view/outliner.ts')) as typeof import('../src/view/outliner');
+      const { dateText } = (await load('/src/model/dates.ts')) as typeof import('../src/model/dates');
+      const doc = build(['PARA', '  Project #project', '    task', '    tomorrow', '    later', 'Kanban', '  Backlog', '  Doing', '  Today']);
+      for (const [id, word] of [['task', 'today'], ['tomorrow', 'tomorrow'], ['later', 'nextthursday']]) {
+        doc.apply({ t: 'setTodo', id, from: false, to: true });
+        doc.apply({ t: 'setNote', id, from: '', to: dateText(word)! });
+        doc.apply({ t: 'insert', parent: 'Doing', node: { id: `mirror-${id}`, order: doc.orderAt('Doing', doc.get('Doing').children.length), text: '', note: '', todo: false, done: false, collapsed: true, created: 0, updated: 0, children: [], mirrorOf: id } });
+      }
+      const o = new Outliner(doc);
+      o.sweepBacklog();
+      return { o, doc, stop: o.watchMidnight(), dateText };
+    });
+    try {
+      await page.clock.runFor(3000);
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-task').parent)).toBe('Today');
+      // Note edits use the original's content, even when editing its mirror.
+      await fixture.evaluate(({ o, dateText }) => o.typeNote('mirror-later', dateText('today')!));
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-later').parent)).toBe('Today');
+      await fixture.evaluate(({ o }) => o.undo());
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-later').parent)).toBe('Doing');
+      await fixture.evaluate(({ o }) => o.redo());
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-later').parent)).toBe('Today');
+      // A received edit also goes through the document directly, outside the editor's commands.
+      await fixture.evaluate(({ doc, dateText }) => {
+        const n = doc.get('mirror-later');
+        doc.apply({ t: 'move', id: n.id, from: { parent: n.parent!, order: n.order }, to: { parent: 'Doing', order: doc.orderAt('Doing', 0) } });
+        doc.apply({ t: 'setNote', id: 'later', from: doc.get('later').note, to: dateText('tomorrow')! });
+      });
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-later').parent)).toBe('Doing');
+      await fixture.evaluate(({ doc, dateText }) => doc.apply({ t: 'setNote', id: 'later', from: doc.get('later').note, to: dateText('today')! }));
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-later').parent)).toBe('Today');
+      await fixture.evaluate(({ o }) => o.setFocus({ id: 'tomorrow', caret: 0 }));
+      await page.clock.runFor(60_000);
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-tomorrow').parent)).toBe('Today');
+      expect(await fixture.evaluate(({ o }) => o.focus()?.id)).toBe('tomorrow');
+      await fixture.evaluate(({ o, dateText }) => {
+        o.typeNote('task', dateText('tomorrow')!);
+        o.doc.apply({ t: 'move', id: 'mirror-task', from: { parent: 'Today', order: o.doc.get('mirror-task').order }, to: { parent: 'Doing', order: o.doc.orderAt('Doing', 0) } });
+      });
+      await page.clock.setFixedTime(new Date(2026, 10, 5, 10));
+      await fixture.evaluate(({ o }) => o.resumed());
+      await page.clock.runFor(3000);
+      expect(await fixture.evaluate(({ doc }) => doc.get('mirror-task').parent)).toBe('Today');
+    } finally {
+      await fixture.evaluate(({ stop }) => stop());
+      await fixture.dispose();
+    }
+  });
+
   test('at start-up, a project with an open task that is not on the board comes to the Backlog', async ({ page }) => {
     await page.goto('/?db=e2e-sweep&empty');
     await create(page);
