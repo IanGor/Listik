@@ -2,13 +2,13 @@ import { TODO_NOTE, firstWord, fillDay } from './calendar';
 import type { Ctx } from './commands';
 import { clock } from './clock';
 import { newId, type Doc } from './doc';
-import { titleOf } from './links';
+import { compareOrder, titleOf } from './links';
 import { content, isSecret, parseTags, searchable } from './tags';
 import type { NodeId, Op } from './types';
 
 /**
- * Tasks of PARA come to the Kanban's Backlog (October 2026). The `#project`
- * bullet a task lies in (inside PARA) is mirrored into the Backlog, inside the Kanban at the top level; the one lacking is made.
+ * Open tasks under `#project` in PARA are mirrored into the Kanban Backlog.
+ * Each checkbox has its own mirror, sharing its text and completion state.
  * Both are found by place and name as the Inbox is: a top-level bullet with
  * the word "kanban" in its title, and in it one with "backlog"; emoji and
  * tags around do not matter. Only changes made here are looked at (an
@@ -21,7 +21,7 @@ const BACKLOG = 'backlog';
 const TODAY = 'today';
 const PROJECT = 'project';
 
-/** A bullet tagged `#project`: the unit that comes to the Backlog. */
+/** A bullet tagged `#project`, in its text or note. */
 const isProject = (doc: Doc, id: NodeId): boolean => {
   const text = content(doc.get(id));
   return text.includes('#') && parseTags(text).includes(PROJECT);
@@ -51,13 +51,19 @@ function findPara(doc: Doc): NodeId | null {
   return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
-/**
- * The bullets to mirror after `ops`: for each task they added or made that
- * lies inside PARA, the nearest bullet at or above it tagged `#project`
- * (Projects → Work → Group → PBR #project → timeline → day → task gives PBR);
- * a task under no project is left. Done tasks do not count: a project with
- * only those has nothing to do on the board. Each only once.
- */
+/** The nearest project of a task (or its mirror), including the task itself, inside PARA. */
+export function projectOf(doc: Doc, id: NodeId): NodeId | null {
+  const para = findPara(doc);
+  if (para === null || !doc.has(id)) return null;
+  const origin = doc.origin(id);
+  if (!doc.inOutline(origin) || !doc.within(origin, para) || !searchable(doc, origin)) return null;
+  for (let cur: NodeId | null = origin; cur !== null && cur !== para && cur !== doc.root; cur = doc.get(cur).parent) {
+    if (isProject(doc, cur)) return cur;
+  }
+  return null;
+}
+
+/** Open tasks inserted, moved or made checkboxes under a project in PARA, each once. */
 export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const para = findPara(doc);
   if (para === null) return [];
@@ -73,22 +79,13 @@ export function backlogTargets(doc: Doc, ops: readonly Op[]): NodeId[] {
   const out: NodeId[] = [];
   for (const task of tasks) {
     if (!doc.has(task) || !doc.inOutline(task) || !doc.get(task).todo || doc.get(task).done || !searchable(doc, task)) continue;
-    // Up from the task to the nearest `#project`, which must lie inside PARA.
-    let cur: NodeId | null = task;
-    while (cur !== null && cur !== para && cur !== doc.root && !isProject(doc, cur)) cur = doc.get(cur).parent;
-    if (cur === null || cur === para || cur === doc.root || !doc.within(cur, para) || out.includes(cur)) continue;
-    out.push(cur);
+    if (!doc.get(task).mirrorOf && projectOf(doc, task) !== null) out.push(task);
   }
   return out;
 }
 
-/**
- * The projects in PARA that have an open task (a checkbox not yet ticked)
- * anywhere inside, one walk down the tree: the nearest `#project` above each
- * task, as in `backlogTargets`. For the check at start-up, which makes sure
- * the Backlog holds them (`toBacklog`). Mirrors and `#secret` are not walked.
- */
-export function openProjects(doc: Doc): NodeId[] {
+/** All open project tasks for the start-up check; skips mirrors and secret subtrees. */
+export function openProjectTasks(doc: Doc): NodeId[] {
   const para = findPara(doc);
   if (para === null || isSecret(doc.get(para))) return [];
   const out = new Set<NodeId>();
@@ -99,16 +96,40 @@ export function openProjects(doc: Doc): NodeId[] {
     const tagged = text.includes('#');
     if (tagged && isSecret(n)) return;
     const here = tagged && parseTags(text).includes(PROJECT) ? id : project;
-    if (n.todo && !n.done && here !== null) out.add(here);
+    if (n.todo && !n.done && here !== null) out.add(id);
     for (const c of n.children) walk(c, here);
   };
   for (const c of doc.get(para).children) walk(c, null);
   return [...out];
 }
 
+/** Replace legacy project cards with their open tasks in the same column. */
+export function migrateProjectCards(doc: Doc): void {
+  const board = findKanban(doc);
+  if (board === null) return;
+  const cards: NodeId[] = [];
+  doc.walk(board, (n) => {
+    if (n.mirrorOf && !doc.content(n.id).todo && projectOf(doc, n.id) === doc.origin(n.id)) cards.push(n.id);
+  });
+  for (const id of cards) {
+    const card = doc.get(id);
+    const tasks: NodeId[] = [];
+    doc.walk(doc.origin(id), (n) => {
+      if (!n.mirrorOf && n.todo && !n.done && projectOf(doc, n.id) !== null) tasks.push(n.id);
+    });
+    tasks.sort((a, b) => compareOrder(doc, a, b));
+    let at = doc.get(card.parent!).children.indexOf(id);
+    for (const task of tasks) {
+      if (doc.copies(task).some((c) => c !== task && doc.within(c, board))) continue;
+      addChild(doc, card.parent!, '', task, '', at++, false, `${card.parent}~${task}`);
+    }
+    doc.apply({ t: 'remove', parent: card.parent!, node: doc.snapshot(id) });
+  }
+}
+
 /**
- * Mirrors the bullets into the Backlog, last, collapsed (a project shows its
- * next task under it), making the Kanban and the Backlog if they are missing.
+ * Mirrors tasks into the Backlog, last and collapsed, making the board and
+ * Backlog if missing.
  * A bullet with a mirror anywhere in the Kanban (a column, deeper) is left:
  * it is on the board already, wherever it was moved to, and is reported as
  * `known`, so the caller can say so. `added` are the ones that came.

@@ -147,7 +147,13 @@ describe('documents that are not there', () => {
     const id = newId();
     const put = (token: string) => fetch(`${url}/docs/${id}/keyslot`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keyslot: { v: 1 }, token }) });
     const statuses = (await Promise.all([put('first-token-0123456789'), put('second-token-0123456789')])).map((r) => r.status).sort();
-    expect(statuses).toEqual([201, 409]);
+    expect(statuses[0]).toBe(201);
+    // If the first creation finished before the second load, it takes the unauthorized-update path.
+    expect([401, 409]).toContain(statuses[1]);
+    const access = await Promise.all(['first-token-0123456789', 'second-token-0123456789'].map(async (token) =>
+      (await fetch(`${url}/docs/${id}/keyslot`, { headers: { Authorization: `Bearer ${token}` } })).status,
+    ));
+    expect(access.sort()).toEqual([200, 401]);
     expect(mod.openDocuments()).toBe(before + 1);
   });
 });

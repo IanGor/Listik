@@ -804,6 +804,24 @@ kbd {
   cursor: text;
 }
 
+.task-project {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: calc(12px * var(--text-scale));
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.task-project:hover {
+  text-decoration: underline;
+}
+
 /* A note under the bullet: smaller, quieter, may span lines. Notes size is
    mirrored by NOTE_SCALE in Outline.tsx. */
 .note {

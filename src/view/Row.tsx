@@ -2,6 +2,8 @@ import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'sol
 import * as cmd from '../model/commands';
 import { dateWordBefore } from '../model/dates';
 import { caretOutside, linkOver, plainText } from '../model/format';
+import { findKanban, projectOf } from '../model/kanban';
+import { splitTags } from '../model/tags';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
 import { parseIndented } from '../model/outline-text';
@@ -163,6 +165,31 @@ export function Row(props: RowProps) {
     const t = o.doc.nodes.get(p.task);
     return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
   };
+  const projectPath = createMemo(() => {
+    o.rowsVersion();
+    if (!content()?.todo) return [];
+    const board = findKanban(o.doc);
+    if (board === null || !id.split('/').some((part) => o.doc.has(part) && o.doc.within(part, board))) return [];
+    const path: string[] = [];
+    for (let cur: string | null = o.doc.origin(nid); cur !== null; cur = o.doc.get(cur).parent) path.push(cur);
+    return path;
+  });
+  createEffect(() => {
+    const path = projectPath();
+    for (const p of path) o.nodes.acquire(p);
+    onCleanup(() => { for (const p of path) o.nodes.release(p); });
+  });
+  const project = createMemo(() => {
+    const path = projectPath();
+    for (const p of path) o.nodes.track(p);
+    return path.length ? projectOf(o.doc, nid) : null;
+  });
+  const projectName = () => {
+    const p = project();
+    if (p === null) return '';
+    o.nodes.track(p);
+    return splitTags(plainText(o.doc.get(p).text)).filter((part) => !part.tag).map((part) => part.text).join('').trim() || 'Проект без названия';
+  };
   const query = () => o.highlightFor(nid);
   const terms = () => query()?.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
@@ -280,6 +307,9 @@ export function Row(props: RowProps) {
           }
         >
           <Editable o={o} id={id} />
+        </Show>
+        <Show when={project()}>
+          {(p) => <button type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => o.zoomTo(p())} title="Открыть проект">Проект: {projectName()}</button>}
         </Show>
         <Show when={pending()}>
           {(p) => (

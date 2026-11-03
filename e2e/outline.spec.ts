@@ -1120,7 +1120,7 @@ test.describe('structure and calendar', () => {
     await expect.poll(() => outline(page)).toEqual(QUARTERS);
   });
 
-  test('a task in PARA puts its #project into the structure\'s Kanban Backlog', async ({ page }) => {
+  test('a task in PARA puts its checkbox into the structure\'s Kanban Backlog', async ({ page }) => {
     await create(page);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
@@ -1134,9 +1134,9 @@ test.describe('structure and calendar', () => {
     await page.keyboard.type('write');
     await page.keyboard.press('Control+l');
     // Not silently: the toast says it, with the way there.
-    await expect(page.locator('.toast')).toContainText('«Alpha #project» — в Backlog');
+    await expect(page.locator('.toast')).toContainText('«write» — в Backlog');
     await expect(page.locator('.toast').getByRole('button', { name: 'Показать' })).toBeVisible();
-    // A task moved about inside its project says nothing; a new one says the project is on the board.
+    // A task moved about inside its project says nothing; a new one gets its own card.
     await page.keyboard.press('Enter');
     await page.keyboard.type('read');
     await page.locator('.row', { hasText: 'write' }).locator('.text').click();
@@ -1145,12 +1145,30 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.toast')).not.toContainText('уже в Kanban');
     await page.locator('.row', { hasText: 'read' }).locator('.text').click();
     await page.keyboard.press('Control+l');
-    await expect(page.locator('.toast')).toContainText('«Alpha #project» уже в Kanban');
+    await expect(page.locator('.toast')).toContainText('«read» — в Backlog');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'Kanban' }).locator('.toggle').click();
+    await expect(page.locator('.task-project')).toHaveText(['Проект: Alpha', 'Проект: Alpha']);
     const rows = await outline(page);
     const at = rows.indexOf('Kanban');
-    expect(rows.slice(at, at + 5)).toEqual(['Kanban', '  Backlog', '    Alpha #project ', '  Today', '@q1']);
+    expect(rows.slice(at, at + 6)).toEqual(['Kanban', '  Backlog', '    write', '    read', '  Today', '@q1']);
+    await page.locator('.row').filter({ has: page.locator('.text', { hasText: /^Backlog$/ }) }).locator('.bullet').click();
+    await page.screenshot({ path: 'test-results/kanban-light.png', fullPage: true, animations: 'disabled' });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.screenshot({ path: 'test-results/kanban-dark.png', fullPage: true, animations: 'disabled' });
+    // Rename the original project: both card labels follow without reloading.
+    await page.locator('.task-project').first().click();
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('renamed');
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await expect(page.locator('.task-project')).toHaveText(['Проект: Alpha renamed', 'Проект: Alpha renamed']);
+    const card = page.locator('.row').filter({ has: page.locator('.text', { hasText: /^write$/ }) }).last();
+    await card.locator('.check').click();
+    await expect(card.locator('.check')).toHaveAttribute('aria-checked', 'true');
+    await card.locator('.task-project').click();
+    await expect(page.locator('.row').filter({ has: page.locator('.text', { hasText: /^write$/ }) }).locator('.check')).toHaveAttribute('aria-checked', 'true');
   });
 
   test('at start-up, a project with an open task that is not on the board comes to the Backlog', async ({ page }) => {
@@ -1167,17 +1185,17 @@ test.describe('structure and calendar', () => {
     await page.keyboard.press('Tab');
     await page.keyboard.type('write');
     await page.keyboard.press('Control+l');
-    await expect(page.locator('.toast')).toContainText('«Alpha #project» — в Backlog');
+    await expect(page.locator('.toast')).toContainText('«write» — в Backlog');
     // Take the mirror off the board by hand.
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'Kanban' }).locator('.bullet').click();
     await page.locator('.row', { hasText: 'Backlog' }).locator('.bullet').click();
-    await page.locator('.row', { hasText: 'Alpha #project' }).locator('.text').click();
+    await page.locator('.row .text', { hasText: /^write$/ }).click();
     await page.keyboard.press('Control+Shift+Backspace');
-    await expect(page.locator('.row', { hasText: 'Alpha #project' })).toHaveCount(0);
+    await expect(page.locator('.row .text', { hasText: /^write$/ })).toHaveCount(0);
     // A reload brings it back, said once.
     await page.reload();
-    await expect(page.locator('.toast')).toContainText('В Backlog: 1 проект с открытыми задачами', { timeout: 10_000 });
+    await expect(page.locator('.toast')).toContainText('В Backlog: 1 задача', { timeout: 10_000 });
   });
 
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backlogTargets, findBacklog, findKanban, openProjects, toBacklog } from '../src/model/kanban';
+import { backlogTargets, findBacklog, findKanban, migrateProjectCards, openProjectTasks, projectOf, toBacklog } from '../src/model/kanban';
 import type { Doc } from '../src/model/doc';
 import { checkInvariants } from '../src/model/invariants';
 import { applyMerged } from '../src/model/merge';
@@ -16,49 +16,50 @@ function task(doc: Doc, id: string) {
 describe('the Backlog of the Kanban', () => {
   const para = ['PARA', '  Projects', '    Alpha #project', '      one', '      two', '  Areas', '    solo #project'];
 
-  it('a task makes its project a mirror in a new Kanban and Backlog', () => {
+  it('a task becomes a mirror in a new Kanban and Backlog', () => {
     const doc = build([...para, '📥 Inbox']);
     task(doc, 'one');
     const kanban = findKanban(doc)!;
     const backlog = findBacklog(doc)!;
     expect(doc.get(kanban).text).toBe('Kanban');
     expect(doc.get(backlog).text).toBe('Backlog');
-    expect(doc.get(backlog).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
+    expect(doc.get(backlog).children.map((c) => doc.get(c).mirrorOf)).toEqual(['one']);
     checkInvariants(doc);
   });
 
-  it('a second task in the same project adds nothing; a task right in Areas is its own', () => {
+  it('each task in the same project gets its own mirror, including a project checkbox', () => {
     const doc = build(para);
     task(doc, 'one');
     task(doc, 'two');
     task(doc, 'solo #project');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project', 'solo #project']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['one', 'two', 'solo #project']);
   });
 
-  it('the first level under a PARA folder is mirrored, however deep the task lies', () => {
+  it('a task is mirrored however deep under a project it lies', () => {
     const doc = build(['PARA', '  Projects', '    Alpha #project', '      Phase', '        Step', '          deep']);
     task(doc, 'deep');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['deep']);
   });
 
   it('a mirror anywhere in the Kanban keeps it from coming again', () => {
     const doc = build([...para, 'Kanban', '  Backlog', '  Doing', '    Wip']);
     doc.apply({
       t: 'insert', parent: 'Wip',
-      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha #project' },
+      node: { id: 'm', order: doc.orderAt('Wip', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'one' },
     });
     task(doc, 'one');
     task(doc, 'two');
-    expect(doc.get('Backlog').children).toHaveLength(0);
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['two']);
     task(doc, 'solo #project');
-    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['solo #project']);
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['two', 'solo #project']);
   });
 
-  it('a project already on the board is reported as known, not mirrored again', () => {
+  it('only the same task already on the board is reported as known', () => {
     const doc = build(para);
-    expect(task(doc, 'one')).toEqual({ added: ['Alpha #project'], known: [] });
-    expect(task(doc, 'two')).toEqual({ added: [], known: ['Alpha #project'] });
-    expect(doc.get(findBacklog(doc)!).children).toHaveLength(1);
+    expect(task(doc, 'one')).toEqual({ added: ['one'], known: [] });
+    expect(task(doc, 'two')).toEqual({ added: ['two'], known: [] });
+    expect(toBacklog(doc, ['one'])).toEqual({ added: [], known: ['one'] });
+    expect(doc.get(findBacklog(doc)!).children).toHaveLength(2);
   });
 
   it('after a reload (a snapshot), the mirror already in the Backlog keeps it from coming again', () => {
@@ -66,19 +67,19 @@ describe('the Backlog of the Kanban', () => {
     task(doc, 'one');
     const back = deserialize(serialize(doc));
     task(back, 'two');
-    expect(back.get(findBacklog(back)!).children.map((c) => back.get(c).mirrorOf)).toEqual(['Alpha #project']);
+    expect(back.get(findBacklog(back)!).children.map((c) => back.get(c).mirrorOf)).toEqual(['one', 'two']);
   });
 
-  it('two devices making the same project a task at once end with one Kanban and one mirror of it', () => {
+  it('two devices making the same bullet a task at once end with one Kanban and one mirror of it', () => {
     const base = build(para);
     const a = deserialize(serialize(base));
     const b = deserialize(serialize(base));
-    const fromA = a.transact(() => { a.apply({ t: 'setTodo', id: 'one', from: false, to: true }); toBacklog(a, ['Alpha #project']); });
-    const fromB = b.transact(() => { b.apply({ t: 'setTodo', id: 'two', from: false, to: true }); toBacklog(b, ['Alpha #project']); });
+    const fromA = a.transact(() => { a.apply({ t: 'setTodo', id: 'one', from: false, to: true }); toBacklog(a, ['one']); });
+    const fromB = b.transact(() => { b.apply({ t: 'setTodo', id: 'one', from: false, to: true }); toBacklog(b, ['one']); });
     const c = deserialize(serialize(base));
     for (const op of [...fromA, ...fromB]) applyMerged(c, op);
     expect(c.get(c.root).children.filter((k) => c.get(k).text === 'Kanban')).toHaveLength(1);
-    expect(c.get(findBacklog(c)!).children.map((k) => c.get(k).mirrorOf)).toEqual(['Alpha #project']);
+    expect(c.get(findBacklog(c)!).children.map((k) => c.get(k).mirrorOf)).toEqual(['one']);
     checkInvariants(c);
   });
 
@@ -86,7 +87,7 @@ describe('the Backlog of the Kanban', () => {
     const doc = build([...para, '🗂 KANBAN #board', '  ⏳ backlog @x', '  Doing']);
     task(doc, 'one');
     expect(findKanban(doc)).toBe('🗂 KANBAN #board');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Alpha #project']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['one']);
     expect(doc.get('🗂 KANBAN #board').children).toHaveLength(2);
   });
 
@@ -112,13 +113,13 @@ describe('the Backlog of the Kanban', () => {
     expect(findKanban(doc)).toBeNull();
     const ops = doc.transact(() => doc.apply({ t: 'move', id: 'Beta #project', from: { parent: 'Elsewhere', order: doc.get('Beta #project').order }, to: { parent: 'Areas', order: doc.orderAt('Areas', 1) } }));
     toBacklog(doc, backlogTargets(doc, ops));
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['Beta #project']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['chore']);
   });
 
-  it('the #project is mirrored, not the groups above it nor the bullets below it', () => {
+  it('the checkbox is mirrored, not the project or groups above it', () => {
     const doc = build(['PARA', '  Projects', '    Work', '      Stream', '        PBR #project @work', '          timeline', '            day', '              t']);
     task(doc, 't');
-    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['PBR #project @work']);
+    expect(doc.get(findBacklog(doc)!).children.map((c) => doc.get(c).mirrorOf)).toEqual(['t']);
   });
 
   it('a task under no #project, or under one outside PARA, is left', () => {
@@ -153,33 +154,64 @@ describe('the start-up check of the Backlog', () => {
   const open = (doc: Doc, id: string) => doc.apply({ t: 'setTodo', id, from: false, to: true });
   const done = (doc: Doc, id: string) => doc.apply({ t: 'setDone', id, from: false, to: true, at: 1 });
 
-  it('finds the projects with an open task, the nearest #project of each, once', () => {
+  it('finds every open checkbox under a project, including nested projects', () => {
     const doc = build(['PARA', '  Projects', '    Alpha #project', '      a1', '      a2', '      Inner #project', '        a3', '    Plain', '      p1', '    Beta #project', '      b1', 'Elsewhere #project', '  e1']);
     for (const id of ['a1', 'a2', 'a3', 'p1', 'b1', 'e1']) open(doc, id);
     done(doc, 'b1');
-    expect(openProjects(doc).sort()).toEqual(['Alpha #project', 'Inner #project']);
+    expect(openProjectTasks(doc).sort()).toEqual(['a1', 'a2', 'a3']);
   });
 
   it('skips #secret, mirrors and a project with no tasks; no PARA, nothing', () => {
     const doc = build(['PARA', '  Projects', '    Hidden #secret #project', '      t', '    Empty #project', '      x']);
     open(doc, 't');
-    expect(openProjects(doc)).toEqual([]);
-    expect(openProjects(build(['Elsewhere #project', '  t']))).toEqual([]);
+    expect(openProjectTasks(doc)).toEqual([]);
+    expect(openProjectTasks(build(['Elsewhere #project', '  t']))).toEqual([]);
   });
 
   it('brings the missing ones to the Backlog and leaves those on the board', () => {
     const doc = build([...para, 'Kanban', '  Backlog']);
     open(doc, 'one');
     open(doc, 'solo #project');
-    const first = toBacklog(doc, openProjects(doc));
-    expect(first.added.sort()).toEqual(['Alpha #project', 'solo #project']);
-    expect(toBacklog(doc, openProjects(doc))).toEqual({ added: [], known: ['Alpha #project', 'solo #project'].sort() });
+    const first = toBacklog(doc, openProjectTasks(doc));
+    expect(first.added.sort()).toEqual(['one', 'solo #project']);
+    expect(toBacklog(doc, openProjectTasks(doc))).toEqual({ added: [], known: ['one', 'solo #project'].sort() });
     expect(doc.get('Backlog').children).toHaveLength(2);
   });
 
   it('with nothing to bring, no Kanban is made', () => {
     const doc = build(para);
-    expect(toBacklog(doc, openProjects(doc))).toEqual({ added: [], known: [] });
+    expect(toBacklog(doc, openProjectTasks(doc))).toEqual({ added: [], known: [] });
     expect(findKanban(doc)).toBeNull();
+  });
+});
+
+
+describe('project names and legacy Kanban cards', () => {
+  it('resolves the nearest project from a task mirror, including a project checkbox and tags in notes', () => {
+    const doc = build(['PARA', '  Projects', '    Outer #project', '      Inner', '        task']);
+    doc.apply({ t: 'setNote', id: 'Inner', from: '', to: '#project' });
+    task(doc, 'task');
+    const mirror = doc.get(findBacklog(doc)!).children[0];
+    expect(projectOf(doc, mirror)).toBe('Inner');
+    expect(projectOf(doc, 'Outer #project')).toBe('Outer #project');
+    doc.apply({ t: 'setText', id: 'Inner', from: 'Inner', to: 'Renamed' });
+    expect(doc.get(projectOf(doc, mirror)!).text).toBe('Renamed');
+    doc.apply({ t: 'setDone', id: doc.origin(mirror), from: false, to: true, at: 1 });
+    expect(doc.content(mirror).done).toBe(true);
+  });
+
+  it('replaces old project mirrors in their column, keeps existing task cards and skips done and secret tasks', () => {
+    const doc = build(['PARA', '  Projects', '    Alpha #project', '      one', '      two', '      finished', '      Hidden #secret', '        private', 'Kanban', '  Backlog', '  Doing']);
+    for (const id of ['one', 'two', 'finished', 'private']) doc.apply({ t: 'setTodo', id, from: false, to: true });
+    doc.apply({ t: 'setDone', id: 'finished', from: false, to: true, at: 1 });
+    toBacklog(doc, ['one']);
+    doc.apply({ t: 'insert', parent: 'Doing', node: { id: 'old', order: doc.orderAt('Doing', 0), text: '', note: '', collapsed: true, todo: false, done: false, created: 0, updated: 0, children: [], mirrorOf: 'Alpha #project' } });
+    migrateProjectCards(doc);
+    expect(doc.get('Doing').children.map((c) => doc.get(c).mirrorOf)).toEqual(['two']);
+    expect(doc.get('Backlog').children.map((c) => doc.get(c).mirrorOf)).toEqual(['one']);
+    expect(doc.has('Alpha #project')).toBe(true);
+    migrateProjectCards(doc);
+    expect(toBacklog(doc, openProjectTasks(doc)).added).toEqual([]);
+    checkInvariants(doc);
   });
 });
