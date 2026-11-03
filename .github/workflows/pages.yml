@@ -28,6 +28,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npx playwright install --with-deps chromium
+      # Touch input and the live percentage must work in both dev and the built app.
+      - run: npx playwright test textsize.spec.ts
       # Served under /Listik/, so asset URLs need the base.
       - run: npm run build
         env:

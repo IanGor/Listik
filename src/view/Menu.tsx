@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Match, Show, Switch, createRenderEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { appendTrees } from '../model/commands';
 import { countTrees, looksLikeOpml, parseIndented, parseOpml, toMarkdown, toOpml } from '../model/outline-text';
 import type { BackupStatus } from '../persist/backup';
@@ -195,7 +195,10 @@ export function DocumentMenu(props: { o: Outliner }) {
               {/* A small and a large A, as Apple sizes text (Safari's "Aa"). */}
               <span class="step-a small" aria-hidden="true">A</span>
             </button>
-            <span class="step-value" aria-live="polite">{Math.round(textScale() * 100)}%</span>
+            {/* Update the element itself: native DOM changes must not strand a cached text node. */}
+            <span class="step-value" aria-live="polite" aria-atomic="true" ref={(el) => createRenderEffect(() => {
+              el.textContent = `${Math.round(textScale() * 100)}%`;
+            })} />
             <button
               type="button"
               class="step"

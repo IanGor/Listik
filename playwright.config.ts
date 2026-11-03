@@ -17,8 +17,8 @@ export default defineConfig({
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
   projects: [
-    { name: 'app', testMatch: /outline\.spec\.ts|sync\.spec\.ts/, use: { baseURL: dev } },
-    { name: 'pwa', testMatch: 'pwa.spec.ts', use: { baseURL: built } },
+    { name: 'app', testMatch: /outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev } },
+    { name: 'pwa', testMatch: /pwa\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: built } },
   ],
   webServer: [
     {
