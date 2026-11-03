@@ -1311,6 +1311,13 @@ mark,
     display: none;
   }
 
+  /* Keep the query readable on the smallest phones while it is being edited. */
+  @media (max-width: 380px) {
+    .topbar:has(.searchbar:focus-within) .places {
+      display: none;
+    }
+  }
+
   .crumbbar {
     padding-top: 10px;
   }
@@ -1486,6 +1493,16 @@ mark,
   color: var(--link);
 }
 
+.menu .hint.attention {
+  color: var(--link);
+}
+
+.menu-files {
+  display: flex;
+  flex-direction: column;
+  padding-left: 12px;
+}
+
 .menu .hint {
   font-size: 12px;
   color: var(--muted);
@@ -1579,7 +1596,7 @@ mark,
 }
 
 /* The item's symbol, at the end of its line. */
-.menu-icon {
+.menu .menu-icon {
   flex: none;
   margin-left: auto;
   padding-left: 12px;

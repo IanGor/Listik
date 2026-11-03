@@ -27,7 +27,7 @@ const UNDO = () => <Symbol><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 
 const REDO = () => <Symbol><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></Symbol>;
 const GO = () => <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>;
 // A note being written (square.and.pencil): the tray is the header's Inbox, a place, not this action.
-const WRITE = () => <Symbol><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" /></Symbol>;
+export const WriteIcon = () => <Symbol><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" /><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" /></Symbol>;
 const SAVE = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" /></Symbol>;
 const OPEN = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 17v-6M9 14l3-3 3 3" /></Symbol>;
 const KEYS = () => <Symbol><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8" /></Symbol>;
@@ -50,6 +50,7 @@ export function DocumentMenu(props: { o: Outliner }) {
   const o = props.o;
   const [open, setOpen] = createSignal(false);
   const [fontsOpen, setFontsOpen] = createSignal(false);
+  const [filesOpen, setFilesOpen] = createSignal(false);
   const [backup, setBackup] = createSignal<BackupStatus | null>(o.backup?.status ?? null);
   if (o.backup) onCleanup(o.backup.subscribe(setBackup));
   let root!: HTMLDivElement;
@@ -57,6 +58,7 @@ export function DocumentMenu(props: { o: Outliner }) {
   const close = () => {
     setOpen(false);
     setFontsOpen(false);
+    setFilesOpen(false);
   };
   const onPointerDown = (e: PointerEvent) => {
     if (!root.contains(e.target as Node)) close();
@@ -138,7 +140,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <button type="button" role="menuitem" onClick={() => { close(); o.openCapture(); }}>
               Записать в Inbox
               <Show when={!phone()}><span class="hint">{MOD}+Shift+Space</span></Show>
-              <WRITE />
+              <WriteIcon />
             </button>
           </Show>
           <button type="button" role="menuitem" onClick={() => { close(); o.showTrash(); }}>
@@ -250,43 +252,6 @@ export function DocumentMenu(props: { o: Outliner }) {
               <CLOUD />
             </button>
           </Show>
-          <Show when={backup()}>
-            {(b) => (
-              <>
-                <Switch>
-                  <Match when={b().state === 'unsupported'}>
-                    <p class="menu-note">Автокопия в папку работает в Chrome и Edge</p>
-                  </Match>
-                  <Match when={b().state === 'off'}>
-                    <button type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>
-                      Автокопия в папку…
-                      <FOLDER />
-                    </button>
-                  </Match>
-                  <Match when={b().state === 'on'}>
-                    <p class="menu-note">
-                      Автокопия: <b>{b().folder}</b>
-                      <Show when={b().last}>, последняя в {time(b().last)}</Show>
-                    </p>
-                    <button type="button" role="menuitem" onClick={act(() => o.backup?.write())}>
-                      Сохранить копию сейчас
-                    </button>
-                    <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
-                      Отключить автокопию
-                    </button>
-                  </Match>
-                  <Match when={b().state === 'paused' || b().state === 'error'}>
-                    <button type="button" role="menuitem" class="attention" onClick={act(() => o.backup?.resume())}>
-                      {b().state === 'paused' ? 'Автокопия на паузе — продолжить' : 'Автокопия не удалась — повторить'}
-                    </button>
-                    <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
-                      Отключить автокопию
-                    </button>
-                  </Match>
-                </Switch>
-              </>
-            )}
-          </Show>
           <Show when={!o.readOnly}>
             <button type="button" role="menuitem" onClick={() => { close(); o.createStructure(); }}>
               Создать структуру <span class="hint">PARA и календарь</span>
@@ -294,19 +259,67 @@ export function DocumentMenu(props: { o: Outliner }) {
             </button>
           </Show>
           <div class="menu-sep" role="separator" />
-          <button type="button" role="menuitem" onClick={() => exportAs('md')}>
-            Скачать как Markdown
-            <SAVE />
+          <button type="button" role="menuitem" aria-expanded={filesOpen()} onClick={() => setFilesOpen(!filesOpen())}>
+            Файлы и резервные копии
+            <Show when={backup()?.state === 'paused' || backup()?.state === 'error'}>
+              <span class="hint attention">Автокопия требует внимания</span>
+            </Show>
+            <CHEVRON />
           </button>
-          <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
-            Скачать как OPML <span class="hint">для Workflowy</span>
-            <SAVE />
-          </button>
-          <Show when={!o.readOnly}>
-            <button type="button" role="menuitem" onClick={() => void importFile()}>
-              Импорт из файла…
-              <OPEN />
-            </button>
+          <Show when={filesOpen()}>
+            <div class="menu-files" role="group" aria-label="Файлы и резервные копии">
+              <button type="button" role="menuitem" onClick={() => exportAs('md')}>
+                Скачать как Markdown
+                <SAVE />
+              </button>
+              <button type="button" role="menuitem" onClick={() => exportAs('opml')}>
+                Скачать как OPML <span class="hint">для Workflowy</span>
+                <SAVE />
+              </button>
+              <Show when={!o.readOnly}>
+                <button type="button" role="menuitem" onClick={() => void importFile()}>
+                  Импорт из файла…
+                  <OPEN />
+                </button>
+              </Show>
+              <Show when={backup()}>
+                {(b) => (
+                  <>
+                    <Switch>
+                      <Match when={b().state === 'unsupported'}>
+                        <p class="menu-note">Автокопия в папку работает в Chrome и Edge</p>
+                      </Match>
+                      <Match when={b().state === 'off'}>
+                        <button type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>
+                          Автокопия в папку…
+                          <FOLDER />
+                        </button>
+                      </Match>
+                      <Match when={b().state === 'on'}>
+                        <p class="menu-note">
+                          Автокопия: <b>{b().folder}</b>
+                          <Show when={b().last}>, последняя в {time(b().last)}</Show>
+                        </p>
+                        <button type="button" role="menuitem" onClick={act(() => o.backup?.write())}>
+                          Сохранить копию сейчас
+                        </button>
+                        <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
+                          Отключить автокопию
+                        </button>
+                      </Match>
+                      <Match when={b().state === 'paused' || b().state === 'error'}>
+                        <button type="button" role="menuitem" class="attention" onClick={act(() => o.backup?.resume())}>
+                          {b().state === 'paused' ? 'Автокопия на паузе — продолжить' : 'Автокопия не удалась — повторить'}
+                        </button>
+                        <button type="button" role="menuitem" onClick={act(() => o.backup?.disable())}>
+                          Отключить автокопию
+                        </button>
+                      </Match>
+                    </Switch>
+                  </>
+                )}
+              </Show>
+            </div>
           </Show>
           <div class="menu-sep" role="separator" />
           <button type="button" role="menuitem" onClick={() => { close(); o.showHelp(); }}>

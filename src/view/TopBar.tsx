@@ -1,5 +1,5 @@
-import { createSignal, onCleanup } from 'solid-js';
-import { DocumentMenu } from './Menu';
+import { Show, createSignal, onCleanup } from 'solid-js';
+import { DocumentMenu, WriteIcon } from './Menu';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
 import { watchWindowControls } from './window-controls';
@@ -9,8 +9,7 @@ import { watchWindowControls } from './window-controls';
  * home page — then search and the menu. The places are named, not a logo to
  * guess at, and stand together at the leading edge, the one you are in lit
  * (`aria-current`), as Apple's guides ask of navigation. On a phone they are
- * their symbols alone. Quick capture lives on Ctrl+Shift+Space and in the
- * menu; the day/night switch and the sync state too, on every screen.
+ * their symbols alone. Quick capture has its own button on every screen.
  */
 export function TopBar(props: { o: Outliner }) {
   // In an iPadOS window the controls lie over the header's left corner: the places step aside.
@@ -55,6 +54,11 @@ export function TopBar(props: { o: Outliner }) {
       </nav>
       <SearchBar o={props.o} />
       <div class="topbar-actions">
+        <Show when={!props.o.readOnly}>
+          <button type="button" class="icon-button" title="Записать в Inbox" aria-label="Записать в Inbox" onPointerDown={(e) => e.preventDefault()} onClick={() => props.o.openCapture()}>
+            <WriteIcon />
+          </button>
+        </Show>
         <DocumentMenu o={props.o} />
       </div>
     </header>

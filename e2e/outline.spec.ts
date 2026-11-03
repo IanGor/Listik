@@ -1604,6 +1604,18 @@ test.describe('quick capture', () => {
   const line = (page: Page) => page.getByRole('dialog', { name: 'Запись в Inbox' });
   const field = (page: Page) => line(page).getByRole('textbox');
 
+  test('the header button returns to the original caret after saving', async ({ page }) => {
+    await edit(page, 'Часть вторая');
+    await page.keyboard.press('ArrowLeft');
+    await page.getByRole('button', { name: 'Записать в Inbox' }).click();
+    await expect(field(page)).toBeFocused();
+    await field(page).fill('мысль');
+    await page.keyboard.press('Enter');
+    await expect(editing(page)).toBeFocused();
+    await page.keyboard.type('!');
+    await expect(editing(page)).toHaveText('Часть втора!я');
+  });
+
   test('Ctrl+Shift+Space while editing: a thought goes last into the Inbox, made if missing; the caret comes back where it was', async ({ page }) => {
     await edit(page, 'Часть вторая');
     await page.keyboard.press('ArrowLeft');
@@ -2216,6 +2228,7 @@ test.describe('export and import', () => {
 
   test('downloads the outline as Markdown and as OPML', async ({ page }) => {
     await menu(page).click();
+    await item(page, 'Файлы и резервные копии').click();
     const [md] = await Promise.all([page.waitForEvent('download'), item(page, 'Скачать как Markdown').click()]);
     expect(md.suggestedFilename()).toMatch(/^listik-\d{4}-\d{2}-\d{2}\.md$/);
     const text = await readFile((await md.path())!, 'utf8');
@@ -2223,6 +2236,7 @@ test.describe('export and import', () => {
     expect(text).toContain('    - Так говорила в июле 1805 года');
 
     await menu(page).click();
+    await item(page, 'Файлы и резервные копии').click();
     const [opml] = await Promise.all([page.waitForEvent('download'), item(page, /OPML/).click()]);
     expect(opml.suggestedFilename()).toMatch(/\.opml$/);
     expect(await readFile((await opml.path())!, 'utf8')).toContain('<outline text="Том первый">');
@@ -2231,6 +2245,7 @@ test.describe('export and import', () => {
   test('imports an OPML file into the current zoom, as one undo step', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
     await menu(page).click();
+    await item(page, 'Файлы и резервные копии').click();
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), item(page, 'Импорт из файла…').click()]);
     const opml = '<?xml version="1.0"?><opml version="2.0"><body><outline text="Глава I"><outline text="Москва &amp; Петербург" /></outline><outline text="Глава II" /></body></opml>';
     await chooser.setFiles({ name: 'workflowy.opml', mimeType: 'text/xml', buffer: Buffer.from(opml) });
@@ -2255,6 +2270,8 @@ test.describe('export and import', () => {
     await page.goto('/?db=e2e-backup&empty');
     await expect(page.locator('.row')).toHaveCount(1);
     await menu(page).click();
+    await expect(item(page, 'Автокопия в папку…')).toHaveCount(0);
+    await item(page, 'Файлы и резервные копии').click();
     await expect(item(page, 'Автокопия в папку…')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.menu')).toHaveCount(0);
@@ -2564,6 +2581,25 @@ test.describe('touch screen', () => {
     const toast = page.getByRole('status');
     await expect(toast).toContainText('Отменить');
     expect((await toast.boundingBox())!.height).toBeLessThan(50);
+  });
+
+  test('quick capture opens directly from the header on a phone', async ({ page }) => {
+    await page.getByRole('button', { name: 'Записать в Inbox' }).tap();
+    const line = page.getByRole('dialog', { name: 'Запись в Inbox' });
+    await expect(line.getByRole('textbox')).toBeFocused();
+    await page.keyboard.type('быстрая запись');
+    await page.keyboard.press('Enter');
+    expect((await outline(page)).slice(-2)).toEqual(['Inbox', '  быстрая запись']);
+  });
+
+  test('search stays editable beside header actions on a small phone', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 720 });
+    const search = page.locator('input.search');
+    await search.tap();
+    await search.fill('Часть');
+    expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(80);
+    await expect(page.locator('.topbar')).toHaveJSProperty('scrollWidth', 320);
+    await expect(page.locator('.row', { hasText: 'Часть вторая' })).toBeVisible();
   });
 
   test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {

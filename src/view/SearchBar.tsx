@@ -98,7 +98,7 @@ export function SearchBar(props: { o: Outliner }) {
         ref={input}
         class="search"
         type="text"
-        placeholder={narrow() ? 'Поиск и #теги' : 'Поиск по тексту и #тегам'}
+        placeholder={narrow() ? 'Поиск' : 'Поиск по тексту и #тегам'}
         title="Слова через пробел, «фраза в кавычках», #тег или @тег; -слово или -#тег исключает; OR — или; is:done — выполненные"
         spellcheck={false}
         value={o.query()}
