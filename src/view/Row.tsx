@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'sol
 import * as cmd from '../model/commands';
 import { dateWordBefore } from '../model/dates';
 import { caretOutside, linkOver, plainText } from '../model/format';
-import { findKanban, projectOf } from '../model/kanban';
+import { findKanban, findToday, projectOf } from '../model/kanban';
 import { splitTags } from '../model/tags';
 import { closesLink, opensLink } from '../model/links';
 import { closesMirror, mirrorBefore, opensMirror } from '../model/mirrors';
@@ -290,6 +290,16 @@ export function Row(props: RowProps) {
         />
       </Show>
       <div class="body">
+        <Show when={(o.rowsVersion(), o.rows.retainedEditor(id))}>
+          <button type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => {
+            const focus = o.caretNow();
+            const today = findToday(o.doc);
+            if (today) {
+              o.zoomTo(today);
+              if (focus) o.setFocus({ ...focus, id: nodeOf(focus.id) });
+            }
+          }}>Теперь в Today · Показать</button>
+        </Show>
         <Show
           when={editingText()}
           fallback={

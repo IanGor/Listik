@@ -1222,7 +1222,8 @@ test.describe('structure and calendar', () => {
     await page.locator('.toast').getByRole('button', { name: 'Показать' }).click();
     await expect(title(page)).toHaveText('Backlog');
     await edit(page, 'owned');
-    await page.keyboard.press('Control+Shift+Backspace');
+    await editing(page).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Удалить эту копию', exact: true }).click();
     await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(0);
     await page.keyboard.press('Control+z');
     await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
@@ -1231,7 +1232,9 @@ test.describe('structure and calendar', () => {
     await enter('Projects');
     await enter(/^Source #project/);
     await edit(page, 'owned');
-    await page.keyboard.press('Control+Shift+Backspace');
+    await editing(page).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Удалить источник и все копии', exact: true }).click();
+    await expect(page.locator('.toast')).toContainText('Удалён источник и 1 копия');
     await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(0);
     await page.locator('.toast').getByRole('button', { name: 'Отменить' }).click();
     await expect(page.locator('.row .text', { hasText: 'owned' })).toHaveCount(1);
@@ -1281,6 +1284,42 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.row .text')).toHaveCount(2);
     await expect(page.locator('.row .text').first()).toContainText('first');
     await expect(page.locator('.row .text').last()).toContainText('second');
+  });
+
+  for (const note of [false, true]) test(`routing to Today preserves the active ${note ? 'note' : 'text'} editor and continued typing`, async ({ page }) => {
+    await page.goto('/?db=e2e-retain-editor&empty');
+    await create(page);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'PARA' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: 'Projects' }).locator('.bullet').click();
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Editing #project ');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('keep typing');
+    await page.keyboard.press('Control+l');
+    await page.locator('.toast').getByRole('button', { name: 'Показать' }).click();
+    await edit(page, 'keep typing');
+    const id = await page.locator('.row', { hasText: 'keep typing' }).getAttribute('data-id');
+    if (note) await page.keyboard.press('Shift+Enter');
+    const editor = page.locator('.row [contenteditable]');
+    const handle = (await editor.elementHandle())!;
+    await page.keyboard.type(' @today ');
+    await expect(editor).toBeFocused();
+    expect(await handle.evaluate(el => el.isConnected)).toBe(true);
+    await expect(title(page)).toHaveText('Backlog');
+    await page.keyboard.type('продолжение');
+    await expect(editor).toContainText('продолжение');
+    await page.getByRole('button', { name: 'Теперь в Today · Показать' }).click();
+    await expect(title(page)).toHaveText('Today');
+    await expect(page.locator('.row [contenteditable]')).toBeFocused();
+    await expect(page.locator('.row')).toHaveAttribute('data-id', id!);
+    await page.keyboard.type('!');
+    await expect(page.locator('.row [contenteditable]')).toContainText('продолжение!');
+    await page.reload();
+    await expect(page.locator('.row', { hasText: 'keep typing' })).toHaveCount(1);
   });
 
   test('Kanban dates are checked at startup, on note edits, at midnight while editing, and when resuming on a new day', async ({ page }) => {

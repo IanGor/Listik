@@ -1,5 +1,6 @@
 import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { markdownOf } from '../model/outline-text';
+import { deletionLabel } from '../model/commands';
 import { nodeOf } from '../model/rows';
 import { Symbol } from './Menu';
 import type { Outliner } from './outliner';
@@ -124,7 +125,7 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
         <Show when={!o.readOnly}>
           <div class="menu-sep" role="separator" />
           <button type="button" role="menuitem" class="destructive" onClick={act(() => o.swipeDelete(key))}>
-            Удалить
+            {deletionLabel(o.doc, nodeOf(key))}
             <Symbol><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Symbol>
           </button>
         </Show>

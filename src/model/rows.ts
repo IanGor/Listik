@@ -101,6 +101,23 @@ export class VisibleRows implements DocListener {
   top: NodeId;
   private doc: Doc;
   private filter: Filter | null = null;
+  private editor: { key: RowKey; active: RowKey; parent: RowKey; index: number } | null = null;
+
+  /** Keep only the active editor at its former visual place after automatic routing. */
+  retainEditor(key: RowKey, active = key): void {
+    if (this.editor || this.indexOf(key) < 0) return;
+    const parent = this.parentKey(key) ?? this.top;
+    this.editor = { key, active, parent, index: this.shownChildren(parent).indexOf(nodeOf(key)) };
+    this.expectMany();
+  }
+
+  retainedEditor(key: RowKey): boolean { return this.editor?.key === key || this.editor?.active === key; }
+
+  releaseEditor(): void {
+    if (!this.editor) return;
+    this.editor = null;
+    this.rebuild();
+  }
   /** Where the last `indexOf` found its row. */
   private hint = 0;
   /** `shownRoots`, until the next op or zoom. */
@@ -152,6 +169,7 @@ export class VisibleRows implements DocListener {
 
   /** Zoom: show the subtree of `top` (its children at depth 0). */
   setTop(top: NodeId): void {
+    this.editor = null;
     this.top = top;
     this.hint = 0;
     this.roots = null;
@@ -260,7 +278,15 @@ export class VisibleRows implements DocListener {
   /** Children of the row `key` (`top` for the top level) shown below it, assuming the row itself is shown: what folding and the filter leave. */
   shownChildren(key: RowKey): NodeId[] {
     const n = this.doc.get(nodeOf(key));
-    const kids = this.host(key)?.children ?? [];
+    let kids = this.host(key)?.children ?? [];
+    const editor = this.editor;
+    if (editor && this.doc.has(nodeOf(editor.key)) && this.doc.inOutline(nodeOf(editor.key))) {
+      kids = kids.filter((id) => id !== nodeOf(editor.key));
+      if (key === editor.parent) {
+        kids = [...kids];
+        kids.splice(Math.max(0, Math.min(editor.index, kids.length)), 0, nodeOf(editor.key));
+      }
+    }
     const f = this.filter;
     if (f?.keep.has(n.id)) return f.shut.has(n.id) ? [] : f.open.has(n.id) ? kids : kids.filter((c) => f.keep.has(c));
     // The zoomed-in bullet always shows its children, whatever its own collapsed state.
@@ -448,6 +474,13 @@ export class VisibleRows implements DocListener {
   /** End of a transaction: rebuild if patching gave up. */
   private settle(): void {
     this.patched = 0;
+    if (this.editor) {
+      const n = this.doc.nodes.get(nodeOf(this.editor.key));
+      if (!n || !this.doc.inOutline(n.id) || !this.doc.has(nodeOf(this.editor.parent)) || n.parent === this.doc.host(nodeOf(this.editor.parent))?.id) {
+        this.editor = null;
+        this.stale = true;
+      }
+    }
     if (!this.stale) return;
     this.stale = false;
     this.rebuild();

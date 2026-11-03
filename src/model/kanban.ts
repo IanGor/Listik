@@ -172,7 +172,7 @@ export function toBacklog(doc: Doc, targets: readonly NodeId[], now = new Date()
 }
 
 /** Move existing open, dated mirrors from every other column; never traverse Today. */
-export function moveTodayMirrors(doc: Doc, now = new Date(), origins?: readonly NodeId[]): NodeId[] {
+export function moveTodayMirrors(doc: Doc, now = new Date(), origins?: readonly NodeId[], beforeMove?: (id: NodeId) => void): NodeId[] {
   const board = findKanban(doc);
   if (board === null) return [];
   let today = findToday(doc);
@@ -193,6 +193,7 @@ export function moveTodayMirrors(doc: Doc, now = new Date(), origins?: readonly 
     }
   }
   for (const id of targets) {
+    beforeMove?.(id);
     today ??= ensureToday(doc);
     const n = doc.get(id);
     doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: today, order: doc.orderAt(today, doc.get(today).children.length) } });

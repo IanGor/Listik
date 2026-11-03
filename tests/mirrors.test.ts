@@ -18,6 +18,18 @@ describe('deleting original nodes born in PARA', () => {
   const lines = ['PARA', '  Project', '    task', '      child', 'Kanban', '  Backlog', '    deep', '      card', '  Today', '    project-card', 'Elsewhere', '  copy', '  unrelated'];
   const fixture = () => mirrored(lines, { card: 'task', copy: 'task', 'project-card': 'Project' });
 
+  it('describes source, copy and plain-node deletion using the actual cascade plan', () => {
+    const { doc } = fixture();
+    expect(cmd.deletionLabel(doc, 'task')).toBe('Удалить источник и все копии');
+    expect(cmd.deletionLabel(doc, 'card')).toBe('Удалить эту копию');
+    expect(cmd.deletionLabel(doc, 'unrelated')).toBe('Удалить');
+    const plan = cmd.deletionPlan(doc, 'task');
+    expect([...plan.sources]).toEqual(['task']);
+    expect([...plan.deleting].sort()).toEqual(['task', 'child', 'card', 'copy'].sort());
+    expect(cmd.deletionPlan(doc, 'Project').sources.size).toBe(2);
+    checkInvariants(doc);
+  });
+
   it('deletes every physical copy at any depth, including completed tasks; a mirrored project just stops showing the child', () => {
     const { doc, ctx, rows, run } = fixture();
     run(() => cmd.toggleTask(ctx, ['task']));

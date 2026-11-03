@@ -3,7 +3,8 @@ import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseAll, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
-import { invert, newId, type Doc } from '../model/doc';
+import { invert, newId, TRASH, type Doc } from '../model/doc';
+import { deletionPlan } from '../model/commands';
 import { clock } from '../model/clock';
 import { LINK_RE, plainText, toggleFormat } from '../model/format';
 import { History, focusAfter, type HistoryEntry } from '../model/history';
@@ -323,7 +324,7 @@ export class Outliner {
         if (!this.readOnly && !this.collected && (!this.syncing() || this.synced)) {
           const dated = ops.flatMap((op) => (op.t === 'setText' || op.t === 'setNote') && (op.from.includes('@') || op.to.includes('@')) ? [op.id] : []);
           if (dated.length) queueMicrotask(() => {
-            this.scaffold(() => { this.backlogged = moveTodayMirrors(this.doc, new Date(), dated).map((id) => this.doc.origin(id)); });
+            this.scaffold(() => { this.backlogged = this.routeToday(dated).map((id) => this.doc.origin(id)); });
             this.tellBacklog();
           });
         }
@@ -337,6 +338,11 @@ export class Outliner {
   setFocus(f: FocusRequest | null): void {
     if (this.retitled && (!f || !this.doc.has(nodeOf(f.id)) || this.contentOf(f.id).id !== this.retitled.id)) this.settleTitle();
     batch(() => {
+      const previous = this.focus();
+      if (previous && previous.id !== f?.id && this.rows.retainedEditor(previous.id)) {
+        this.rows.releaseEditor();
+        this.syncRows();
+      }
       if (f && this.selection()) this.setSelectionSignal(null);
       this.setFocusSignal(f);
     });
@@ -625,7 +631,7 @@ export class Outliner {
       this.scaffold(() => {
         migrateProjectCards(this.doc);
         this.backlogged = toBacklog(this.doc, openProjectTasks(this.doc)).added;
-        this.backlogged.push(...moveTodayMirrors(this.doc).map((id) => this.doc.origin(id)));
+        this.backlogged.push(...this.routeToday().map((id) => this.doc.origin(id)));
       });
       this.tellBacklog(true);
     };
@@ -1304,8 +1310,13 @@ export class Outliner {
   deleteRows(keys: RowKey[], elsewhere = false): void {
     const rows = keys.filter((k) => this.rows.indexOf(k) >= 0);
     if (this.readOnly || !rows.length) return;
-    let count = 0;
-    for (const k of new Set(rows.map((r) => nodeOf(r)))) this.doc.walk(k, () => void count++);
+    const sources = new Set<NodeId>();
+    const families = new Map<NodeId, NodeId | null>();
+    for (const k of new Set(rows.map((r) => nodeOf(r)))) {
+      const plan = deletionPlan(this.doc, k);
+      for (const source of plan.sources) sources.add(source);
+      for (const id of plan.deleting) families.set(id, this.doc.get(id).paraOrigin ?? null);
+    }
     const cur = this.focus();
     let keep: Focus | undefined;
     if (elsewhere && cur && 'caret' in cur) {
@@ -1322,8 +1333,22 @@ export class Outliner {
       return elsewhere ? keep : focus;
     }, keep);
     if (!ops.length) return;
+    const deleted = new Set<NodeId>();
+    for (const op of ops) if (op.t === 'move' && op.to.parent === TRASH) {
+      this.doc.walk(op.id, (n) => { if (!this.doc.inOutline(n.id)) deleted.add(n.id); });
+    }
+    const count = deleted.size;
+    const sourceCount = [...sources].filter((id) => deleted.has(id)).length;
+    const copies = [...deleted].filter((id) => {
+      const source = families.get(id);
+      return source != null && source !== id && sources.has(source);
+    }).length;
+    const message = sourceCount > 0
+      ? sourceCount === 1 ? `Удалён источник и ${copies} ${plural(copies, 'копия', 'копии', 'копий')}`
+        : `Удалено: ${sourceCount} ${plural(sourceCount, 'источник', 'источника', 'источников')} и ${copies} ${plural(copies, 'копия', 'копии', 'копий')}`
+      : count > 1 ? `Удалено: ${count} ${plural(count, 'пункт', 'пункта', 'пунктов')}` : 'Удалено';
     this.notify(
-      count > 1 ? `Удалено: ${count} ${plural(count, 'пункт', 'пункта', 'пунктов')}` : 'Удалено',
+      message,
       { label: 'Отменить', run: () => this.takeBack(ops, 'Удаление отменено') },
       null,
       count > 1 ? DELETE_TOAST_MS : undefined,
@@ -1630,12 +1655,23 @@ export class Outliner {
     const targets = backlogTargets(this.doc, seen);
     const { added, known } = toBacklog(this.doc, targets);
     const changed = seen.flatMap((op) => op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone' ? [op.id] : []);
-    const moved = moveTodayMirrors(this.doc, new Date(), changed);
+    const moved = this.routeToday(changed);
     this.backlogged = [...new Set([...added, ...moved.map((id) => this.doc.origin(id))])];
     // Said only for a task that appeared (a checkbox set, a task inserted), not
     // for one moved about inside its project: Tab or Alt+Shift+↑ would say it each time.
     const appeared = known.length ? new Set(backlogTargets(this.doc, seen.filter((op) => op.t !== 'move')).map((t) => this.doc.origin(t))) : null;
     this.onBoard = appeared ? known.filter((k) => appeared.has(k)) : [];
+  }
+
+  private routeToday(origins?: readonly NodeId[]): NodeId[] {
+    return moveTodayMirrors(this.doc, new Date(), origins, (id) => {
+      const f = this.focus();
+      if (f) {
+        const parts = f.id.split('/');
+        const at = parts.indexOf(id);
+        if (at >= 0) this.rows.retainEditor(parts.slice(0, at + 1).join('/'), f.id);
+      }
+    });
   }
 
   /** The last command's new tasks already held by the Kanban: told once the command is done. */

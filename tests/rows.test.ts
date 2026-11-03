@@ -8,6 +8,26 @@ import type { Op } from '../src/model/types';
 import { dump, dumpRows, rng, setup } from './helpers';
 
 describe('VisibleRows', () => {
+  it('keeps an editor visually in its old column while the document moves immediately; release and undo clear the temporary row', () => {
+    const { doc, rows, run } = setup(['Backlog', '  card', 'Today']);
+    rows.setTop('Backlog');
+    rows.retainEditor('card');
+    const move: Op = { t: 'move', id: 'card', from: { parent: 'Backlog', order: doc.get('card').order }, to: { parent: 'Today', order: doc.orderAt('Today', 0) } };
+    run(() => doc.apply(move));
+    expect(doc.get('card').parent).toBe('Today');
+    expect(rows.ids).toEqual(['card']);
+    rows.setFilter(null);
+    expect(rows.ids).toEqual(['card']);
+    run(() => doc.apply(invert(move)));
+    expect(rows.retainedEditor('card')).toBe(false);
+    rows.retainEditor('card');
+    run(() => doc.apply(move));
+    rows.releaseEditor();
+    expect(rows.ids).toEqual([]);
+    rows.setTop('Today');
+    expect(rows.ids).toEqual(['card']);
+    checkInvariants(doc);
+  });
   it('lists rows in pre-order and skips collapsed subtrees', () => {
     const { doc, rows } = setup(['a', '  b [+]', '    hidden', '  c', 'd']);
     expect(dumpRows(rows, doc)).toEqual(['a', '  b [+]', '  c', 'd']);

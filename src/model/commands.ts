@@ -84,10 +84,10 @@ function moveTo(doc: Doc, id: NodeId, parent: NodeId, index: number): void {
  * elsewhere stay whole (`handOver`), except for first sources born in PARA:
  * deleting those from PARA removes every physical copy, at any depth.
  */
-function remove(doc: Doc, id: NodeId): void {
-  if (!doc.inOutline(id)) return;
+export function deletionPlan(doc: Doc, id: NodeId): { roots: NodeId[]; deleting: Set<NodeId>; sources: Set<NodeId> } {
   // Collect physical copies before changing the tree; projections under project mirrors are not nodes.
   const targets = new Set<NodeId>();
+  const sources = new Set<NodeId>();
   const scan: [NodeId, boolean][] = [[id, false]];
   const inspected = new Map<NodeId, boolean>();
   while (scan.length) {
@@ -97,7 +97,9 @@ function remove(doc: Doc, id: NodeId): void {
     const n = doc.get(cur);
     for (const child of n.children) scan.push([child, cascade]);
     if (n.paraOrigin !== n.id || (!cascade && !doc.inPara(cur))) continue;
-    for (const copy of doc.copies(cur)) if (!targets.has(copy)) {
+    const copies = doc.copies(cur);
+    if (copies.length > 1) sources.add(cur);
+    for (const copy of copies) if (!targets.has(copy)) {
       targets.add(copy);
       scan.push([copy, true]);
     }
@@ -109,8 +111,20 @@ function remove(doc: Doc, id: NodeId): void {
   const deleting = new Set<NodeId>();
   doc.walk(id, (n) => deleting.add(n.id));
   for (const root of roots) doc.walk(root, (n) => deleting.add(n.id));
+  return { roots: [...roots, id], deleting, sources };
+}
+
+/** Explain the same deletion plan the command will execute. */
+export function deletionLabel(doc: Doc, id: NodeId): string {
+  if (deletionPlan(doc, id).sources.size) return 'Удалить источник и все копии';
+  return doc.isCopy(id) ? 'Удалить эту копию' : 'Удалить';
+}
+
+function remove(doc: Doc, id: NodeId): void {
+  if (!doc.inOutline(id)) return;
+  const { roots, deleting } = deletionPlan(doc, id);
   // Remove PARA sources before an outside-born parent can hand its children to a surviving copy.
-  for (const root of [...roots, id]) {
+  for (const root of roots) {
     if (!doc.inOutline(root)) continue;
     handOver(doc, root, deleting);
     const n = doc.get(root);
