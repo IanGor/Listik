@@ -1648,7 +1648,7 @@ test.describe('quick capture', () => {
     await page.keyboard.type('дописать потом');
     await page.keyboard.press('Enter');
     await page.locator('.toast').getByRole('button', { name: 'Inbox' }).click();
-    await expect(page.locator('.crumb.current')).toHaveText('Главная');
+    await expect(page.locator('.crumb.current')).toHaveText('Inbox');
     await expect(page.locator('.toast')).toHaveCount(0);
     await expect(editing(page)).toHaveText('дописать потом');
     await page.keyboard.type(': подробности');
@@ -2331,8 +2331,8 @@ test.describe('theme', () => {
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
-    // The switch lives in the menu, as everything but search and the places does: «Сегодня», Inbox, the menu.
-    await expect(page.locator('.topbar button')).toHaveCount(3);
+    // Theme stays in the menu; the header has Today, Home, capture and menu.
+    await expect(page.locator('.topbar button')).toHaveCount(4);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
     const dark = page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' });
