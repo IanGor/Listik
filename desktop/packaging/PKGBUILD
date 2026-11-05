@@ -1,0 +1,34 @@
+# Local source archive: generate with `npm run source` in desktop/.
+pkgname=listik
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Listik desktop with live Omarchy themes'
+arch=('x86_64' 'aarch64')
+url='https://iangor.github.io/Listik/'
+# The project has no license grant yet; this recipe is for local builds.
+license=()
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils' 'libdrm' 'mesa')
+makedepends=('nodejs>=22.12' 'npm')
+options=('!strip')
+source=("listik-desktop-$pkgver.tar.gz")
+sha256sums=('30832755859af7c276a576a89ef58a6a4b8e0a1084a0f7dacc5c731485ac8aec')
+
+build() {
+  cd "$srcdir/listik-desktop-$pkgver"
+  npm ci --ignore-scripts
+  npm run package
+}
+
+package() {
+  cd "$srcdir/listik-desktop-$pkgver"
+  local electron_arch=x64
+  [[ $CARCH == aarch64 ]] && electron_arch=arm64
+  install -dm755 "$pkgdir/opt/listik"
+  cp -a "dist/Listik-linux-$electron_arch/." "$pkgdir/opt/listik/"
+  chmod 755 "$pkgdir/opt/listik"
+  install -Dm755 packaging/listik "$pkgdir/usr/bin/listik"
+  install -Dm644 packaging/listik.desktop "$pkgdir/usr/share/applications/listik.desktop"
+  install -Dm644 icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/listik.png"
+  install -Dm644 "$pkgdir/opt/listik/LICENSE" "$pkgdir/usr/share/licenses/listik/Electron-LICENSE"
+  install -Dm644 "$pkgdir/opt/listik/LICENSES.chromium.html" "$pkgdir/usr/share/licenses/listik/LICENSES.chromium.html"
+}

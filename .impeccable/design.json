@@ -3,6 +3,7 @@
   "generatedAt": "2026-10-20T15:30:00+03:00",
   "title": "Design System: Listik",
   "extensions": {
+    "omarchy": { "source": "Electron bridge v1 / colors.toml", "policy": "Always follow Omarchy; no manual switch", "scope": "Color tokens only; preserve typography and layout" },
     "colorMeta": {
       "primary": { "role": "primary", "displayName": "Коралл Claude", "canonical": "#c96442" },
       "link": { "role": "primary", "displayName": "Терракотовые чернила", "canonical": "#a9583e" },

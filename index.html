@@ -27,6 +27,18 @@
         const font = localStorage.getItem('listik-font');
         if (font) document.documentElement.style.setProperty('--font-text', font);
       } catch {}
+      // The desktop palette takes priority over the browser's saved choice.
+      try {
+        const bridge = window.listikDesktop;
+        const state = bridge?.version === 1 ? bridge.getTheme() : null;
+        if (state?.version === 1 && state.managed === true) {
+          const palette = state.palette;
+          document.documentElement.dataset.theme = palette?.mode === 'light' ? 'light' : palette?.mode === 'dark' ? 'dark' : system;
+          for (const [token, color] of [['--canvas', palette?.colors?.background], ['--text', palette?.colors?.foreground]]) {
+            if (typeof color === 'string' && /^#[\da-f]{6}$/i.test(color)) document.documentElement.style.setProperty(token, color);
+          }
+        }
+      } catch {}
       }
     </script>
   </head>

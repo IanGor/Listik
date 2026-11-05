@@ -30,3 +30,10 @@ dist-ssr
 
 # Local design references (personal screenshots), not for the public repo
 Reference/
+
+# Desktop package output
+/desktop/dist/
+/desktop/packaging/src/
+/desktop/packaging/pkg/
+/desktop/packaging/*.pkg.tar.*
+/desktop/packaging/listik-desktop-*.tar.gz

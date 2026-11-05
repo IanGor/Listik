@@ -9,7 +9,7 @@ import type { Outliner } from './outliner';
 import { MOD, phone, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
-import { theme, toggleTheme } from './theme';
+import { theme, toggleTheme, omarchyManaged } from './theme';
 import { exportUsage } from './analytics';
 
 /**
@@ -169,6 +169,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <div class="menu-sep" role="separator" />
           </Show>
           {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}
+          <Show when={!omarchyManaged()}>
           <button data-action="Menu.7"
             type="button"
             role="menuitemcheckbox"
@@ -185,6 +186,7 @@ export function DocumentMenu(props: { o: Outliner }) {
               <CHECK />
             </Show>
           </button>
+          </Show>
           {/* Steps keep the menu open: the outline behind shows each size at once. */}
           <div class="menu-stepper" role="group" aria-label="Размер текста">
             <span class="menu-stepper-label">Размер текста</span>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Listik
+Comment=Outliner with live Omarchy themes
+Comment[ru]=Бесконечный список с темами Omarchy
+Exec=listik
+Icon=listik
+Terminal=false
+Type=Application
+Categories=Office;Utility;
+StartupWMClass=Listik

@@ -1,4 +1,5 @@
 import { createSignal } from 'solid-js';
+import { paletteToTokens, readDesktopTheme, type ThemeState } from './omarchy';
 
 export type Theme = 'light' | 'dark';
 
@@ -43,23 +44,53 @@ function picked(): Theme | null {
   return (t === 'light' || t === 'dark') && read(SYSTEM_KEY) === system() ? t : null;
 }
 
+let desktop: ThemeState | null = null;
+try {
+  if (window.listikDesktop?.version === 1) desktop = readDesktopTheme(window.listikDesktop.getTheme());
+} catch { /* An unsupported shell behaves like the web app. */ }
+const [omarchyManaged, setOmarchyManaged] = createSignal(desktop?.managed ?? false);
+export { omarchyManaged };
+
 const DARK_BAR = '#262624';
 const LIGHT_BAR = '#faf9f5';
 
 function apply(t: Theme): void {
   document.documentElement.dataset.theme = t;
   // The browser's and the installed app's bar, whatever the system says.
-  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = t === 'dark' ? DARK_BAR : LIGHT_BAR;
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = desktop?.managed && desktop.palette ? desktop.palette.colors.background : t === 'dark' ? DARK_BAR : LIGHT_BAR;
 }
 
-const [theme, setThemeSignal] = createSignal<Theme>(picked() ?? system());
-apply(theme());
+const [theme, setThemeSignal] = createSignal<Theme>(desktop?.managed ? desktop.palette?.mode ?? system() : picked() ?? system());
+let tokenNames: string[] = [];
+function applyDesktop(): void {
+  if (desktop?.managed && desktop.palette) {
+    const tokens = paletteToTokens(desktop.palette);
+    tokenNames = Object.keys(tokens);
+    for (const [key, value] of Object.entries(tokens)) document.documentElement.style.setProperty(key, value);
+  } else {
+    for (const key of tokenNames) document.documentElement.style.removeProperty(key);
+    tokenNames = [];
+  }
+  apply(theme());
+}
+applyDesktop();
+if (window.listikDesktop?.version === 1) {
+  window.listikDesktop.onTheme((value) => {
+    const next = readDesktopTheme(value);
+    if (!next) return;
+    desktop = next;
+    setOmarchyManaged(next.managed);
+    setThemeSignal(next.managed ? next.palette?.mode ?? system() : picked() ?? system());
+    applyDesktop();
+  });
+}
 
 /** The theme in effect. */
 export { theme };
 
 /** A pick in the menu: it holds until the system switches. Picking the system's own theme just follows it again. */
 export function setTheme(t: Theme): void {
+  if (omarchyManaged()) return;
   const s = system();
   write(KEY, t === s ? null : t);
   write(SYSTEM_KEY, t === s ? null : s);
@@ -72,6 +103,7 @@ export function setTheme(t: Theme): void {
  * button pressed); instant with reduced motion.
  */
 export function toggleTheme(from: DOMRect): void {
+  if (omarchyManaged()) return;
   const next = theme() === 'dark' ? 'light' : 'dark';
   if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return setTheme(next);
   const x = from.left + from.width / 2;
@@ -88,6 +120,10 @@ export function toggleTheme(from: DOMRect): void {
 
 // The system switched: the app follows, and a pick made before is let go.
 lightMedia?.addEventListener('change', () => {
+  if (omarchyManaged()) {
+    if (!desktop?.palette) { setThemeSignal(system()); apply(system()); }
+    return;
+  }
   write(KEY, null);
   write(SYSTEM_KEY, null);
   const t = system();
