@@ -871,3 +871,13 @@ LICENSE; рецепт предназначен для локальной сбо�
 `desktop/tests/*.test.cjs`, настоящий Electron в `desktop/tests/run-smoke.cjs`.
 Последний проверяет sandbox, отсутствие моста в iframe, смену темы,
 подключение к тестовому серверу и повторный запуск без сети.
+
+### Окно Electron и перезагрузка
+
+Удалённое меню Electron не регистрирует стандартные reload-ускорители.
+Main обрабатывает `before-input-event` по физическому `KeyR`: Ctrl+R → reload,
+Ctrl+Shift+R → reloadIgnoringCache. На локальной странице ошибки повторяется
+загрузка исходного сайта. Закрытие окна в Hyprland приводит к closed и
+window-all-closed → app.quit; фонового скрытия и tray нет. Проверка настоящего
+Electron: `desktop/tests/window-smoke.cjs` (перезагрузка, сохранение состояния,
+закрытие через действие Hyprland с проверкой выхода процесса).

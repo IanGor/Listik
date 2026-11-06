@@ -25,6 +25,14 @@ async function start({ site = APP_URL, profile, themeRoot } = {}) {
   });
   window.setMenu(null);
   const contents = window.webContents;
+  // Removing Electron's menu also removes its built-in reload accelerators.
+  contents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.control || input.alt || input.meta || input.code !== 'KeyR') return;
+    event.preventDefault();
+    if (!isAppURL(contents.getURL(), site)) void load();
+    else if (input.shift) contents.reloadIgnoringCache();
+    else contents.reload();
+  });
   ipcMain.on('listik:theme', (event) => {
     event.returnValue = isTrustedSender(event, contents, site) ? state : null;
   });

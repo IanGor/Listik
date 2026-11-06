@@ -1,6 +1,6 @@
 # Local source archive: generate with `npm run source` in desktop/.
 pkgname=listik
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc='Listik desktop with live Omarchy themes'
 arch=('x86_64' 'aarch64')
@@ -11,7 +11,7 @@ depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils' 'libdrm' 'mesa')
 makedepends=('nodejs>=22.12' 'npm')
 options=('!strip')
 source=("listik-desktop-$pkgver.tar.gz")
-sha256sums=('30832755859af7c276a576a89ef58a6a4b8e0a1084a0f7dacc5c731485ac8aec')
+sha256sums=('5849424431aff9b5fb37eb5c31c740fbcf228d999af85503972189e0aa69ac1e')
 
 build() {
   cd "$srcdir/listik-desktop-$pkgver"

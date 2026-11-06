@@ -33,7 +33,13 @@ async function main() {
     let page = await electron.firstWindow({ timeout: 15000 });
     await expect(page.getByRole('heading', { name: 'Не удалось открыть Listik' })).toBeVisible();
     assert.equal(await page.evaluate(() => typeof window.listikDesktop), 'undefined');
-    await page.getByRole('link', { name: 'Повторить' }).click();
+    const retried = page.waitForEvent('domcontentloaded');
+    await electron.evaluate(({ BrowserWindow }) => {
+      const wc = BrowserWindow.getAllWindows()[0].webContents;
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'R', modifiers: ['control'] });
+      wc.sendInputEvent({ type: 'keyUp', keyCode: 'R', modifiers: ['control'] });
+    });
+    await retried;
     await expect(page.getByRole('heading', { name: 'Не удалось открыть Listik' })).toBeVisible();
     preview = spawn(process.execPath, [join(repo, 'node_modules/vite/bin/vite.js'), 'preview', '--outDir', web, '--host', '127.0.0.1', '--port', '5271', '--strictPort'], { cwd: repo, stdio: 'ignore' });
     sync = spawn(process.execPath, [join(repo, 'server/index.js')], { cwd: repo, env: { ...process.env, LISTIK_DATA: join(root, 'sync'), LISTIK_PORT: '5272', LISTIK_ORIGINS: '*', LISTIK_ALLOW_CREATE: '1' }, stdio: 'ignore' });
