@@ -273,7 +273,7 @@ export function Outline(props: { o: Outliner }) {
   // without a place in the address (the installed app always is): today's
   // day, if there is the structure.
   const again = reloaded();
-  syncZoomWithHash(o, again);
+  syncZoomWithHash(o);
   const spot = again ? takeSpot() : null;
   const same = spot !== null && spot.zoom === o.zoom();
   if (again) {

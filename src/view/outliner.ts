@@ -3,7 +3,7 @@ import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
   addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
-import { appendTrees, collapseAll, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
+import { appendTrees, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, newId, TRASH, type Doc } from '../model/doc';
 import { deletionPlan } from '../model/commands';
 import { clock } from '../model/clock';
@@ -13,7 +13,7 @@ import { linkEnd, resolveLink, titleOf } from '../model/links';
 import { VisibleRows, contextOf, keepSet, nodeOf, type RowKey } from '../model/rows';
 import { TextIndex, findMatches, isEmptyQuery, normalize, parseQuery, type Query } from '../model/search';
 import { projectTags } from '../model/projects';
-import { backlogTargets, fillDayToday, findBacklog, findKanban, findToday, migrateProjectCards, moveTodayMirrors, openProjectTasks, todayMirrorOf, toBacklog } from '../model/kanban';
+import { backlogTargets, fillDayToday, findBacklog, findKanban, findToday, migrateProjectCards, moveTodayMirrors, openProjectTasks, toBacklog } from '../model/kanban';
 import { PendingTasks } from '../model/tasks';
 import { TagIndex, isSecret, searchable, tagText } from '../model/tags';
 import { timeOfDay } from '../model/time';
@@ -510,14 +510,10 @@ export class Outliner {
    * A search in progress is cleared: you went to a place found, so it shows
    * whole (a search started inside a zoom covers only that bullet). With
    * `keepSearch` (a crumb: up the path), the search stays and runs again
-   * over the new place, so its results show level after level. A bullet
-   * zoomed into opens folded: everything inside it, at any depth (the
-   * command `collapseAll`, no undo step), so the place reads as an overview.
-   * It stays folded as left; only a day's mirror of Today stays open: the day's
-   * list is what the day is entered for. `keepFolds` (a reload coming back to its place) shows it
-   * as it was.
+   * over the new place, so its results show level after level. Navigation
+   * preserves all fold states, including those under mirrors.
    */
-  zoomTo(key: RowKey | null, keepSearch = false, keepFolds = false): void {
+  zoomTo(key: RowKey | null, keepSearch = false): void {
     trackUsage('action.zoomTo');
     this.settleTitle();
     let id = key && nodeOf(key);
@@ -530,14 +526,6 @@ export class Outliner {
       this.rows.setTop(target ?? this.doc.root);
       this.setZoomSignal(target);
       if (this.query() || this.filter()) this.setQuery(keepSearch ? this.query() : '', true);
-      // Folded once the rows are the place's: a rebuild of only what is inside it, not of the list left.
-      if (target && !keepFolds) {
-        this.scaffold((ctx) => {
-          collapseAll(ctx, target);
-          const today = periodAt(this.doc, target)?.kind === 'day' ? todayMirrorOf(this.doc, target) : null;
-          if (today !== null && this.doc.get(today).collapsed) setCollapsed(ctx, today, false);
-        });
-      }
       this.syncRows();
       const cur = this.focus();
       if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);

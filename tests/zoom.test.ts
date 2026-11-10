@@ -49,7 +49,7 @@ describe('zoom', () => {
     expect(dumpRows(rows, doc)).toEqual(['b', '  c #x', 'e', '  d']);
   });
 
-  it('zooming in folds everything inside at any depth, the zoomed-in bullet and the rest as they were', () => {
+  it('explicit collapseAll folds everything inside at any depth, leaving the top and outside unchanged', () => {
     const { doc, rows, ctx, run } = setup(['a', '  b', '    c', '      d', '    e', '  f', '    g', 'h', '  i']);
     run(() => cmd.collapseAll(ctx, 'a'));
     expect(['a', 'b', 'c', 'f', 'h'].map((id) => doc.get(id).collapsed)).toEqual([false, true, true, true, false]);

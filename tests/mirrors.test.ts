@@ -523,7 +523,7 @@ describe('a mirror shows the subtree of its original', () => {
     expect(two.doc.get('b').collapsed).toBe(false);
   });
 
-  it('zooming in folds what mirrors inside show there only, not their original where it lives', () => {
+  it('explicit collapseAll folds mirror contents there only, leaving their original unchanged', () => {
     const { doc, ctx, rows, run } = mirrored(['day', '  m', '  x', '    y', 'project', '  b', '    c'], { m: 'project' });
     run(() => cmd.collapseAll(ctx, 'day'));
     expect(['m', 'x', 'project', 'b'].map((id) => doc.get(id).collapsed)).toEqual([true, true, false, false]);

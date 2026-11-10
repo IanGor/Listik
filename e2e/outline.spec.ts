@@ -670,12 +670,40 @@ test.describe('zoom', () => {
     await page.goForward();
     await expect(title(page)).toHaveText('Часть первая');
 
-    // Zooming in folds what is inside, and it stays folded.
+    // Going up preserves the branches we had open.
     await crumbs(page).filter({ hasText: 'Том первый' }).click();
     await expect(title(page)).toHaveText('Том первый');
+    expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+    await crumbs(page).filter({ hasText: 'Главная' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+  });
+
+  test('navigation preserves mixed fold states through clicks, keyboard, history and search', async ({ page }) => {
+    const row = (text: string) => page.locator('.row').filter({ has: page.locator('.text', { hasText: text }) }).first();
+    await row('Часть первая').locator('.toggle').click();
+    const folded = [DEMO[0], DEMO[1], DEMO[4], DEMO[5]];
+    expect(await outline(page)).toEqual(folded);
+    await row('Том первый').locator('.bullet').click();
+    expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+    await row('Часть первая').locator('.bullet').click();
+    expect(await outline(page)).toEqual([DEMO[2].trim(), DEMO[3].trim()]);
+    await edit(page, 'Eh bien');
+    await page.keyboard.press('Alt+ArrowLeft');
     expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
     await crumbs(page).filter({ hasText: 'Главная' }).click();
-    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], DEMO[4], DEMO[5]]);
+    expect(await outline(page)).toEqual(folded);
+    await page.goBack();
+    await expect(title(page)).toHaveText('Том первый');
+    expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+    await page.locator('.search').fill('шерер');
+    await expect(page.locator('.row .text', { hasText: 'шерер' })).toHaveCount(1);
+    await page.locator('.search').fill('');
+    await expect.poll(() => outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+    await row('Часть первая').locator('.toggle').click();
+    await crumbs(page).filter({ hasText: 'Главная' }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    await row('Том первый').locator('.bullet').click();
+    expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
   });
 
   test('the title scrolls away with the list; the path stays, ending at the bullet', async ({ page }) => {
@@ -786,10 +814,10 @@ test.describe('zoom', () => {
     // Out one level at a time.
     await page.keyboard.press('Alt+ArrowLeft');
     await expect(title(page)).toHaveText('Том первый');
-    // Zoomed into on the way: folded.
-    expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая (черновик)']);
+    // Zooming out preserves both branches, including the child just created.
+    expect(await outline(page)).toEqual([DEMO[1].trim(), '  ' + DEMO[2].trim(), '  ' + DEMO[3].trim(), 'Часть вторая (черновик)', '  первая мысль']);
     await page.keyboard.press('Alt+ArrowLeft');
-    expect(await outline(page)).toEqual([DEMO[0], DEMO[1], '  Часть вторая (черновик)', DEMO[5]]);
+    expect(await outline(page)).toEqual([...DEMO.slice(0, 4), '  Часть вторая (черновик)', '    первая мысль', DEMO[5]]);
   });
 
   test('Backspace takes out an empty first bullet under the title, the caret going to the title\'s end', async ({ page }) => {
@@ -865,7 +893,6 @@ test.describe('zoom', () => {
     await page.keyboard.press('Escape');
     await page.locator('.row', { hasText: /^Том первый/ }).first().locator('.bullet').click();
     await expect(title(page)).toHaveText('Том первый');
-    await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').click();
     await page.locator('.row .tag', { hasText: '#салон' }).click();
     await expect(page.locator('.crumbbar .count')).toHaveText('2 пункта');
     expect(await outline(page)).toEqual([DEMO[1].trim(), `  ${DEMO[2].trim()}`]);
@@ -993,25 +1020,24 @@ test('a click on a guide line folds the bullet whose line it is; the line lights
   expect(await outline(page)).toEqual(DEMO);
 });
 
-test('the button at the path bar\'s end opens the first level a zoom folded; again, it folds it back; the place\'s own crumb does nothing', async ({ page }) => {
+test('the level button folds and restores the first level; the current crumb does nothing', async ({ page }) => {
   await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
-  expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
+  const inside = DEMO.slice(1, 5).map((l) => l.slice(2));
+  expect(await outline(page)).toEqual(inside);
   const crumb = page.locator('.crumbs .crumb.current');
   await expect(crumb).toHaveText('Том первый');
   await crumb.click();
-  expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
-  const level = page.getByRole('button', { name: 'Свернуть первый уровень' });
-  await level.click();
-  expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
+  expect(await outline(page)).toEqual(inside);
+  const level = page.locator('.level-toggle');
   await level.click();
   expect(await outline(page)).toEqual(['Часть первая', 'Часть вторая']);
-  // At home, the same button.
+  await level.click();
+  expect(await outline(page)).toEqual(inside);
   await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
   await level.click();
   expect(await outline(page)).toEqual(['Том первый', 'Том второй']);
   await level.click();
-  // Opened again as they were: "Часть первая" stays as the zoom left it, folded.
-  expect(await outline(page)).toEqual(['Том первый', '  Часть первая', '  Часть вторая', 'Том второй']);
+  expect(await outline(page)).toEqual(DEMO);
 });
 
 test('"Главная" goes home with the search, and there leaves the search', async ({ page }) => {
@@ -1109,7 +1135,7 @@ test.describe('structure and calendar', () => {
     await expect(home).not.toHaveAttribute('aria-current', 'page');
   });
 
-  test('"Сегодня" opens today, folded but for its todo list; nothing comes in twice', async ({ page }) => {
+  test('"Сегодня" opens today with its fold states preserved; nothing comes in twice', async ({ page }) => {
     await page.locator('.today-button').click();
     await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
@@ -1121,9 +1147,9 @@ test.describe('structure and calendar', () => {
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
-    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
     expect(await outline(page)).toEqual(['#notes', '  утро', 'Today', HOURS]);
+    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
@@ -1131,7 +1157,7 @@ test.describe('structure and calendar', () => {
     await page.goto('/?db=e2e-calendar-fold');
     await expect(title(page)).toHaveText(today);
     const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
-    const level = page.getByRole('button', { name: 'Свернуть первый уровень' });
+    const level = page.locator('.level-toggle');
     await home.click();
     // PARA comes open: folded, nothing at the top is open, and the button opens every one.
     await page.locator('.row', { hasText: 'PARA' }).locator('.toggle').click();
@@ -1413,7 +1439,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
     await page.getByRole('button', { name: 'Следующий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(1)));
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(DAY);
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await page.getByRole('button', { name: 'Предыдущий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(-1)));
@@ -1522,7 +1548,7 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DAY);
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(DAY);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
@@ -1544,7 +1570,7 @@ test.describe('structure and calendar', () => {
     await expect(title(page)).toHaveText(today);
   });
 
-  test('a new document starts with it, on today; a new start folds the day, a reload stays where and as it was', async ({ page }) => {
+  test('a new document starts with it, on today; a new start and reload preserve the day\'s folds', async ({ page }) => {
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(DAY);
@@ -1553,12 +1579,13 @@ test.describe('structure and calendar', () => {
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', HOURS]);
     await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     await page.waitForTimeout(500);
     await page.reload();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));
@@ -3998,7 +4025,6 @@ test.describe('mirrors', () => {
 
   test('zoomed in, a tag inside a mirror finds what the mirror shows of its original', async ({ page }) => {
     await mirrorIntoSecond(page, 'Часть перв');
-    await page.locator('.row', { hasText: 'Часть первая' }).locator('.toggle').click();
     await page.locator('.tag', { hasText: '#салон' }).click();
     await expect(page.locator('.crumbbar .count')).toHaveText('1 пункт');
     expect(await outline(page)).toEqual(['Часть первая', '  ' + DEMO[2].trim()]);
@@ -4283,7 +4309,7 @@ test.describe('at scale', () => {
     await page.goto('/?sample=200000');
     await expect(page.locator('.row').first()).toBeVisible();
     await page.waitForTimeout(1000);
-    const ms = await page.getByRole('button', { name: 'Свернуть первый уровень' }).evaluate(async (el) => {
+    const ms = await page.locator('.level-toggle').evaluate(async (el) => {
       const started = performance.now();
       (el as HTMLElement).click();
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
