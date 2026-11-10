@@ -1580,13 +1580,6 @@ mark,
   color: var(--danger);
 }
 
-/* A new document's one empty bullet says what to do (an empty sheet gave no clue). */
-.window > .row:only-child .text:empty::before {
-  content: 'Пишите здесь · Enter — новый пункт · / — команды';
-  color: var(--faint);
-  pointer-events: none;
-}
-
 /* Between groups: a band across the whole menu, as in Apple's menus, not a hairline. */
 .menu-sep {
   flex: none;
