@@ -17,7 +17,7 @@ async function start({ site = APP_URL, profile, themeRoot } = {}) {
   const roots = [join(homedir(), '.local/state/omarchy/current'), join(homedir(), '.config/omarchy/current')];
   const root = themeRoot ?? roots.find(existsSync) ?? roots[0];
   let state = await readTheme(root);
-  const background = () => state.palette?.colors.background ?? (nativeTheme.shouldUseDarkColors ? '#262624' : '#faf9f5');
+  const background = () => state.palette?.colors.background ?? (nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff');
   window = new BrowserWindow({
     width: 1100, height: 800, minWidth: 360, minHeight: 400, show: false,
     title: 'Listik', backgroundColor: background(), icon: join(__dirname, 'icon.png'),

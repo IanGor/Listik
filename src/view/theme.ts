@@ -51,8 +51,8 @@ try {
 const [omarchyManaged, setOmarchyManaged] = createSignal(desktop?.managed ?? false);
 export { omarchyManaged };
 
-const DARK_BAR = '#262624';
-const LIGHT_BAR = '#faf9f5';
+const DARK_BAR = '#1c1c1e';
+const LIGHT_BAR = '#ffffff';
 
 function apply(t: Theme): void {
   document.documentElement.dataset.theme = t;

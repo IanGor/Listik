@@ -22,7 +22,7 @@ export function TopBar(props: { o: Outliner; navigation?: boolean }) {
       </Show>
       <div class="topbar-actions">
         <Show when={!props.navigation}><CaptureButton o={props.o} /></Show>
-        <DocumentMenu o={props.o} />
+        <Show when={!props.navigation}><DocumentMenu o={props.o} /></Show>
       </div>
     </header>
   );

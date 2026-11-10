@@ -423,7 +423,7 @@ export function Outline(props: { o: Outliner }) {
           {(id) => <Sketch o={o} id={id} />}
         </Show>
         <div class="main">
-          <Crumbs o={o} scrolled={scrollTop() > 0} />
+          <Crumbs o={o} scrolled={scrollTop() > 0} navigation={!phone() && !narrow()} />
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>

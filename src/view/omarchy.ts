@@ -71,6 +71,9 @@ export function paletteToTokens({ colors: c, mode }: Palette): Record<string, st
   const shadow = mode === 'light' ? '#00000020' : '#00000080';
   return {
     '--canvas': bg, '--surface': surface1, '--surface-2': surface2,
+    '--window': bg, '--material': surface1, '--material-solid': surface1,
+    '--popover': bg, '--popover-solid': bg, '--material-border': mix(bg, text, 0.15),
+    '--control-border': ink(mix(bg, text, 0.5)),
     '--text': text, '--muted': ink(mix(bg, text, 0.65)), '--faint': ink(mix(bg, text, 0.5)),
     '--hairline': mix(bg, text, 0.15), '--guide': mix(bg, text, 0.1), '--halo': surface(primary, 0.2),
     '--primary': primary, '--link': ink(c.blue ?? c.accent), '--chip': chip,

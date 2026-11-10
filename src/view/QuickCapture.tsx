@@ -2,6 +2,7 @@ import { Show, onMount } from 'solid-js';
 import { dateWordBefore } from '../model/dates';
 import { timeCommandBefore, timeOfDay, TIME_COMMAND } from '../model/time';
 import type { Outliner } from './outliner';
+import { touchCapable } from './screen';
 
 /**
  * Quick capture: one line over the outline for a thought that came up
@@ -38,6 +39,14 @@ function Line(props: { o: Outliner }) {
     o.closeCapture();
   };
 
+  const save = () => {
+    const text = input.value;
+    if (!text.trim()) return close();
+    o.captureDraft = '';
+    input.value = '';
+    o.capture(text);
+    o.closeCapture();
+  };
   const onKeyDown = (e: KeyboardEvent) => {
     // The line's own keys: none of them reaches the outline's.
     e.stopPropagation();
@@ -46,12 +55,7 @@ function Line(props: { o: Outliner }) {
       close();
     } else if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
-      const text = input.value;
-      if (!text.trim()) return close();
-      o.captureDraft = '';
-      input.value = '';
-      o.capture(text);
-      o.closeCapture();
+      save();
     }
   };
 
@@ -69,7 +73,7 @@ function Line(props: { o: Outliner }) {
   };
 
   return (
-    <div class="capture" role="dialog" aria-label="Запись в Inbox">
+    <div class="capture" role="dialog" aria-label="Запись в Inbox" onFocusOut={(e) => { if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) close(); }}>
       <svg class="capture-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M22 12h-6l-2 3h-4l-2-3H2" />
         <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
@@ -84,9 +88,12 @@ function Line(props: { o: Outliner }) {
         aria-label="Запись в Inbox"
         onKeyDown={onKeyDown}
         onInput={onInput}
-        onBlur={close}
+        onBlur={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.parentElement?.contains(e.relatedTarget)) close(); }}
       />
-      <span class="capture-hint" aria-hidden="true">Enter — записать · Esc</span>
+      <Show when={touchCapable()} fallback={<span class="capture-hint" aria-hidden="true">Enter — записать · Esc</span>}>
+        <button class="capture-save" type="button" onPointerDown={(e) => e.preventDefault()} onClick={save}>Записать</button>
+        <button class="capture-close" type="button" aria-label="Закрыть быструю заметку" onPointerDown={(e) => e.preventDefault()} onClick={close}>Закрыть</button>
+      </Show>
     </div>
   );
 }

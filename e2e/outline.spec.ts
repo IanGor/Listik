@@ -45,7 +45,7 @@ test('a button lights the instant it is pressed, not on release', async ({ page 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   // --surface-2 of the light theme, at once: no transition on the way in.
-  await expect(crumb).toHaveCSS('background-color', 'rgb(233, 226, 214)', { timeout: 100 });
+  await expect(crumb).toHaveCSS('background-color', 'rgb(223, 223, 229)', { timeout: 100 });
   await page.mouse.up();
 });
 
@@ -2469,8 +2469,8 @@ test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({
 
 test.describe('theme', () => {
   const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  const CREAM = 'rgb(250, 249, 245)';
-  const DARK = 'rgb(38, 38, 36)';
+  const LIGHT = 'rgb(255, 255, 255)';
+  const DARK = 'rgb(28, 28, 30)';
 
   test('follows the system; a pick holds until the system switches, a reload too; then the system leads again', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -2478,7 +2478,8 @@ test.describe('theme', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
     // Theme stays in the menu; the header has Today, Home, capture and menu.
-    await expect(page.locator('.topbar button')).toHaveCount(4);
+    await expect(page.locator('.navigation-sidebar .navigation-actions button')).toHaveCount(4);
+    await expect(page.locator('.crumbbar .menu-button')).toHaveCount(1);
     const menu = page.getByRole('button', { name: 'Меню документа' });
     await menu.click();
     const dark = page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' });
@@ -2486,7 +2487,7 @@ test.describe('theme', () => {
     await dark.click();
     // The switch runs inside a view transition: it lands on the next frame.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect.poll(() => background(page)).toBe(CREAM);
+    await expect.poll(() => background(page)).toBe(LIGHT);
     await menu.click();
     // The same item, unchecked: its name does not change with the theme.
     await expect(page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' })).toHaveAttribute('aria-checked', 'false');
@@ -2495,7 +2496,7 @@ test.describe('theme', () => {
     // The system is as it was: the pick holds, after a reload too.
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect.poll(() => background(page)).toBe(CREAM);
+    await expect.poll(() => background(page)).toBe(LIGHT);
 
     // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
@@ -2518,7 +2519,7 @@ test.describe('theme', () => {
       localStorage.setItem('listik-theme-system', 'dark');
     });
     await page.reload();
-    await expect.poll(() => background(page)).toBe(CREAM);
+    await expect.poll(() => background(page)).toBe(LIGHT);
   });
 
   test('a system that tells no theme gets the dark one', async ({ page }) => {
@@ -2539,12 +2540,12 @@ test.describe('top edge (iPadOS Home Screen app)', () => {
     const topbar = page.locator('.topbar');
     await expect(topbar).toHaveCSS('position', 'sticky');
     await expect(topbar).toHaveCSS('top', '0px');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(250, 249, 245)');
-    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     expect((await topbar.boundingBox())!.width).toBe(page.viewportSize()!.width);
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(28, 28, 30)');
   });
 });
 
@@ -4573,6 +4574,8 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
 
   for (const pointer of ['touch', 'pen'] as const) {
     test(`the fold arrow receives ${pointer} presses; the dot still zooms`, async ({ page }) => {
+      // Raw CDP coordinates do not wait for unobstructed targets: put away the overlay first.
+      await page.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
       const row = page.locator('.row', { hasText: 'Том первый' });
       const arrow = row.locator('.toggle');
       const dot = row.locator('.bullet');
@@ -4638,7 +4641,7 @@ test.describe('navigation sidebar', () => {
     await page.screenshot({ path: '/tmp/listik-sidebar-desktop.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(sidebar.locator('.home-button')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await expect(sidebar.locator('.home-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: '/tmp/listik-sidebar-dark.png' });
     await page.locator('.zoom-title').click();
     await page.keyboard.press('Control+End');
@@ -4786,7 +4789,7 @@ test.describe('sidebar favorites', () => {
     await page.screenshot({ path: '/tmp/listik-favorites.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.screenshot({ path: '/tmp/listik-favorites-dark.png' });
     await star.click();
     await expect(favorites.getByRole('button', { name: /^Открыть ноду/ })).toHaveCount(0);
@@ -4840,5 +4843,89 @@ test.describe('sidebar favorites', () => {
     await page.locator('.searchbar .star').click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('listik-saved-searches')!));
     expect(saved).toHaveLength(499);
+  });
+});
+
+test.describe('Apple HIG interface', () => {
+  test('document menu supports keyboard opening, arrows, boundaries and focus restoration', async ({ page }) => {
+    const trigger = page.getByRole('button', { name: 'Меню документа', exact: true });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const items = page.locator('.menu button:visible');
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(items.last()).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(items.last()).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('compact surface fits its controls and header actions share the path bar', async ({ page }) => {
+    await page.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
+    const surface = (await page.locator('.navigation-surface').boundingBox())!;
+    expect(surface.height).toBeLessThan(340);
+    await expect(page.locator('.crumbbar .menu-button')).toBeVisible();
+    await expect(page.locator('.topbar .menu-button')).toHaveCount(0);
+    await page.setViewportSize({ width: 820, height: 1000 });
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    const side = page.locator('.navigation-sidebar');
+    await expect(side).toHaveClass(/overlay/);
+    const overlap = await page.locator('.navigation-heading').evaluate(el => {
+      const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + 10, r.y + r.height / 2));
+    });
+    expect(overlap).toBe(true);
+  });
+
+  test('iPad with a fine primary pointer retains touch targets and capture saves by button', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1194, height: 834 }, hasTouch: true });
+    const p = await context.newPage();
+    await p.goto('/?demo');
+    await p.locator('.row').first().waitFor();
+    await p.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await p.locator('input.search').fill('#салон');
+    for (const locator of [p.locator('.searchbar .star'), p.locator('.searchbar .clear'), p.locator('.menu-button'), p.locator('.level-toggle')]) {
+      const box = (await locator.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44); expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await p.locator('input.search').press('Escape');
+    await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
+    await p.locator('.capture-input').fill('Заметка пальцем');
+    await p.getByRole('button', { name: 'Записать', exact: true }).click();
+    await expect(p.locator('.capture')).toHaveCount(0);
+    await expect(p.locator('.row .text', { hasText: /^Заметка пальцем$/ })).toHaveCount(1);
+    await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
+    await p.locator('.capture-input').fill('Черновик');
+    await p.getByRole('button', { name: 'Закрыть быструю заметку' }).click();
+    await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
+    await expect(p.locator('.capture-input')).toHaveValue('Черновик');
+    await p.locator('.capture-input').fill('  ');
+    await p.getByRole('button', { name: 'Записать', exact: true }).click();
+    await expect(p.locator('.capture')).toHaveCount(0);
+    await expect(p.locator('.row .text', { hasText: /^Заметка пальцем$/ })).toHaveCount(1);
+    await context.close();
+  });
+
+  test('materials have opaque accessibility fallbacks and high contrast keeps selection visible', async ({ page }) => {
+    const session = await page.context().newCDPSession(page);
+    await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-transparency', value: 'reduce' }] });
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(245, 245, 247)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
+    await session.detach();
+    await page.emulateMedia({ contrast: 'more', reducedMotion: 'reduce' });
+    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(245, 245, 247)');
+    await expect(page.locator('.row .text').first()).toHaveCSS('color', 'rgb(0, 0, 0)');
+    await page.emulateMedia({ forcedColors: 'active' });
+    await expect(page.locator('.navigation-surface')).toHaveCSS('box-shadow', 'none');
+    await expect(page.locator('.navigation-sidebar .home-button')).toHaveAttribute('aria-current', 'page');
   });
 });

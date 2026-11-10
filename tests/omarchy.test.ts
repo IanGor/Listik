@@ -14,7 +14,7 @@ describe('Omarchy bridge and palette', () => {
       const tokens = paletteToTokens({ mode, colors: { background, foreground, accent: '#888888', red: '#999999', green: '#666666' } });
       expect(tokens['--canvas']).toBe(background);
       for (const name of ['--text', '--muted', '--faint', '--primary', '--link', '--tag', '--bold', '--italic', '--danger']) {
-        for (const surface of ['--canvas', '--surface', '--surface-2', '--selection', '--hit']) {
+        for (const surface of ['--canvas', '--surface', '--surface-2', '--selection', '--hit', '--material', '--popover']) {
           expect(contrast(tokens[name], tokens[surface])).toBeGreaterThanOrEqual(4.5);
         }
       }

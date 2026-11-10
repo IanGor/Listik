@@ -60,6 +60,7 @@ export function watchTablet(): void {
  */
 export function watchPointer(): void {
   const root = document.documentElement;
+  root.classList.toggle('touch-capable', touchCapable());
   const seen = (e: PointerEvent) => root.classList.toggle('mouse', e.pointerType === 'mouse');
   addEventListener('pointermove', seen, { capture: true, passive: true });
   addEventListener('pointerdown', seen, { capture: true, passive: true });

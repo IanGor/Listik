@@ -1,7 +1,6 @@
 /*
- * Layout after Workflowy, colours from Claude's palette, a writing column
- * after iA Writer. Structure is felt, not seen (Linear): hairlines are soft,
- * depth comes from small lightness steps, coral marks state only.
+ * A writing column with semantic light/dark surfaces. Navigation materials
+ * follow Apple HIG layering; the document stays opaque and coral marks state.
  *
  * Every colour token holds its light and dark value: `light-dark()` resolves
  * them by `color-scheme`, set by `data-theme` (view/theme.ts: the system's
@@ -10,36 +9,44 @@
  */
 :root {
   color-scheme: light dark;
+  /* Semantic web materials: the document stays opaque; only chrome blurs. */
+  --window: light-dark(#f5f5f7, #141416);
+  --material-solid: light-dark(#f5f5f7, #242426);
+  --material: light-dark(rgb(245 245 247 / .90), rgb(36 36 38 / .92));
+  --popover-solid: light-dark(#fff, #2c2c2e);
+  --popover: light-dark(rgb(255 255 255 / .96), rgb(44 44 46 / .96));
+  --material-border: light-dark(rgb(29 29 31 / .12), rgb(245 245 247 / .16));
+  --control-border: light-dark(#818189, #92929a);
+  --material-blur: 20px;
+  --popover-blur: 24px;
+  --control-radius: 10px;
+  --panel-radius: 18px;
 
-  /* Dark after Reference/color_pallete.png: a neutral graphite instead of
-     the earlier brown-black; light keeps Claude's cream, with the same accents. */
-  --canvas: light-dark(#faf9f5, #262624);
+  /* Neutral backgrounds with a limited, adaptive coral accent. */
+  --canvas: light-dark(#fff, #1c1c1e);
   /* Raised surfaces, one step up: inputs, the edited row, chips. */
-  --surface: light-dark(#f2ede4, #2f2f2c);
+  --surface: light-dark(#ebebef, #303034);
   /* Pressed / hovered surfaces, one more step. */
-  --surface-2: light-dark(#e9e2d6, #393936);
-  --text: light-dark(#1f1e1c, #f0eee6);
-  --muted: light-dark(#6c6a64, #a3a29c);
-  --faint: light-dark(#8e8b82, #7c7b75);
-  --hairline: light-dark(#e6dfd8, #3a3a37);
-  --guide: light-dark(#e3dcd2, #353532);
-  --halo: light-dark(#e6ddcf, #42423e);
-  /* Coral: bullets, caret, focus, selection. A step deeper on cream, so the
-     dots hold 3.7:1 there (4.9:1 on graphite). Tag text is darker on cream
-     and lighter on dark, for contrast. */
-  --primary: light-dark(#c96442, #d97757);
-  --link: light-dark(#a9583e, #e3997e);
-  --chip: light-dark(rgb(217 119 87 / 0.1), rgb(217 119 87 / 0.16));
+  --surface-2: light-dark(#dfdfe5, #3b3b40);
+  --text: light-dark(#1d1d1f, #f5f5f7);
+  --muted: light-dark(#54545b, #b8b8c0);
+  --faint: light-dark(#606068, #b0b0ba);
+  --hairline: light-dark(rgb(29 29 31 / .14), rgb(245 245 247 / .18));
+  --guide: light-dark(#dddde3, #3c3c42);
+  --halo: light-dark(#dcdce2, #48484e);
+  /* Coral marks actions/state; text and controls retain solid foregrounds. */
+  --primary: light-dark(#a43d23, #f19b7f);
+  --link: light-dark(#a43d23, #f19b7f);
+  --chip: light-dark(rgb(164 61 35 / .10), rgb(241 155 127 / .14));
   /* #Tags and @tags: teal, coral's complement, so they part from [[links]]
-     and web addresses (coral) and from bold (blue) and italic (olive). A step
-     darker on cream: 5:1 on its chip there, 7:1 on graphite. */
-  --tag: light-dark(#28706a, #7cc2b8);
-  --tag-chip: light-dark(rgb(40 112 106 / 0.1), rgb(124 194 184 / 0.14));
-  --tag-chip-strong: light-dark(rgb(40 112 106 / 0.2), rgb(124 194 184 / 0.26));
-  /* A tag on its stronger chip (the active filter): a step deeper, 4.5:1 there (--tag gave 4.2:1). */
-  --tag-on-strong: light-dark(#1f5a55, #93d0c6);
+     and web addresses (coral) and from bold (blue) and italic (olive). */
+  --tag: light-dark(#17645c, #87d6c7);
+  --tag-chip: light-dark(rgb(23 100 92 / .08), rgb(135 214 199 / .10));
+  --tag-chip-strong: light-dark(rgb(23 100 92 / .16), rgb(135 214 199 / .18));
+  /* A separate foreground for the active tag filter. */
+  --tag-on-strong: light-dark(#124e47, #a6e8dd);
   /* Text on the coral (a primary button). */
-  --on-primary: light-dark(#fff, #fff);
+  --on-primary: light-dark(#fff, #1c1c1e);
   /* The marker's own colour, opaque, for its swatch among the sketch tools. */
   --marker-swatch: light-dark(rgb(240 178 80), rgb(232 165 90));
   --hit: light-dark(rgb(232 165 90 / 0.34), rgb(232 165 90 / 0.22));
@@ -48,13 +55,13 @@
   /* Cornell cue column: visible against the sheet, with contrasting pen ink. */
   --sketch-margin: light-dark(#dcebe7, #344e49);
   /* A destructive action in a menu (RowMenu.tsx), red as Apple sets it apart. */
-  --danger: light-dark(#c0392b, #ff6b5e);
+  --danger: light-dark(#b42318, #ffb4ab);
   /* **Bold** reads blue, *italic* green (Reference/color_pallete.png); a step
      darker on cream, for contrast. */
-  --bold: light-dark(#2f6497, #8cb4dc);
-  --italic: light-dark(#55702f, #a3b886);
-  --ring: rgb(217 119 87 / 0.22);
-  --selection: rgb(217 119 87 / 0.24);
+  --bold: light-dark(#285b8f, #a8cbf0);
+  --italic: light-dark(#48642d, #b7d59a);
+  --ring: light-dark(rgb(164 61 35 / .24), rgb(241 155 127 / .32));
+  --selection: light-dark(rgb(164 61 35 / .18), rgb(241 155 127 / .24));
   --shadow: light-dark(0 1px 2px rgb(31 30 28 / 0.06), 0 1px 2px rgb(0 0 0 / 0.3));
   --shadow-pop: light-dark(0 12px 32px rgb(31 30 28 / 0.12), 0 12px 32px rgb(0 0 0 / 0.5));
   /* What dims the page under a dialog or the places line. */
@@ -423,8 +430,11 @@ kbd {
   overscroll-behavior: contain;
   padding: 0 4px 4px;
   font-size: 14px;
-  background: var(--canvas);
-  border: 1px solid var(--hairline);
+  background: var(--popover-solid);
+  background: var(--popover);
+  backdrop-filter: blur(var(--popover-blur));
+  -webkit-backdrop-filter: blur(var(--popover-blur));
+  border: 1px solid var(--material-border);
   border-radius: 12px;
   box-shadow: var(--shadow-pop);
 }
@@ -1447,8 +1457,11 @@ mark,
   overflow-y: auto;
   padding: 6px;
   font-size: 15px;
-  background: var(--canvas);
-  border: 1px solid var(--hairline);
+  background: var(--popover-solid);
+  background: var(--popover);
+  backdrop-filter: blur(var(--popover-blur));
+  -webkit-backdrop-filter: blur(var(--popover-blur));
+  border: 1px solid var(--material-border);
   border-radius: 12px;
   box-shadow: var(--shadow-pop);
 }
@@ -3349,30 +3362,30 @@ body.is-dragging * {
 }
 
 /* --- Desktop/iPad navigation: a floating surface with independent tree folds. --- */
-.has-navigation .topbar.with-navigation {
-  height: 18px;
-  min-height: 18px;
-  border: 0;
-  background: var(--canvas);
-  padding: 0;
+.has-navigation .topbar.with-navigation { height: 0; min-height: 0; border: 0; padding: 0; }
+.has-navigation .workspace { position: relative; padding: 8px; gap: 12px; background: var(--window); }
+.has-navigation .main { background: var(--canvas); border-radius: var(--panel-radius); }
+.has-navigation .crumbbar {
+  max-width: none;
+  min-height: 54px;
+  padding: 6px 14px;
+  gap: 6px;
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+  background: var(--material-solid);
+  background: var(--material);
+  backdrop-filter: blur(var(--material-blur));
+  -webkit-backdrop-filter: blur(var(--material-blur));
   z-index: 28;
 }
-.topbar.with-navigation .topbar-actions {
-  position: absolute;
-  top: 10px;
-  right: 14px;
-  border-radius: 24px;
-  background: var(--canvas);
-}
-.has-navigation .workspace { position: relative; padding: 0 8px 8px; gap: 8px; }
-.has-navigation .crumbbar { padding-right: 58px; }
+.has-navigation .crumbbar > .menu-anchor { margin-left: 10px; flex: none; }
+.has-navigation .crumbbar :is(.icon-button, .level-toggle, .sketch-toggle) { border: 0; background: none; border-radius: var(--control-radius); }
 .navigation-sidebar, .navigation-sidebar * { box-sizing: border-box; }
 .navigation-sidebar {
   flex: 0 0 64px;
   width: 64px;
   min-height: 0;
   position: relative;
-  z-index: 22;
+  z-index: 30;
   font-family: var(--font-ui);
   font-size: 14px;
 }
@@ -3384,10 +3397,11 @@ body.is-dragging * {
   min-height: 0;
   padding: 8px;
   border: 1px solid var(--hairline);
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--text) 5%, transparent);
-  backdrop-filter: blur(18px);
+  border-radius: var(--panel-radius);
+  background: var(--material-solid);
+  background: var(--material);
+  backdrop-filter: blur(var(--material-blur));
+  -webkit-backdrop-filter: blur(var(--material-blur));
 }
 .navigation-sidebar.overlay.expanded .navigation-surface {
   position: absolute;
@@ -3395,6 +3409,9 @@ body.is-dragging * {
   width: min(300px, calc(100vw - 86px));
   box-shadow: var(--shadow-pop);
 }
+.navigation-sidebar:not(.expanded) .navigation-surface { height: auto; }
+.navigation-sidebar.expanded .navigation-actions :is(.place, .icon-button) { background: none; border-radius: var(--control-radius); }
+.navigation-sidebar.expanded .navigation-actions .place[aria-current="page"] { background: var(--chip); }
 .navigation-head { display: flex; flex: none; align-items: center; gap: 8px; min-height: 42px; }
 .navigation-heading { font-weight: 600; font-size: 15px; color: var(--text); }
 .navigation-toggle { flex: none; width: 42px; height: 42px; border-radius: 14px; }
@@ -3424,14 +3441,14 @@ body.is-dragging * {
 .navigation-actions .navigation-capture { order: 3; }
 .navigation-actions .place-icon,
 .navigation-capture svg { flex: 0 0 20px; }
-.navigation-actions .place[aria-current="page"] { color: var(--primary); background: var(--chip); }
+.navigation-actions .place[aria-current="page"] { color: var(--text); background: var(--chip); }
 :where(:root.mouse) .navigation-actions button:hover { color: var(--text); background: var(--surface-2); }
 .navigation-sidebar.expanded .navigation-search-button { display: none; }
 .navigation-search { display: none; flex: none; position: relative; margin: 14px 0 4px; }
 .navigation-search.visible { display: block; }
 .navigation-search .searchbar { width: 100%; height: 42px; gap: 7px; padding: 0 8px; margin: 0; }
 .navigation-search .searchbar kbd { display: none; }
-.navigation-search .search { min-width: 0; font-size: 14px; }
+.navigation-search .search { min-width: 0; font-size: 15px; }
 .navigation-search .searchbar .star { flex: none; width: 24px; }
 .navigation-search .search-menu { z-index: 31; left: 0; right: 0; max-height: min(420px, 55vh); }
 .navigation-sidebar:not(.expanded) .navigation-search.visible {
@@ -3446,7 +3463,7 @@ body.is-dragging * {
   box-shadow: var(--shadow-pop);
   background: var(--surface);
 }
-.navigation-section-label { flex: none; padding: 18px 9px 9px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.navigation-section-label { flex: none; padding: 12px 9px 6px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .navigation-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; }
 .navigation-tree { position: relative; min-width: 0; }
 .navigation-row {
@@ -3484,14 +3501,16 @@ body.is-dragging * {
 .navigation-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.4; }
 .navigation-mirror { color: var(--muted); font-size: 12px; }
 .navigation-empty { padding: 12px 8px; color: var(--muted); font-size: 13px; }
-.has-navigation:has(.touch-navigation) .topbar.with-navigation { height: 48px; min-height: 48px; }
+/* Standalone iPad window buttons occupy a reserved top-left strip. */
+.has-navigation .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
+.has-navigation:has(.touch-navigation) .workspace { padding-top: max(8px, var(--controls-left, 0px), env(safe-area-inset-top)); }
 .touch-navigation .navigation-actions .place,
 .touch-navigation .navigation-capture .icon-button,
 .touch-navigation .navigation-toggle { min-height: 44px; height: 44px; }
 .touch-navigation .navigation-toggle { width: 44px; }
 .touch-navigation .navigation-disclosure { flex-basis: 44px; }
 @media (prefers-reduced-transparency: reduce) {
-  .navigation-surface { background: var(--surface); backdrop-filter: none; }
+  :root { --material: var(--material-solid); --popover: var(--popover-solid); --material-blur: 0px; --popover-blur: 0px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .navigation-sidebar * { transition: none !important; animation: none !important; }
@@ -3518,23 +3537,72 @@ body.is-dragging * {
 .node-favorite:disabled { cursor: default; }
 :where(:root.mouse) .node-favorite:not(:disabled):hover { background: var(--surface); }
 .navigation-tree-heading { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 4px; }
-.navigation-tree-heading .navigation-section-label { padding-top: 14px; }
+.navigation-tree-heading .navigation-section-label { padding-top: 8px; }
 .navigation-collapse-all { display: grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
 .navigation-collapse-all:disabled { opacity: .35; cursor: default; }
 :where(:root.mouse) .navigation-collapse-all:not(:disabled):hover { background: var(--surface-2); }
 .touch-navigation .navigation-collapse-all { width: 44px; height: 44px; }
 .sidebar-favorites { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; max-height: 34%; }
-.sidebar-favorites > .navigation-section-label { padding: 14px 9px 0; }
+.sidebar-favorites > .navigation-section-label { padding: 10px 9px 0; }
 .favorite-scroll { min-height: 0; max-height: min(25vh, 220px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
 .favorite-list { position: relative; }
 .favorite-entry { position: absolute; left: 0; right: 0; }
-.favorite-group { display: flex; align-items: center; height: 100%; padding: 0 10px; color: var(--muted); font-size: 11px; }
+.favorite-group { display: flex; align-items: center; height: 100%; padding: 0 10px; color: var(--muted); font-size: 12px; }
 .favorite-link { display: flex; align-items: center; width: 100%; height: 100%; gap: 9px; padding: 2px 10px; border: 0; border-radius: 9px; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
 .favorite-link > svg { flex: none; color: var(--muted); }
-.favorite-link[aria-current="page"] { color: var(--primary); background: var(--chip); }
+.favorite-link[aria-current="page"] { color: var(--text); background: var(--chip); }
 .favorite-link[aria-current="page"] > svg { color: var(--primary); }
 :where(:root.mouse) .favorite-link:hover { background: var(--surface-2); }
 .favorite-caption { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
 .favorite-caption > span, .favorite-caption small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.favorite-caption small { color: var(--muted); font-size: 10px; }
+.favorite-caption > span { line-height: 1.3; }
+.favorite-caption small { color: var(--muted); font-size: 12px; line-height: 1.2; }
 .saved-search-run { width: 100%; }
+
+/* Touch capability persists with a connected trackpad. */
+:root.touch-capable :is(.crumbbar .icon-button, .level-toggle, .sketch-toggle, .day-step, .topbar .icon-button) { width: 44px; height: 44px; }
+:root.touch-capable .crumb { min-height: 44px; box-sizing: border-box; }
+:root.touch-capable .searchbar { min-height: 48px; }
+:root.touch-capable .searchbar :is(.star, .clear) { width: 44px; height: 44px; flex: 0 0 44px; }
+:root.touch-capable .navigation-search .searchbar { gap: 2px; padding-inline: 6px; }
+:root.touch-capable .menu button { min-height: 44px; }
+:root.touch-capable .menu .step { width: 44px; height: 44px; }
+:root.touch-capable .capture { min-height: 60px; height: auto; padding: 6px 10px; gap: 6px; }
+.capture-save, .capture-close { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--control-radius); font-family: var(--font-ui); cursor: pointer; }
+.capture-save { color: var(--on-primary); background: var(--primary); }
+.capture-close { color: var(--text); background: none; }
+.capture { background: var(--popover-solid); background: var(--popover); backdrop-filter: blur(var(--popover-blur)); -webkit-backdrop-filter: blur(var(--popover-blur)); }
+.searchbar { border-color: var(--control-border); }
+@supports not (backdrop-filter: blur(1px)) {
+  :root { --material: var(--material-solid); --popover: var(--popover-solid); }
+}
+@media (prefers-contrast: more) {
+  :root {
+    --material: var(--material-solid); --popover: var(--popover-solid);
+    --material-blur: 0px; --popover-blur: 0px;
+    --text: light-dark(#000, #fff); --muted: light-dark(#303036, #dddde3); --faint: var(--muted);
+    --control-border: light-dark(#74747c, #a0a0a8); --material-border: var(--control-border); --hairline: var(--control-border);
+    --primary: light-dark(#8c301b, #ffb49c); --link: var(--primary);
+  }
+}
+@media (forced-colors: active) {
+  :root {
+    --canvas: Canvas; --window: Canvas; --surface: Canvas; --surface-2: ButtonFace;
+    --material: Canvas; --material-solid: Canvas; --popover: Canvas; --popover-solid: Canvas;
+    --text: CanvasText; --muted: CanvasText; --faint: CanvasText; --primary: LinkText; --link: LinkText;
+    --hairline: ButtonText; --control-border: ButtonText; --material-border: ButtonText;
+    --material-blur: 0px; --popover-blur: 0px; --shadow: none; --shadow-pop: none;
+  }
+  .navigation-row[aria-selected="true"], .favorite-link[aria-current="page"], .navigation-actions .place[aria-current="page"] { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .navigation-surface, .crumbbar, .menu, .capture { box-shadow: none; }
+}
+
+.navigation-actions .place[aria-current="page"] .place-icon { color: var(--primary); }
+.navigation-row[aria-selected="true"] { color: var(--text); }
+
+:root.touch-capable input.search { font-size: 16px; }
+:where(:root.mouse) .navigation-sidebar.expanded .navigation-actions button:hover { color: var(--text); background: var(--surface-2); }
+.navigation-sidebar.expanded .navigation-actions button:active { background: var(--surface-2); }
+:where(:root.mouse) .navigation-sidebar.expanded .navigation-actions .place[aria-current="page"]:hover { background: var(--chip); }
+:where(:root.mouse) .favorite-link[aria-current="page"]:hover { background: var(--chip); }
+.capture-save, .capture-close { font-size: 15px; line-height: 1.2; }

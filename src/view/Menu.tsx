@@ -55,6 +55,9 @@ export function DocumentMenu(props: { o: Outliner }) {
   const [backup, setBackup] = createSignal<BackupStatus | null>(o.backup?.status ?? null);
   if (o.backup) onCleanup(o.backup.subscribe(setBackup));
   let root!: HTMLDivElement;
+  let trigger!: HTMLButtonElement;
+  const items = () => Array.from(root.querySelectorAll<HTMLButtonElement>('.menu button:not(:disabled)')).filter((item) => item.getClientRects().length > 0);
+  const focusEdge = (last = false) => queueMicrotask(() => { const list = items(); (last ? list.at(-1) : list[0])?.focus(); });
 
   const close = () => {
     setOpen(false);
@@ -65,7 +68,22 @@ export function DocumentMenu(props: { o: Outliner }) {
     if (!root.contains(e.target as Node)) close();
   };
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') close();
+    if (e.defaultPrevented || !open() || !root.contains(e.target as Node)) return;
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation(); close(); trigger.focus();
+    } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault(); e.stopPropagation();
+      const list = items(); const index = list.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : (index + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+      list[next]?.focus();
+    } else if (e.key === 'Tab') {
+      // Resolve the next outside stop before unmounting the focused menu item.
+      const stops = Array.from(document.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"], a[href]')).filter((el) => el.getClientRects().length && !el.closest('.menu'));
+      const index = stops.indexOf(trigger);
+      const next = e.shiftKey ? trigger : stops[index + 1];
+      if (next) { e.preventDefault(); close(); next.focus(); }
+      else close();
+    }
   };
   document.addEventListener('pointerdown', onPointerDown);
   document.addEventListener('keydown', onKeyDown);
@@ -113,14 +131,15 @@ export function DocumentMenu(props: { o: Outliner }) {
 
   return (
     <div class="menu-anchor" ref={root}>
-      <button data-action="Menu.1"
+      <button ref={trigger} data-action="Menu.1"
         type="button"
         class="icon-button menu-button"
         title={o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
         aria-label="Меню документа"
         aria-haspopup="menu"
         aria-expanded={open()}
-        onClick={() => setOpen(!open())}
+        onClick={(e) => { const show = !open(); setOpen(show); if (show && e.detail === 0) focusEdge(); }}
+        onKeyDown={(e) => { if (!open() && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); e.stopPropagation(); setOpen(true); focusEdge(e.key === 'ArrowUp'); } }}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <circle cx="5" cy="12" r="1.7" />

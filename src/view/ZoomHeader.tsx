@@ -1,3 +1,4 @@
+import { DocumentMenu } from './Menu';
 import { Star } from './SearchBar';
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
@@ -73,7 +74,7 @@ function mouseScroll(nav: HTMLElement): void {
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
-export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
+export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean }) {
   const o = props.o;
   let nav!: HTMLElement;
   const level = createMemo(() => o.levelState());
@@ -204,6 +205,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
           </svg>
         </button>
       </Show>
+      <Show when={props.navigation}><DocumentMenu o={o} /></Show>
     </div>
   );
 }
