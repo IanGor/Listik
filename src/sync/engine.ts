@@ -79,10 +79,10 @@ type OutboxBatch = Op[] & { sealed?: boolean };
  * update, rather than applying it without the new fields, or failing on
  * every pull, and uploading snapshots that lose them for every new device.
  */
-export const FORMAT = 2;
+export const FORMAT = 3;
 
 /** The op types this version applies (model/types.ts `Op`). */
-const KNOWN_OPS = new Set<string>(['insert', 'remove', 'setText', 'move', 'setCollapsed', 'setTodo', 'setDone', 'setNote', 'setMirror', 'addStrokes', 'removeStrokes']);
+const KNOWN_OPS = new Set<string>(['insert', 'remove', 'setText', 'move', 'setCollapsed', 'setTodo', 'setFavorite', 'setDone', 'setNote', 'setMirror', 'addStrokes', 'removeStrokes']);
 
 /** Can this version apply the batch as it is? */
 const readable = (body: BatchBody): boolean =>

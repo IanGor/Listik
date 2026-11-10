@@ -225,7 +225,7 @@ test.describe('saved searches', () => {
   const star = (page: Page) => page.locator('.searchbar .star');
   const list = (page: Page) => page.getByRole('list', { name: 'Избранные поиски' });
 
-  test('the star saves what is typed; focused, the box lists saved searches, last saved first; a press runs one, × takes it out', async ({ page }) => {
+  test('the star saves what is typed; focused, the box lists saved searches, last saved first; a press runs one, the star takes it out', async ({ page }) => {
     const search = page.locator('.search');
     await search.fill('#салон');
     await expect(star(page)).toHaveAttribute('aria-pressed', 'false');
@@ -255,24 +255,28 @@ test.describe('saved searches', () => {
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
     await search.click();
     await expect(list(page).getByRole('listitem')).toHaveCount(2);
-    await list(page).getByRole('button', { name: 'Убрать «Анна» из избранного' }).click();
+    await list(page).getByRole('button', { name: 'Анна', exact: true }).click();
+    await star(page).click();
+    await search.fill('');
+    await search.click();
     await expect(list(page).getByRole('listitem')).toHaveText(['#салон']);
+    await expect(page.locator('.saved-search-remove')).toHaveCount(0);
     await search.press('Escape');
     await expect(list(page)).toHaveCount(0);
   });
 
-  test('at most 20 kept, the oldest letting go; a long list scrolls, about five rows on a phone with the keyboard up', async ({ page }) => {
-    await page.evaluate(() => localStorage.setItem('listik-saved-searches', JSON.stringify(Array.from({ length: 20 }, (_, i) => `поиск ${i}`))));
+  test('more than 20 searches stay saved; long lists scroll and fit a phone keyboard', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('listik-saved-searches', JSON.stringify(Array.from({ length: 40 }, (_, i) => `поиск ${i}`))));
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
     const search = page.locator('.search');
     await search.fill('новый');
     await star(page).click();
-    await expect(page.locator('.toast')).toContainText('не больше 20');
+    await expect(page.locator('.toast')).toHaveCount(0);
     await search.fill('');
-    await expect(list(page).getByRole('listitem')).toHaveCount(20);
+    await expect(list(page).getByRole('listitem')).toHaveCount(41);
     await expect(list(page).getByRole('listitem').first()).toHaveText('новый');
-    await expect(list(page).getByRole('listitem').last()).toHaveText('поиск 18');
+    await expect(list(page).getByRole('listitem').last()).toHaveText('поиск 39');
     const menu = page.locator('.search-menu');
     expect(await menu.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
     await expect(menu).toHaveClass(/more/);
@@ -1148,7 +1152,7 @@ test.describe('structure and calendar', () => {
     await expect(page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.reload();
-    expect(await outline(page)).toEqual(['Запись 2025']);
+    await expect(page.locator('.row .text')).toHaveText(['Запись 2025']);
   });
 
   test('read-only and pending initial sync do not move existing years', async ({ page }) => {
@@ -4738,5 +4742,103 @@ test.describe('navigation sidebar', () => {
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await expect(page.locator('.zoom-title')).toBeVisible();
+  });
+});
+
+
+test.describe('sidebar favorites', () => {
+  test('removes the scope hint and collapses only the navigation tree', async ({ page }) => {
+    const tree = page.getByRole('tree');
+    await tree.getByRole('button', { name: 'Развернуть Том первый', exact: true }).click();
+    await tree.getByRole('treeitem', { name: 'Часть вторая', exact: true }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+    await page.getByRole('button', { name: 'Свернуть дерево', exact: true }).click();
+    await expect(tree.getByRole('treeitem')).toHaveCount(2);
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+    await expect(tree.getByRole('treeitem', { name: 'Том первый', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.navigation-search-scope')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Свернуть дерево', exact: true })).toBeDisabled();
+  });
+
+  test('stars the open node, supports undo/redo, follows rename and opens it from favorites', async ({ page }) => {
+    await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
+    const star = page.locator('.node-favorite');
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    const favorites = page.getByRole('list', { name: 'Избранное', exact: true });
+    await expect(favorites.getByRole('button', { name: 'Открыть ноду «Том первый»', exact: true })).toBeVisible();
+    await page.keyboard.press('Control+z');
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await expect(favorites).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+z');
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' — важно');
+    await page.keyboard.press('Escape');
+    await expect(favorites.getByRole('button', { name: 'Открыть ноду «Том первый — важно»', exact: true })).toBeVisible();
+    await page.locator('.navigation-sidebar .home-button').click();
+    await favorites.getByRole('button', { name: 'Открыть ноду «Том первый — важно»', exact: true }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том первый — важно');
+    await page.locator('.search').fill('#салон');
+    await page.locator('.searchbar .star').click();
+    await page.screenshot({ path: '/tmp/listik-favorites.png' });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await page.screenshot({ path: '/tmp/listik-favorites-dark.png' });
+    await star.click();
+    await expect(favorites.getByRole('button', { name: /^Открыть ноду/ })).toHaveCount(0);
+  });
+
+  test('saved searches share the block, stay local in the current branch, and are removed using the search star', async ({ page }) => {
+    await page.locator('.search').fill('#салон');
+    await page.locator('.searchbar .star').click();
+    await page.locator('.search').press('Escape');
+    await page.locator('.row', { hasText: 'Том второй' }).locator('.bullet').click();
+    const favorite = page.getByRole('button', { name: 'Выполнить поиск «#салон»', exact: true });
+    await favorite.click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await expect(page.locator('.search')).toHaveValue('#салон');
+    await expect(page.locator('.searchbar .star')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('.searchbar .star').click();
+    await expect(favorite).toHaveCount(0);
+    await expect(page.locator('.saved-search-remove')).toHaveCount(0);
+  });
+
+  test('stars survive reload and are available in a phone header without a sidebar', async ({ page }) => {
+    await page.goto('/?db=e2e-node-favorite&empty');
+    await page.locator('.row .text').click();
+    await page.keyboard.type('Важная нода');
+    await page.keyboard.press('Escape');
+    await page.locator('.row .bullet').click();
+    await page.locator('.node-favorite').click();
+    await expect(page.getByRole('button', { name: 'Открыть ноду «Важная нода»', exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.node-favorite')).toHaveAttribute('aria-pressed', 'true');
+    await page.setViewportSize({ width: 412, height: 915 });
+    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
+    await expect(page.locator('.node-favorite')).toBeVisible();
+    await page.locator('.node-favorite').click();
+    await expect(page.locator('.node-favorite')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('unbounded favorites use a virtual list and leave room for the tree', async ({ page }) => {
+    await page.evaluate(() => localStorage.setItem('listik-saved-searches', JSON.stringify(Array.from({ length: 500 }, (_, i) => `saved ${i}`))));
+    await page.reload();
+    const list = page.getByRole('list', { name: 'Избранное', exact: true });
+    await expect(list).toBeVisible();
+    expect(await list.getByRole('listitem').count()).toBeLessThan(30);
+    const item = list.getByRole('button').first();
+    await item.focus();
+    await page.keyboard.press('End');
+    await page.getByRole('button', { name: 'Выполнить поиск «saved 499»', exact: true }).click();
+    await expect(page.locator('.search')).toHaveValue('saved 499');
+    await expect(page.getByRole('tree')).toBeVisible();
+    await page.locator('.searchbar .star').click();
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('listik-saved-searches')!));
+    expect(saved).toHaveLength(499);
   });
 });

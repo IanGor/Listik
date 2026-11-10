@@ -160,6 +160,7 @@ function handOver(doc: Doc, id: NodeId, deleting: ReadonlySet<NodeId>): void {
     if (to.note !== from.note) doc.apply({ t: 'setNote', id: heir, from: to.note, to: from.note, at: now });
     if (to.todo !== from.todo) doc.apply({ t: 'setTodo', id: heir, from: to.todo, to: from.todo });
     if (to.done !== from.done) doc.apply({ t: 'setDone', id: heir, from: to.done, to: from.done, ...stamp(from.done ? from.doneAt : to.doneAt) });
+    if (!!to.favorite !== !!from.favorite) doc.apply({ t: 'setFavorite', id: heir, from: !!to.favorite, to: !!from.favorite });
     if (to.strokes) doc.apply({ t: 'removeStrokes', id: heir, strokes: to.strokes });
     if (from.strokes) doc.apply({ t: 'addStrokes', id: heir, strokes: from.strokes });
     for (const c of [...from.children]) {

@@ -1,3 +1,4 @@
+import { Favorites, toggleFavorite } from '../model/favorites';
 import { trackUsage } from './analytics';
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
@@ -62,15 +63,13 @@ function untilMidnight(now = new Date()): number {
 const TRASH_OPEN = 'listik-trash-open';
 /** Saved searches (the star in the search box), newest first; per browser, like the theme. */
 const SAVED_SEARCHES = 'listik-saved-searches';
-/** Saved searches kept at most: saving one more lets the oldest go. */
-export const SAVED_MAX = 20;
 /** Places gone to lately, kept at most (the search box shows fewer). */
 const RECENT_MAX = 20;
 
 function readSaved(): string[] {
   try {
     const list: unknown = JSON.parse(readSetting(SAVED_SEARCHES) ?? '[]');
-    return Array.isArray(list) ? list.filter((q): q is string => typeof q === 'string' && !!q.trim()).slice(0, SAVED_MAX) : [];
+    return Array.isArray(list) ? list.filter((q): q is string => typeof q === 'string' && !!q.trim()) : [];
   } catch {
     return [];
   }
@@ -189,7 +188,11 @@ export class Outliner {
   /** The trash panel (Trash.tsx) is open beside the outline. */
   readonly trashOpen: Accessor<boolean>;
   private setTrashOpen: Setter<boolean>;
-  /** Saved searches, newest first (SearchBar.tsx): the star saves what is typed, focus lists them. */
+  /** Sparse, synchronized node bookmarks, independent from local saved queries. */
+  private readonly favorites: Favorites;
+  private readonly favoriteVersion: Accessor<number>;
+  private readonly setFavoriteVersion: Setter<number>;
+  /** Saved searches, newest first (SearchBar.tsx), kept locally without a count cap. */
   readonly savedSearches: Accessor<string[]>;
   private setSavedSearches: Setter<string[]>;
   /** Places zoomed into lately, newest first, calendar periods aside: the places line offers them before anything is typed. */
@@ -302,6 +305,8 @@ export class Outliner {
     [this.rowMenu, this.setRowMenu] = createSignal<{ key: RowKey; x: number; y: number } | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
+    this.favorites = new Favorites(doc);
+    [this.favoriteVersion, this.setFavoriteVersion] = createSignal(this.favorites.version);
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
     [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
     [this.recentTargets, this.setRecentTargets] = createSignal<NodeId[]>([]);
@@ -312,7 +317,9 @@ export class Outliner {
     doc.subscribe(this.nodes);
     doc.subscribe({
       op: (o) => void this.collected?.push(o),
+      rollback: () => this.setFavoriteVersion(this.favorites.version),
       commit: (ops) => {
+        if (this.favorites.version !== this.favoriteVersion()) this.setFavoriteVersion(this.favorites.version);
         if (this.tasks.version !== this.tasksVersion()) this.setTasksVersion(this.tasks.version);
         // The zoomed-in bullet was deleted (or its creation undone): back to the whole outline.
         const z = this.zoom();
@@ -438,23 +445,25 @@ export class Outliner {
     return this.savedSearches().includes(query.trim());
   }
 
-  /** The star: saves the search, first in the list, or takes it out again. Beyond SAVED_MAX the oldest goes. */
+  /** Saved queries are local; no application-imposed count limit. */
   toggleSaved(query: string): void {
     trackUsage('action.toggleSaved');
     const q = query.trim();
     if (!q) return;
     const list = this.savedSearches();
-    let next: string[];
-    if (list.includes(q)) next = list.filter((s) => s !== q);
-    else {
-      next = [q, ...list];
-      if (next.length > SAVED_MAX) {
-        next = next.slice(0, SAVED_MAX);
-        this.notify(`В избранном не больше ${SAVED_MAX} поисков: самый старый убран`);
-      }
-    }
+    const next = list.includes(q) ? list.filter((s) => s !== q) : [q, ...list];
     this.setSavedSearches(next);
     writeSetting(SAVED_SEARCHES, next.length ? JSON.stringify(next) : null);
+  }
+
+  favoriteNodes(): NodeId[] {
+    this.favoriteVersion();
+    return this.favorites.list();
+  }
+
+  toggleFavorite(id: NodeId): void {
+    if (this.readOnly) return;
+    this.run(({ doc }) => toggleFavorite(doc, id));
   }
 
   /** A click on a tag: search for it. */

@@ -1,3 +1,4 @@
+import { FavoriteList } from './FavoriteList';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { calendarName } from '../model/calendar';
 import { titleOf } from '../model/links';
@@ -39,6 +40,12 @@ export function Sidebar(props: { o: Outliner }) {
     if (!overlay()) write('listik-navigation-open', String(value));
   };
   const collapse = () => { setMode(false); queueMicrotask(() => toggleButton.focus()); };
+  const observeScroller = (el: HTMLDivElement) => {
+    scroller = el;
+    const resize = new ResizeObserver(() => { if (el.clientHeight) setHeight(el.clientHeight); });
+    resize.observe(el);
+    onCleanup(() => resize.disconnect());
+  };
   const fold = (key: string) => {
     const next = new Set(expanded());
     if (next.has(key)) next.delete(key); else next.add(key);
@@ -122,6 +129,7 @@ export function Sidebar(props: { o: Outliner }) {
     };
     const observer = new ResizeObserver(measure);
     observer.observe(workspace); observer.observe(aside);
+    if (scroller) observer.observe(scroller);
     const mutation = new MutationObserver(measure);
     mutation.observe(workspace, { childList: true });
     const desk = workspace.querySelector('.desk');
@@ -165,11 +173,20 @@ export function Sidebar(props: { o: Outliner }) {
         </div>
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
           <SearchBar o={o} onRequest={() => { if (!open()) setSearchOpen(true); }} />
-          <span class="navigation-search-scope">{o.zoom() ? 'В текущей ветке' : 'Во всём документе'}</span>
         </div>
         <Show when={open()}>
-          <div class="navigation-section-label" aria-hidden="true">Дерево документа</div>
-          <div ref={scroller} class="navigation-scroll" onScroll={(e) => { setScroll(e.currentTarget.scrollTop); saveScroll(); }}>
+          <FavoriteList o={o} labelVersion={labels} navigate={(id) => {
+            o.setFocus(null); o.zoomTo(id);
+            if (overlay()) collapse();
+          }} search={(query) => { o.setQuery(query, true); o.requestSearch(); }} />
+          <div class="navigation-tree-heading">
+            <span class="navigation-section-label" aria-hidden="true">Дерево документа</span>
+            <button class="navigation-collapse-all" type="button" aria-label="Свернуть дерево" title="Свернуть дерево" disabled={!rows().some((row) => row.children && expanded().has(row.key))}
+              onClick={() => { setExpanded(new Set<string>()); setScroll(0); if (scroller) scroller.scrollTop = 0; persist(); }}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 3 4 4 4-4M6 17l4-4 4 4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            </button>
+          </div>
+          <div ref={observeScroller} class="navigation-scroll" onScroll={(e) => { setScroll(e.currentTarget.scrollTop); saveScroll(); }}>
             <div ref={tree} class="navigation-tree" role="tree" aria-label="Дерево документа" onKeyDown={treeKeys} style={{ height: `${rows().length * rowHeight}px` }}>
               <For each={visible()}>{(row) => {
                 const index = () => start() + visible().indexOf(row);

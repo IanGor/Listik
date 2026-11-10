@@ -12,15 +12,16 @@ import { own } from '../util/own';
  * version 7 adds `doneAt`, when a done task was checked, only on rows that
  * have one (`strokes` is then null on a row without a sketch).
  * Version 8 adds paraOrigin, the first source of a family born in PARA.
+ * Version 9 adds the favorite flag, only for starred nodes.
  */
 export type SnapshotRow = [
   id: NodeId, parent: number, order: string, text: string, collapsed: 0 | 1, created: number, updated: number,
-  done?: 0 | 1, note?: string, todo?: 0 | 1, mirror?: string, strokes?: Stroke[] | null, doneAt?: number | null, paraOrigin?: NodeId,
+  done?: 0 | 1, note?: string, todo?: 0 | 1, mirror?: string, strokes?: Stroke[] | null, doneAt?: number | null, paraOrigin?: NodeId | null, favorite?: 0 | 1,
 ];
 
 /** Rows in pre-order, so children arrive already sorted. */
 export interface Snapshot {
-  v: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  v: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   root: NodeId;
   rows: SnapshotRow[];
 }
@@ -50,10 +51,13 @@ export function serialize(doc: Doc): string {
       row[12] = n.doneAt ?? null;
       row[13] = n.paraOrigin;
     }
+    if (n.favorite) {
+      row[11] = n.strokes ?? null; row[12] = n.doneAt ?? null; row[13] = n.paraOrigin ?? null; row[14] = 1;
+    }
     rows.push(row);
     pushChildren(n.children, index);
   }
-  const snapshot: Snapshot = { v: 8, root: doc.root, rows };
+  const snapshot: Snapshot = { v: 9, root: doc.root, rows };
   return JSON.stringify(snapshot);
 }
 
@@ -65,10 +69,10 @@ export function serialize(doc: Doc): string {
  */
 export function deserialize(json: string): Doc {
   const s = JSON.parse(json) as Snapshot;
-  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5 && s.v !== 6 && s.v !== 7 && s.v !== 8) throw new Error(`Unsupported snapshot version ${s.v}`);
+  if (s.v !== 1 && s.v !== 2 && s.v !== 3 && s.v !== 4 && s.v !== 5 && s.v !== 6 && s.v !== 7 && s.v !== 8 && s.v !== 9) throw new Error(`Unsupported snapshot version ${s.v}`);
   const doc = new Doc(s.root);
   const ids = new Array<NodeId>(s.rows.length);
-  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo, mirror, strokes, doneAt, paraOrigin], i) => {
+  s.rows.forEach(([rawId, p, order, text, collapsed, created, updated, done, note, todo, mirror, strokes, doneAt, paraOrigin, favorite], i) => {
     const parent = p === -1 ? s.root : p === -2 ? TRASH : ids[p];
     const id = own(rawId);
     ids[i] = id;
@@ -77,6 +81,7 @@ export function deserialize(json: string): Doc {
       collapsed: collapsed === 1, todo: todo === 1 || done === 1, done: done === 1, created, updated,
       mirrorOf: mirror ? own(mirror) : null,
       ...(done === 1 && doneAt != null ? { doneAt } : {}),
+      ...(favorite === 1 ? { favorite: true } : {}),
       paraOrigin: paraOrigin ? own(paraOrigin) : null,
       ...(strokes?.length ? { strokes: strokes.map((t) => ({ id: own(t.id), tool: t.tool, d: own(t.d) })) } : {}),
     });

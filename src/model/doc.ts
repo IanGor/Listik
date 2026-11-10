@@ -53,6 +53,8 @@ export function invert(op: Op): Op {
       return { t: 'move', id: op.id, from: op.to, to: op.from };
     case 'setCollapsed':
       return { t: 'setCollapsed', id: op.id, from: op.to, to: op.from };
+    case 'setFavorite':
+      return { t: 'setFavorite', id: op.id, from: op.to, to: op.from };
     case 'setTodo':
       return { t: 'setTodo', id: op.id, from: op.to, to: op.from };
     case 'setDone':
@@ -258,6 +260,7 @@ export class Doc {
     const n = this.get(id);
     return {
       id: n.id, order: n.order, text: n.text, note: n.note, collapsed: n.collapsed, todo: n.todo, done: n.done,
+      ...(n.favorite ? { favorite: true } : {}),
       ...(n.doneAt !== undefined ? { doneAt: n.doneAt } : {}),
       created: n.created, updated: n.updated, ...(n.mirrorOf ? { mirrorOf: n.mirrorOf } : {}),
       ...(n.strokes ? { strokes: n.strokes } : {}),
@@ -341,6 +344,13 @@ export class Doc {
         n.collapsed = op.to;
         break;
       }
+      case 'setFavorite': {
+        const n = this.get(op.id);
+        if (!!n.favorite !== op.from) throw new Error(`setFavorite: stale state for ${op.id}`);
+        if (op.to) n.favorite = true;
+        else delete n.favorite;
+        break;
+      }
       case 'setTodo': {
         const n = this.get(op.id);
         if (n.todo !== op.from) throw new Error(`setTodo: stale state for ${op.id}`);
@@ -412,6 +422,7 @@ export class Doc {
         note: s.note, collapsed: s.collapsed, todo: s.todo, done: s.done, created: s.created, updated: s.updated,
         mirrorOf: s.mirrorOf && s.mirrorOf !== s.id ? s.mirrorOf : null,
       };
+      if (s.favorite) n.favorite = true;
       if (s.strokes?.length) n.strokes = s.strokes;
       if (s.done && s.doneAt !== undefined) n.doneAt = s.doneAt;
       // Capture birthplace on the insert itself, so replay, undo and other devices keep it.

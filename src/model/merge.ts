@@ -55,6 +55,12 @@ function mergeOp(doc: Doc, op: Exclude<Op, { t: 'insert' }>): Op[] {
       const n = doc.nodes.get(op.id);
       return n && n.collapsed !== op.to ? [{ ...op, from: n.collapsed }] : [];
     }
+    case 'setFavorite': {
+      // A concurrent deletion may have handed the original to a surviving mirror.
+      const id = doc.has(op.id) ? doc.origin(op.id) : op.id;
+      const n = doc.nodes.get(id);
+      return n && !!n.favorite !== op.to ? [{ ...op, id, from: !!n.favorite }] : [];
+    }
     case 'setTodo': {
       const n = doc.nodes.get(op.id);
       return n && n.todo !== op.to ? [{ ...op, from: n.todo }] : [];

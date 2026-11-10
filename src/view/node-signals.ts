@@ -38,6 +38,7 @@ export class NodeSignals implements DocListener {
       case 'setText':
       case 'setNote':
       case 'setDone':
+      case 'setFavorite':
       case 'setTodo':
       case 'setCollapsed':
       case 'setMirror':

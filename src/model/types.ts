@@ -29,6 +29,8 @@ export interface OutlineNode {
   done: boolean;
   /** When a done task was checked (clock stamp); absent if not done, or checked before the app kept it. */
   doneAt?: number;
+  /** Starred original; absent means false. Preserved in the trash and sync. */
+  favorite?: boolean;
   created: number;
   updated: number;
   /**
@@ -53,6 +55,8 @@ export interface NodeSnapshot {
   todo: boolean;
   done: boolean;
   doneAt?: number;
+  /** Starred original; absent means false. Preserved in the trash and sync. */
+  favorite?: boolean;
   created: number;
   updated: number;
   mirrorOf?: NodeId;
@@ -82,6 +86,7 @@ export type Op =
   | { t: 'setText'; id: NodeId; from: string; to: string; at?: number; was?: number }
   | { t: 'move'; id: NodeId; from: Position; to: Position }
   | { t: 'setCollapsed'; id: NodeId; from: boolean; to: boolean }
+  | { t: 'setFavorite'; id: NodeId; from: boolean; to: boolean }
   | { t: 'setTodo'; id: NodeId; from: boolean; to: boolean }
   /**
    * `at`: when the task was checked — the new stamp when it is checked, the

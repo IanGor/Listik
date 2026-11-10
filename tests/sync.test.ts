@@ -1,3 +1,4 @@
+import { Favorites, toggleFavorite } from '../src/model/favorites';
 import 'fake-indexeddb/auto';
 import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import type { Server } from 'node:http';
@@ -76,6 +77,32 @@ async function createDoc() {
 }
 
 describe('sync', () => {
+  it('syncs stars, concurrent edits, undo and bootstrapped snapshots between devices', async () => {
+    const { docId, token, a } = await createDoc();
+    const b = await device(docId, token, { bootstrap: true });
+    const id = a.rows.ids[0];
+    const fa = new Favorites(a.doc), fb = new Favorites(b.doc);
+    a.run(() => toggleFavorite(a.doc, id));
+    b.run(() => cmd.setText(b.ctx, id, 'renamed elsewhere'));
+    await a.engine.sync();
+    await b.engine.sync();
+    await a.engine.sync();
+    expect(fa.list()).toEqual([id]);
+    expect(fb.list()).toEqual([id]);
+    expect(a.doc.get(id).text).toBe('renamed elsewhere');
+    await a.engine.uploadSnapshot();
+    const c = await device(docId, token, { bootstrap: true });
+    expect(new Favorites(c.doc).list()).toEqual([id]);
+    a.history.undo(a.doc);
+    await a.engine.sync();
+    await b.engine.sync();
+    expect(fb.list()).toEqual([]);
+    a.history.redo(a.doc);
+    await a.engine.sync();
+    await b.engine.sync();
+    expect(fb.list()).toEqual([id]);
+  });
+
   it('two devices converge; a move and an edit of the same bullet both survive; the server sees only ciphertext', async () => {
     const { docId, token, a } = await createDoc();
     const b = await device(docId, token, { bootstrap: true });

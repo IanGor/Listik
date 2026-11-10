@@ -45,6 +45,7 @@ function fromNow(doc: Doc, op: Op): Op | null {
     case 'setText': return { ...op, from: n.text };
     case 'setNote': return { ...op, from: n.note };
     case 'setCollapsed': return { ...op, from: n.collapsed };
+    case 'setFavorite': return { ...op, from: !!n.favorite };
     case 'setTodo': return { ...op, from: n.todo };
     case 'setDone': return { ...op, from: n.done };
     case 'setMirror': return { ...op, from: n.mirrorOf ?? null, ...(op.source ? { source: { from: n.paraOrigin ?? null, to: op.source.to } } : {}) };

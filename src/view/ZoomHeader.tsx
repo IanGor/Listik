@@ -1,3 +1,4 @@
+import { Star } from './SearchBar';
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
 import { calendarName } from '../model/calendar';
@@ -287,6 +288,14 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
 
   return (
     <>
+      <button class="node-favorite" type="button" disabled={o.readOnly}
+        aria-label={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
+        title={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
+        aria-pressed={!!node()?.favorite}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => o.toggleFavorite(id)}>
+        <Star filled={!!node()?.favorite} size={22} />
+      </button>
       <Show
         when={edit() && !edit()!.note}
         fallback={

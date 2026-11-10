@@ -420,7 +420,7 @@ export class VisibleRows implements DocListener {
 
   op(op: Op): void {
     // Text, task state and sketches change no rows: completed bullets always show, struck through.
-    if (op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone' || op.t === 'addStrokes' || op.t === 'removeStrokes') return;
+    if (op.t === 'setFavorite' || op.t === 'setText' || op.t === 'setNote' || op.t === 'setTodo' || op.t === 'setDone' || op.t === 'addStrokes' || op.t === 'removeStrokes') return;
     this.roots = null;
     // Under a filter, edited bullets must stay visible (admit), which needs
     // the in-place patches; there, every op is patched.

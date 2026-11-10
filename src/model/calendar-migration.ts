@@ -143,7 +143,7 @@ export function rebuildCalendar(ctx: Ctx): { changed: boolean; retained: string[
   const cleanup = (id: NodeId) => {
     const n = doc.get(id);
     const reasons: string[] = [];
-    if (n.children.length || n.note || n.strokes?.length || n.todo || n.done || n.paraOrigin || n.text.split(/\s+/).some((word) => word && !/^@[yq]\d+$/.test(word))) reasons.push('есть свои данные');
+    if (n.favorite || n.children.length || n.note || n.strokes?.length || n.todo || n.done || n.paraOrigin || n.text.split(/\s+/).some((word) => word && !/^@[yq]\d+$/.test(word))) reasons.push('есть свои данные');
     if (doc.hasMirrors(id) || n.mirrorOf || linked.has(normalize(titleOf(n.text)))) reasons.push('есть ссылки или зеркала');
     if (reasons.length) retained.push(`${n.text}: ${reasons.join(', ')}`);
     else deleteNode(ctx, id);
