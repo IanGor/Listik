@@ -1040,6 +1040,44 @@ test('the level button folds and restores the first level; the current crumb doe
   expect(await outline(page)).toEqual(DEMO);
 });
 
+test('the level button updates its icon and action after manual folds, undo and navigation', async ({ page }) => {
+  const level = page.locator('.level-toggle');
+  const icon = level.locator('path').first();
+  const state = async (expanded: boolean) => {
+    await expect(level).toHaveAttribute('aria-expanded', String(expanded));
+    await expect(level).toHaveAccessibleName(expanded ? 'Свернуть первый уровень' : 'Развернуть первый уровень');
+    await expect(level).toHaveAttribute('title', expanded ? 'Свернуть первый уровень' : 'Развернуть первый уровень');
+    await expect(icon).toHaveAttribute('d', expanded ? 'm7 20 5-5 5 5' : 'm7 16 5 5 5-5');
+  };
+  await state(true);
+  await level.click();
+  await state(false);
+  await page.keyboard.press('Control+z');
+  await state(true);
+  await page.locator('.row', { hasText: 'Том первый' }).locator('.toggle').click();
+  await state(false);
+  await level.click();
+  await state(true);
+  // Inside, the first level has its own state.
+  await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').click();
+  await state(true);
+  await level.click();
+  await state(false);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/level-expand-${scheme}.png`, fullPage: true });
+  }
+  await level.click();
+  await state(true);
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `test-results/level-collapse-${scheme}.png`, fullPage: true });
+  }
+  await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
+  await expect(level).toBeDisabled();
+  await state(false);
+});
+
 test('"Главная" goes home with the search, and there leaves the search', async ({ page }) => {
   await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').click();
   await page.locator('.search').fill('шерер');

@@ -13,8 +13,8 @@ import { plural } from '../util/plural';
 
 /**
  * The path from the root to where you are, the place itself included:
- * "Главная" alone on the home page. A click on it goes home; on the home
- * page, it folds every top-level bullet. It stays above the list while the
+ * "Главная" alone on the home page. Crumbs navigate; a separate button
+ * folds or unfolds the first level. The path stays above the list while the
  * zoomed-in bullet's title (ZoomTitle) scrolls away with it, as in Workflowy.
  * One line that never shortens a crumb: a long path scrolls sideways and
  * stays at its end, so the bullets next to where you are show whole.
@@ -75,6 +75,9 @@ const CURRENT_MIN = 72;
 export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
   const o = props.o;
   let nav!: HTMLElement;
+  const level = createMemo(() => o.levelState());
+  const collapse = () => level().open.length > 0;
+  const levelLabel = () => collapse() ? 'Свернуть первый уровень' : 'Развернуть первый уровень';
   /** From the root's first child down to the zoomed-in bullet. */
   const path = createMemo(() => {
     o.rowsVersion();
@@ -170,14 +173,16 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean }) {
       <button data-action="ZoomHeader.3"
         type="button"
         class="level-toggle"
-        aria-label="Свернуть первый уровень"
-        title="Свернуть всё первого уровня; ещё раз — развернуть"
+        aria-label={levelLabel()}
+        title={levelLabel()}
+        aria-expanded={collapse()}
+        disabled={!level().kids.length}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => o.toggleLevel()}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m7 20 5-5 5 5" />
-          <path d="m7 4 5 5 5-5" />
+          <path d={collapse() ? 'm7 20 5-5 5 5' : 'm7 16 5 5 5-5'} />
+          <path d={collapse() ? 'm7 4 5 5 5-5' : 'm7 8 5-5 5 5'} />
         </svg>
       </button>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}

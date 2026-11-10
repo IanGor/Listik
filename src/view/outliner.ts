@@ -1072,6 +1072,14 @@ export class Outliner {
     });
   }
 
+  /** The level button and its command share the same targets and next action. */
+  levelState(): { kids: NodeId[]; open: NodeId[] } {
+    this.rowsVersion();
+    const parent = this.zoom() ?? this.doc.root;
+    const kids = this.doc.get(parent).children.filter((c) => (this.doc.host(c)?.children.length ?? 0) > 0);
+    return { kids, open: kids.filter((c) => !this.doc.get(c).collapsed) };
+  }
+
   /** What the place's own crumb last folded: pressed again, it opens just those. */
   private levelFolded: { parent: NodeId; ids: NodeId[] } | null = null;
 
@@ -1085,8 +1093,7 @@ export class Outliner {
   toggleLevel(): void {
     trackUsage('action.toggleLevel');
     const parent = this.zoom() ?? this.doc.root;
-    const kids = this.doc.get(parent).children.filter((c) => (this.doc.host(c)?.children.length ?? 0) > 0);
-    const open = kids.filter((c) => !this.doc.get(c).collapsed);
+    const { kids, open } = this.levelState();
     if (open.length) {
       this.run((ctx) => collapseChildren(ctx, parent));
       this.levelFolded = { parent, ids: open };
