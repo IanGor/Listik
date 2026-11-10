@@ -165,11 +165,11 @@ export function Sidebar(props: { o: Outliner }) {
           <span class="navigation-heading">Навигация</span>
         </div>
         <div class="navigation-actions">
-          <Places o={o} onNavigate={() => { if (overlay()) collapse(); }} />
+          <Places o={o} homeFirst onNavigate={() => { if (overlay()) collapse(); }} />
+          <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
           <button class="navigation-search-button place" type="button" aria-label="Поиск" title="Поиск в текущей ветке" onClick={search}>
             <svg class="place-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" stroke-linecap="round" /></svg><span class="place-label">Поиск</span>
           </button>
-          <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
         </div>
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
           <SearchBar o={o} onRequest={() => { if (!open()) setSearchOpen(true); }} />
@@ -180,7 +180,7 @@ export function Sidebar(props: { o: Outliner }) {
             if (overlay()) collapse();
           }} search={(query) => { o.setQuery(query, true); o.requestSearch(); }} />
           <div class="navigation-tree-heading">
-            <span class="navigation-section-label" aria-hidden="true">Дерево документа</span>
+            <span class="navigation-divider" role="separator" />
             <button class="navigation-collapse-all" type="button" aria-label="Свернуть дерево" title="Свернуть дерево" disabled={!rows().some((row) => row.children && expanded().has(row.key))}
               onClick={() => { setExpanded(new Set<string>()); setScroll(0); if (scroller) scroller.scrollTop = 0; persist(); }}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m6 3 4 4 4-4M6 17l4-4 4 4" stroke-linecap="round" stroke-linejoin="round" /></svg>

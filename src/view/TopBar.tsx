@@ -28,14 +28,12 @@ export function TopBar(props: { o: Outliner; navigation?: boolean }) {
   );
 }
 
-export function Places(props: { o: Outliner; onNavigate?: () => void }) {
+export function Places(props: { o: Outliner; onNavigate?: () => void; homeFirst?: boolean }) {
   // Today's number on the calendar symbol: past midnight it turns over by itself.
   const [day, setDay] = createSignal(new Date().getDate());
   const tick = setInterval(() => setDay(new Date().getDate()), 60_000);
   onCleanup(() => clearInterval(tick));
-  return (
-      <nav class="places" aria-label="Места">
-        <button data-action="TopBar.1"
+  const Today = () => (<button data-action="TopBar.1"
           type="button"
           class="place today-button"
           title="Сегодняшний день в календаре"
@@ -50,8 +48,8 @@ export function Places(props: { o: Outliner; onNavigate?: () => void }) {
             <text x="12" y="18.4" text-anchor="middle" font-size={day() > 9 ? "9.5" : "10.5"} font-weight="700" letter-spacing="-0.3" fill="currentColor">{day()}</text>
           </svg>
           <span class="place-label">Сегодня</span>
-        </button>
-        <button data-action="TopBar.2"
+        </button>);
+  const Home = () => (<button data-action="TopBar.2"
           type="button"
           class="place home-button"
           title="На главную"
@@ -64,9 +62,10 @@ export function Places(props: { o: Outliner; onNavigate?: () => void }) {
             <path d="M9 21v-8h6v8" />
           </svg>
           <span class="place-label">Главная</span>
-        </button>
-      </nav>
-  );
+        </button>);
+  return <nav class="places" aria-label="Места">
+    <Show when={props.homeFirst} fallback={<><Today /><Home /></>}><Home /><Today /></Show>
+  </nav>;
 }
 
 export function CaptureButton(props: { o: Outliner; labelled?: boolean }) {

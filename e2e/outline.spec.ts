@@ -284,6 +284,10 @@ test.describe('saved searches', () => {
     await expect(menu).not.toHaveClass(/more/);
     // A OnePlus 8 with the keyboard up: 412 × 540.
     await page.setViewportSize({ width: 412, height: 540 });
+    // The input moves from sidebar to phone header; wait for that replacement.
+    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
+    await expect(search).toBeFocused();
+    await expect(menu).toBeVisible();
     const height = await menu.evaluate((el) => el.getBoundingClientRect().height);
     expect(height).toBeLessThanOrEqual(0.4 * 540 + 1);
     expect(height).toBeGreaterThan(150);
@@ -4927,5 +4931,65 @@ test.describe('Apple HIG interface', () => {
     await page.emulateMedia({ forcedColors: 'active' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('box-shadow', 'none');
     await expect(page.locator('.navigation-sidebar .home-button')).toHaveAttribute('aria-current', 'page');
+  });
+});
+
+test.describe('consistent sidebar states', () => {
+  test('keeps action positions and Tab order when expanded or compact', async ({ page }) => {
+    const sidebar = page.locator('.navigation-sidebar');
+    const names = ['Главная', 'Сегодня', 'Записать в Inbox'];
+    const positions = async () => Promise.all(names.map(async name => {
+      const box = (await sidebar.getByRole('button', { name, exact: true }).boundingBox())!;
+      return { y: box.y, h: box.height };
+    }));
+    const expanded = await positions();
+    const searchIcon = (await sidebar.locator('.searchbar > svg').boundingBox())!;
+    await sidebar.getByRole('button', { name: names[0], exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await expect(sidebar.getByRole('button', { name: names[1], exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(sidebar.getByRole('button', { name: names[2], exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(sidebar.locator('input.search')).toBeFocused();
+    await sidebar.locator('input.search').fill('#салон');
+    await sidebar.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
+    expect(await positions()).toEqual(expanded);
+    const search = sidebar.getByRole('button', { name: 'Поиск', exact: true });
+    const compactIcon = (await search.locator('svg').boundingBox())!;
+    expect(Math.abs(compactIcon.x + compactIcon.width / 2 - searchIcon.x - searchIcon.width / 2)).toBeLessThanOrEqual(1);
+    await sidebar.getByRole('button', { name: names[0], exact: true }).focus();
+    for (const name of [...names.slice(1), 'Поиск']) {
+      await page.keyboard.press('Tab');
+      await expect(sidebar.getByRole('button', { name, exact: true })).toBeFocused();
+    }
+    await page.keyboard.press('Enter');
+    await expect(sidebar.locator('input.search')).toBeFocused();
+    await expect(sidebar.locator('input.search')).toHaveValue('#салон');
+    const popup = (await sidebar.locator('.navigation-search').boundingBox())!;
+    expect(Math.abs(popup.y - (await search.boundingBox())!.y)).toBeLessThanOrEqual(2);
+  });
+
+  test('separates favorites and tree without visible section titles or empty groups', async ({ page }) => {
+    const sidebar = page.locator('.navigation-sidebar');
+    const favorites = sidebar.getByRole('list', { name: 'Избранное', exact: true });
+    await expect(favorites).toHaveCount(0);
+    await expect(sidebar.getByRole('separator')).toHaveCount(1);
+    await sidebar.getByRole('treeitem', { name: 'Том первый', exact: true }).click();
+    await page.locator('.node-favorite').click();
+    await expect(favorites.getByRole('listitem')).toHaveCount(1);
+    await expect(favorites.getByRole('listitem')).toHaveAttribute('aria-posinset', '1');
+    await sidebar.locator('input.search').fill('#салон');
+    await sidebar.locator('.searchbar .star').click();
+    await expect(favorites.getByRole('listitem')).toHaveCount(2);
+    await expect(favorites.getByRole('listitem').nth(1)).toHaveAttribute('aria-posinset', '2');
+    for (const text of ['Избранное', 'Ноды', 'Поиски', 'Дерево документа']) await expect(sidebar.getByText(text, { exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole('tree', { name: 'Дерево документа' })).toBeVisible();
+    await expect(sidebar.getByRole('separator')).toHaveCount(2);
+    await page.locator('.node-favorite').click();
+    await expect(favorites.getByRole('button')).toHaveCount(1);
+    await expect(favorites.getByRole('listitem')).toHaveAttribute('aria-posinset', '1');
+    await sidebar.locator('.searchbar .star').click();
+    await expect(favorites).toHaveCount(0);
+    await expect(sidebar.getByRole('separator')).toHaveCount(1);
   });
 });
