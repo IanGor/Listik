@@ -34,34 +34,34 @@ describe('weeks', () => {
 });
 
 describe('structure', () => {
-  it('a year in a quarter: its months, weeks and days, named by tags, all folded', () => {
-    const t = yearTree(2026, 4);
+  it('a root year: its twelve months, weeks and days, named by tags, all folded', () => {
+    const t = yearTree(2026);
     expect(t.text).toBe('@y26');
-    expect(t.children.map((m) => m.text)).toEqual(['@m10', '@m11', '@m12']);
-    const oct = t.children[0];
+    expect(t.children.map((m) => m.text)).toEqual(Array.from({ length: 12 }, (_, i) => `@m${String(i + 1).padStart(2, '0')}`));
+    const oct = t.children[9];
     expect(oct.children.map((w) => w.text)).toEqual(['@w40', '@w41', '@w42', '@w43', '@w44']);
     expect(oct.children[0].children.map((d) => d.text)).toEqual([
       '@d01 @m10 @y26 @четверг', '@d02 @m10 @y26 @пятница', '@d03 @m10 @y26 @суббота', '@d04 @m10 @y26 @воскресенье',
     ]);
     expect(oct.children[3].children[0]).toEqual({ text: '@d19 @m10 @y26 @понедельник', collapsed: true, children: [] });
-    expect(count(t)).toBe(1 + 3 + 5 + 6 + 5 + 92);
-    // Opening a quarter shows its years, a year its months, and so on: not the ~470 rows of a year.
+    expect(count(t)).toBe(1 + 12 + Array.from({ length: 12 }, (_, i) => weeksOf(2026, i + 1).length).reduce((a, b) => a + b, 0) + 365);
+    // Opening a year shows its folded months, not all weeks and days.
     expect([t.collapsed, oct.collapsed, oct.children[0].collapsed]).toEqual([true, true, true]);
     expect(yearTree(2028, 1).children[1].children.at(-1)!.children.at(-1)!.text).toBe('@d29 @m02 @y28 @вторник');
   });
 
-  it('Inbox, PARA with its four, the Kanban with its Backlog, the quarters below folded with the year; no notes', () => {
+  it('Inbox, PARA with its four, Kanban with Backlog, a folded root year; no notes', () => {
     const trees = structureTrees(2026);
-    expect(trees.map((t) => t.text)).toEqual(['📥 Inbox', 'PARA', 'Kanban', '@q1', '@q2', '@q3', '@q4']);
-    expect(trees.map((t) => t.text)).toEqual(STRUCTURE.map((s) => s.text));
+    expect(trees.map((t) => t.text)).toEqual(['📥 Inbox', 'PARA', 'Kanban', '@y26']);
+    expect(trees.map((t) => t.text)).toEqual([...STRUCTURE.map((s) => s.text), '@y26']);
     expect(trees[1].children.map((t) => t.text)).toEqual(['Projects', 'Areas', 'Resources', 'Archive']);
     expect(trees[1].collapsed).toBeFalsy();
     const all = (ts: Tree[]): Tree[] => ts.flatMap((t) => [t, ...all(t.children)]);
     expect(all(trees).some((t) => t.note)).toBe(false);
     expect(trees[2].children.map((t) => t.text)).toEqual(['Backlog']);
     expect(trees[2].collapsed).toBe(true);
-    expect(trees[6].collapsed).toBe(true);
-    expect(trees[6].children.map((y) => y.text)).toEqual(['@y26']);
+    expect(trees[3].collapsed).toBe(true);
+    expect(trees[3].children).toHaveLength(12);
     expect(trees[0].children).toEqual([]);
   });
 
@@ -74,18 +74,18 @@ describe('structure', () => {
     expect(doc.get(first).text).toBe('📥 Inbox');
     expect(findInbox(doc)).toBe(first);
     expect(dumpRows(rows, doc)).toEqual(
-      ['а', '📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban [+]', '@q1 [+]', '@q2 [+]', '@q3 [+]', '@q4 [+]'],
+      ['а', '📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban [+]', '@y26 [+]'],
     );
     expect(hasStructure(doc, tags)).toBe(true);
-    const q4 = findQuarter(doc, tags, 4)!;
+    const calendarYear = findPeriod(doc, tags, { kind: 'year', y: 2026 })!;
     expect(findPeriod(doc, tags, day(2026, 2, 28))).not.toBeNull();
     expect(findPeriod(doc, tags, day(2026, 10, 19))).not.toBeNull();
     run(() => createStructure(ctx, 2026));
-    expect(doc.get(doc.root).children.length).toBe(1 + 14);
+    expect(doc.get(doc.root).children.length).toBe(1 + 8);
     // The first one stays the calendar.
-    expect(findQuarter(doc, tags, 4)).toBe(q4);
+    expect(findPeriod(doc, tags, { kind: 'year', y: 2026 })).toBe(calendarYear);
     const oct19 = findPeriod(doc, tags, day(2026, 10, 19))!;
-    expect(doc.within(oct19, q4)).toBe(true);
+    expect(doc.within(oct19, calendarYear)).toBe(true);
     checkInvariants(doc);
   });
 });
@@ -208,7 +208,7 @@ describe('built on two devices at once', () => {
     });
     for (const doc of [c, b]) {
       const tags = new TagIndex(doc);
-      for (let q = 1; q <= 4; q++) expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y26', '@y27']);
+      expect(doc.get(doc.root).children.map((id) => doc.get(id).text).filter((t) => /^@y/.test(t))).toEqual(['@y26', '@y27']);
       const d = findPeriod(doc, tags, day(2026, 10, 21))!;
       expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#daynote', '', ...SLOTS]);
       expect(doc.get(d).children.filter((k) => doc.get(k).mirrorOf)).toHaveLength(1);
@@ -249,7 +249,7 @@ describe('addYear', () => {
     expect(dump(doc)).toEqual(before);
   });
 
-  it('puts the year into each quarter in order, once; undone whole', () => {
+  it('puts the year at the root in order, once; undone whole', () => {
     const { doc, ctx, run } = setup([]);
     const tags = new TagIndex(doc);
     run(() => createStructure(ctx, 2026));
@@ -258,9 +258,7 @@ describe('addYear', () => {
       expect(addYear(ctx, tags, 2027)).toBe(true);
       expect(addYear(ctx, tags, 2025)).toBe(true);
     });
-    for (let q = 1; q <= 4; q++) {
-      expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y25', '@y26', '@y27']);
-    }
+    expect(doc.get(doc.root).children.map((id) => doc.get(id).text).filter((t) => /^@y/.test(t))).toEqual(['@y25', '@y26', '@y27']);
     expect(findPeriod(doc, tags, day(2027, 1, 1))).not.toBeNull();
     expect(run(() => addYear(ctx, tags, 2027))).toBe(false);
     checkInvariants(doc);
@@ -268,11 +266,12 @@ describe('addYear', () => {
     expect(dump(doc)).toEqual(before);
   });
 
-  it('leaves out a quarter that is gone', () => {
+  it('creates a root year even when only a legacy quarter exists', () => {
     const { doc, ctx, run } = setup(['@q1', '  @y2026']);
     const tags = new TagIndex(doc);
     expect(run(() => addYear(ctx, tags, 2027))).toBe(true);
-    expect(dump(doc).filter((l) => !l.startsWith('    '))).toEqual(['@q1', '  @y2026', '  @y27 [+]']);
+    expect(doc.get(doc.root).children.map((id) => doc.get(id).text)).toEqual(['@q1', '@y27']);
+    expect(findPeriod(doc, tags, day(2027, 12, 31))).not.toBeNull();
   });
 
   it('days with their year tag are periods and are found; so are days written without it, which get it; a year `@y2026` becomes `@y26`', () => {
@@ -339,7 +338,7 @@ describe('calendarName', () => {
     expect(calendarName(doc, month, 'crumb')).toBe('Октябрь');
     const year = doc.get(month).parent!;
     expect(calendarName(doc, year, 'title')).toBe('2026');
-    expect(calendarName(doc, doc.get(year).parent!, 'crumb')).toBe('Q4');
+    expect(doc.get(year).parent).toBe(doc.root);
     // Text of its own beside the tags: as it is written.
     run(() => cmd.setText(ctx, day, `${doc.get(day).text} созвон`));
     expect(calendarName(doc, day, 'title')).toBeNull();

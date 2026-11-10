@@ -5,25 +5,7 @@ import type { Tree } from './outline-text';
 import { parseTags, type TagIndex } from './tags';
 import type { NodeId } from './types';
 
-/**
- * The structure (PARA after Tiago Forte, with a calendar in four quarters)
- * and its calendar. The menu, the first start and the first sync put six
- * bullets at the top level, with no notes: 📥 Inbox, PARA (Projects, Areas,
- * Resources, Archive inside), then `@q1`…`@q4`.
- *
- * Each quarter holds a bullet per year, and the year its three months:
- * `@q4` → `@y26` → `@m10` → week `@w43` (ISO, from Monday; a week that
- * spans two months is in both, with its own days) → day
- * `@d19 @m10 @y26 @понедельник`. A year comes whole, its days empty; a day gets
- * its template (#daynote, a Today mirror, 09:00…18:00) when it is first entered.
- *
- * Bullets are named by tags. Numbers have two digits, as a tag in the
- * search box matches by its start (`@m1` would find `@m10`). A day carries
- * its month too: a search checks each bullet's own tags, so `@d19 @m10`
- * finds 19 October of every year. The app finds a period by its tags and
- * the periods around it, never by the place or the order of its bullet:
- * they may be renamed, moved and given notes.
- */
+/** Calendar: root year → month → ISO week → day. Legacy quarters remain readable. */
 
 const two = (n: number) => String(n).padStart(2, '0');
 
@@ -32,10 +14,6 @@ export const STRUCTURE: readonly { text: string; children: readonly string[] }[]
   { text: '📥 Inbox', children: [] },
   { text: 'PARA', children: ['Projects', 'Areas', 'Resources', 'Archive'] },
   { text: 'Kanban', children: ['Backlog'] },
-  { text: '@q1', children: [] },
-  { text: '@q2', children: [] },
-  { text: '@q3', children: [] },
-  { text: '@q4', children: [] },
 ];
 
 /** `@имя` of each weekday, from Sunday (Date.getDay). */
@@ -53,6 +31,7 @@ export const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(
  * `@qN`: the quarter of that year.
  */
 export type Period =
+  | { kind: 'year'; y: number }
   | { kind: 'quarter'; y: number; q: number }
   | { kind: 'month'; y: number; m: number }
   | { kind: 'week'; y: number; m: number; w: number }
@@ -95,6 +74,7 @@ export function weeksOf(y: number, m: number): number[] {
  */
 export function periodText(p: Period): string {
   switch (p.kind) {
+    case 'year':
     case 'quarter':
       return yearTag(p.y);
     case 'month':
@@ -110,6 +90,8 @@ export function periodText(p: Period): string {
 export function periodName(p: Period): string {
   const month = (m: number) => new Date(2000, m - 1, 1).toLocaleString('ru', { month: 'long' });
   switch (p.kind) {
+    case 'year':
+      return String(p.y);
     case 'quarter':
       return `${p.q} квартал ${p.y}`;
     case 'month':
@@ -124,10 +106,10 @@ export function periodName(p: Period): string {
 /** The day of a date, on the device's clock. */
 export const dayOf = (date: Date): Period => ({ kind: 'day', y: date.getFullYear(), m: date.getMonth() + 1, d: date.getDate() });
 
-/** The year's bullet for a quarter: its months, their weeks and days; days folded, for they get a template. */
-export function yearTree(y: number, q: number): Tree {
+/** A whole year; optional quarter is only for reading/building legacy fixtures. */
+export function yearTree(y: number, q?: number): Tree {
   const months: Tree[] = [];
-  for (let m = q * 3 - 2; m <= q * 3; m++) {
+  for (let m = q === undefined ? 1 : q * 3 - 2; m <= (q === undefined ? 12 : q * 3); m++) {
     const weeks: Tree[] = [];
     for (let d = 1; d <= daysIn(y, m); d++) {
       const w = periodText({ kind: 'week', y, m, w: isoWeek(y, m, d) });
@@ -136,7 +118,7 @@ export function yearTree(y: number, q: number): Tree {
     }
     months.push({ text: periodText({ kind: 'month', y, m }), collapsed: true, children: weeks });
   }
-  return { text: periodText({ kind: 'quarter', y, q }), collapsed: true, children: months };
+  return { text: yearTag(y), collapsed: true, children: months };
 }
 
 /**
@@ -156,18 +138,26 @@ export function openPeriods(doc: Doc): NodeId[] {
       if (rank < RANK.week) walk(c, rank + 1);
     }
   };
-  for (const q of doc.get(doc.root).children) if (labelOf(doc.get(q).text)?.kind === 'quarter') walk(q, RANK.year);
+  for (const id of doc.get(doc.root).children) {
+    const label = labelOf(doc.get(id).text);
+    if (label?.kind === 'quarter') walk(id, RANK.year);
+    if (label?.kind === 'year') {
+      if (!doc.get(id).collapsed && doc.get(id).children.length) out.push(id);
+      walk(id, RANK.month);
+    }
+  }
   return out;
 }
 
-/** The whole structure, with this year in its quarters, folded. */
+/** The whole structure, with a folded root year. */
 export function structureTrees(y: number): Tree[] {
-  return STRUCTURE.map(({ text, children }) => {
-    const q = labelOf(text);
-    return q?.kind === 'quarter'
-      ? { text, collapsed: true, children: [yearTree(y, q.q)] }
-      : { text, ...(text === 'Kanban' ? { collapsed: true } : {}), children: children.map((c) => ({ text: c, children: [] })) };
-  });
+  return [
+    ...STRUCTURE.map(({ text, children }) => ({
+      text, ...(text === 'Kanban' ? { collapsed: true } : {}),
+      children: children.map((c) => ({ text: c, children: [] })),
+    })),
+    yearTree(y),
+  ];
 }
 
 /** The caption (note) of the Kanban's Today: its contexts, ready to filter the tasks by work or by home. */
@@ -206,6 +196,7 @@ export function calendarName(doc: Doc, id: NodeId, use: 'title' | 'crumb'): stri
   if (!p) return null;
   const short = use === 'crumb';
   switch (p.kind) {
+    case 'year':
     case 'quarter':
       return String(p.y);
     case 'month':
@@ -235,7 +226,7 @@ const RANK = { quarter: 0, year: 1, month: 2, week: 3, day: 4 };
  * versions, until `yearTags`), a quarter `@qN`. Null for
  * anything else (and for dates no year has).
  */
-function labelOf(text: string): Label | null {
+export function labelOf(text: string): Label | null {
   if (!text.includes('@')) return null;
   const tags = parseTags(text);
   const num = (re: RegExp) => {
@@ -266,8 +257,8 @@ function quarterAt(doc: Doc, id: NodeId): number | null {
 
 /**
  * The period the bullet `id` stands for: its own label, with the year (and
- * for a week, the month) of the periods around it, inside a top-level
- * quarter. Null for any other bullet, for one inside a period as fine or
+ * for a week, the month) of the periods around it, inside a root year
+ * or a legacy top-level quarter. Null for any other bullet, for one inside a period as fine or
  * finer (an entry `созвон @d24 @m10` written in another day is not 24
  * October), and for a day not right in a week (the same entry written in
  * a month).
@@ -280,18 +271,21 @@ export function periodAt(doc: Doc, id: NodeId): Period | null {
   let y: number | null = null;
   let m: number | null = null;
   let q: number | null = null;
+  let rooted = own.kind === 'year' && doc.get(id).parent === doc.root;
   for (let p = doc.get(id).parent; p !== null && p !== doc.root; p = doc.get(p).parent) {
     const outer = labelOf(doc.get(p).text);
     if (!outer) continue;
     if (RANK[outer.kind] >= RANK[own.kind]) return null;
-    if (outer.kind === 'year') y ??= outer.y;
-    else if (outer.kind === 'month') m ??= outer.m;
+    if (outer.kind === 'year') {
+      y ??= outer.y;
+      if (doc.get(p).parent === doc.root) rooted = true;
+    } else if (outer.kind === 'month') m ??= outer.m;
     else q = quarterAt(doc, p);
   }
-  if (q === null) return null;
+  if (q === null && !rooted) return null;
   switch (own.kind) {
     case 'year':
-      return { kind: 'quarter', y: own.y, q };
+      return q === null ? { kind: 'year', y: own.y } : { kind: 'quarter', y: own.y, q };
     case 'month':
       return y === null ? null : { kind: 'month', y, m: own.m };
     case 'week':
@@ -347,13 +341,15 @@ export function findInbox(doc: Doc): NodeId | null {
   return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
-/** Is the structure in the document: a quarter at the top level? */
-export const hasStructure = (doc: Doc, tags: TagIndex) => [1, 2, 3, 4].some((q) => findQuarter(doc, tags, q) !== null);
+/** New root year or legacy root quarter. */
+export const hasStructure = (doc: Doc, tags: TagIndex) =>
+  doc.get(doc.root).children.some((id) => periodAt(doc, id)?.kind === 'year') ||
+  [1, 2, 3, 4].some((q) => findQuarter(doc, tags, q) !== null);
 
 /** The bullet of a period: the highest one whose own tags and surroundings make it that period. */
 export function findPeriod(doc: Doc, tags: TagIndex, p: Period): NodeId | null {
   const sets =
-    p.kind === 'quarter'
+    (p.kind === 'quarter' || p.kind === 'year')
       ? // A year written `@y2026` is still a year until it is renamed (`yearTags`).
         [new Set([...tags.nodesWith(yearTag(p.y)), ...tags.nodesWith(`@y${p.y}`)])]
       : parseTags(periodText(p))
@@ -377,41 +373,41 @@ const onlyTags = (text: string) => text.split(/\s+/).every((w) => !w || /^@[\p{L
 
 /** The quarter of the year a period lies in. */
 export function quarterPeriod(p: Period): Period {
-  return { kind: 'quarter', y: p.y, q: p.kind === 'quarter' ? p.q : quarterOf(p.m) };
+  return p.kind === 'year' ? p : { kind: 'quarter', y: p.y, q: p.kind === 'quarter' ? p.q : quarterOf(p.m) };
 }
 
 /**
  * "Создать структуру": the structure goes in as the last top-level bullets,
- * this year in its quarters, folded, whatever is there already. Returns
+ * a folded root year, whatever is there already. Returns
  * its first bullet.
  */
 export function createStructure(ctx: Ctx, y: number): NodeId {
   const { doc } = ctx;
   placeTrees(ctx, doc.root, doc.get(doc.root).children.length, structureTrees(y));
   const kids = doc.get(doc.root).children;
-  return kids[kids.length - STRUCTURE.length];
+  return kids[kids.length - STRUCTURE.length - 1];
 }
 
-/**
- * The year `y` into each quarter at the top level that has none yet, among
- * the years there in order. Returns whether any came in.
- */
+/** Any year already present, including the old quarter layout. */
+export function hasYear(doc: Doc, tags: TagIndex, y: number): boolean {
+  return findPeriod(doc, tags, { kind: 'year', y }) !== null ||
+    [1, 2, 3, 4].some((q) => findPeriod(doc, tags, { kind: 'quarter', y, q }) !== null);
+}
+
 export function addYear(ctx: Ctx, tags: TagIndex, y: number): boolean {
   const { doc } = ctx;
-  let added = false;
-  for (let q = 1; q <= 4; q++) {
-    const quarter = findQuarter(doc, tags, q);
-    if (quarter === null || findPeriod(doc, tags, { kind: 'quarter', y, q }) !== null) continue;
-    const kids = doc.get(quarter).children;
-    let index = kids.findIndex((c) => {
-      const label = labelOf(doc.get(c).text);
-      return label?.kind === 'year' && label.y > y;
-    });
-    if (index < 0) index = kids.length;
-    placeTrees(ctx, quarter, index, fixedIds([yearTree(y, q)], `${quarter}~y${y}~`));
-    added = true;
+  if (hasYear(doc, tags, y)) return false;
+  const kids = doc.get(doc.root).children;
+  let index = kids.findIndex((id) => {
+    const p = periodAt(doc, id);
+    return p?.kind === 'year' && p.y > y;
+  });
+  if (index < 0) {
+    const years = kids.filter((id) => periodAt(doc, id)?.kind === 'year');
+    index = years.length ? kids.indexOf(years[years.length - 1]) + 1 : kids.length;
   }
-  return added;
+  placeTrees(ctx, doc.root, index, fixedIds([yearTree(y)], `${doc.root}~calendar~y${y}~`));
+  return true;
 }
 
 /** A day entered for the first time, with nothing in it: the template goes in. Returns whether it did. */
@@ -426,7 +422,7 @@ export function fillDay(ctx: Ctx, day: NodeId): boolean {
  * built alike on every device, so a year or a day's template made on two
  * devices before they heard of each other (two devices open at midnight)
  * merges into one, not two side by side. The prefix is a bullet they share
- * (the quarter, the day); `.` and `~` never occur in a random id.
+ * (the document root, the day); `.` and `~` never occur in a random id.
  */
 export function fixedIds(trees: Tree[], prefix: string): Tree[] {
   return trees.map((t, i) => ({ ...t, id: `${prefix}${i}`, children: fixedIds(t.children, `${prefix}${i}.`) }));
@@ -441,26 +437,23 @@ export function fixedIds(trees: Tree[], prefix: string): Tree[] {
  */
 export function yearTags(doc: Doc): { id: NodeId; text: string }[] {
   const out: { id: NodeId; text: string }[] = [];
-  const walk = (id: NodeId, depth: number) => {
-    for (const c of doc.get(id).children) {
-      const text = doc.get(c).text;
-      const label = labelOf(text);
-      if (depth === 1 && label?.kind === 'year' && periodAt(doc, c)) {
-        const next = text.replace(/(^|\s)@y(\d{4})(?=\s|$)/, (_, before: string, y: string) => before + yearTag(Number(y)));
-        if (next !== text) out.push({ id: c, text: next });
-      }
-      if (depth < 4) {
-        if (label) walk(c, depth + 1);
-        continue;
-      }
-      const p = label?.kind === 'day' ? periodAt(doc, c) : null;
-      if (!p || parseTags(text).some((t) => SHORT_YEAR.test(t))) continue;
-      const next = text.replace(new RegExp(` ${p.y}$`), '').replace(/(^|\s)(@m\d\d)(?=\s|$)/, `$1$2 ${yearTag(p.y)}`);
-      if (next !== text) out.push({ id: c, text: next });
+  const visit = (id: NodeId) => {
+    const n = doc.get(id);
+    const p = periodAt(doc, id);
+    if (!p) return;
+    let text = n.text;
+    if (p.kind === 'year' || p.kind === 'quarter') {
+      text = text.replace(/(^|\s)@y(\d{4})(?=\s|$)/, (_, before: string, y: string) => before + yearTag(Number(y)));
+    } else if (p.kind === 'day' && !parseTags(text).some((t) => SHORT_YEAR.test(t))) {
+      text = text.replace(new RegExp(` ${p.y}$`), '').replace(/(^|\s)(@m\d\d)(?=\s|$)/, `$1$2 ${yearTag(p.y)}`);
     }
+    if (text !== n.text) out.push({ id: n.id, text });
+    if (p.kind !== 'day') for (const child of n.children) visit(child);
   };
-  // Quarter → year → month → week → day.
-  for (const q of doc.get(doc.root).children) if (labelOf(doc.get(q).text)?.kind === 'quarter') walk(q, 1);
+  for (const id of doc.get(doc.root).children) {
+    if (quarterAt(doc, id) !== null) for (const child of doc.get(id).children) visit(child);
+    else visit(id);
+  }
   return out;
 }
 

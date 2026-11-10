@@ -1,7 +1,8 @@
+import { calendarPlan, rebuildCalendar } from '../model/calendar-migration';
 import { trackUsage } from './analytics';
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, quarterPeriod, sameDate, yearTags, type DayDate, type Period,
+  addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, hasYear, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, newId, TRASH, type Doc } from '../model/doc';
@@ -876,7 +877,7 @@ export class Outliner {
    */
   private periodBullet(p: Period): NodeId | null {
     const found = findPeriod(this.doc, this.tags, p);
-    if (found !== null || this.readOnly || findPeriod(this.doc, this.tags, quarterPeriod(p)) !== null) return found;
+    if (found !== null || this.readOnly || hasYear(this.doc, this.tags, p.y)) return found;
     if (this.syncing() && !this.synced) return null;
     this.scaffold((ctx) => void addYear(ctx, this.tags, p.y));
     return findPeriod(this.doc, this.tags, p);
@@ -1108,7 +1109,7 @@ export class Outliner {
     });
   }
 
-  /** Is the structure in the document (a quarter at the top level, model/calendar.ts)? Reactive. */
+  /** Is a calendar present (root year or legacy quarter, model/calendar.ts)? Reactive. */
   structure(): boolean {
     this.rowsVersion();
     return hasStructure(this.doc, this.tags);
@@ -1123,6 +1124,23 @@ export class Outliner {
     if (this.readOnly) return;
     this.run((ctx) => void createStructure(ctx, new Date().getFullYear()));
     this.goToday();
+  }
+
+  /** Explicit, undoable migration; old documents are never moved at startup. */
+  rebuildCalendar(): void {
+    if (this.readOnly) return;
+    if (this.syncing() && !this.synced) return this.notify('Дождитесь завершения синхронизации');
+    const plan = calendarPlan(this.doc);
+    if (plan.error) return this.notify(plan.error);
+    if (!plan.years.length) return this.notify('Перестраивать календарь не нужно');
+    const years = plan.years.map(({ y }) => y).join(', ');
+    if (!confirm(`Перестроить календарь за ${years}? Месяцы будут собраны под годами в корне. Содержимое дней сохранится. Перенос можно отменить через Ctrl+Z.`)) return;
+    this.run((ctx) => {
+      const result = rebuildCalendar(ctx);
+      this.notify(result.error ?? (result.changed
+        ? `Календарь перестроен${result.retained.length ? `. Сохранены: ${result.retained.join('; ')}` : ''}`
+        : 'Перестраивать календарь не нужно'));
+    });
   }
 
   /**

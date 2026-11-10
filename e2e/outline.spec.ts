@@ -1105,8 +1105,7 @@ test.describe('structure and calendar', () => {
   const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
   const today = dayText(now);
   const year = `@y${two(now.getFullYear() % 100)}`;
-  const quarter = Math.floor(now.getMonth() / 3) + 1;
-  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', '@q1', '@q2', '@q3', '@q4'];
+  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', year];
   // The day's 19 half-hour slots are direct children, after the Today mirror.
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   // The path names the calendar by dates (model/calendar.ts calendarName).
@@ -1122,6 +1121,35 @@ test.describe('structure and calendar', () => {
     await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
   };
 
+  test('the rebuild menu previews the migration, can cancel, and moves a legacy calendar with one undo', async ({ page }) => {
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await editing(page).evaluate((el) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', '- @q1\n  - @y26\n    - @m01\n- @q4\n  - @y2026\n    - @m10\n');
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await page.keyboard.press('Escape');
+    const before = await outline(page);
+    const rebuild = async () => {
+      await page.locator('.menu-button').click();
+      await page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true }).click();
+    };
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await rebuild();
+    expect(await outline(page)).toEqual(before);
+    page.once('dialog', (dialog) => dialog.accept());
+    await rebuild();
+    await expect(page.locator('.toast')).toContainText('Календарь перестроен');
+    expect(await outline(page)).toEqual([...DEMO, '@y26', '  @m01', '  @m10']);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(before);
+    await page.keyboard.press('Control+Shift+z');
+    expect(await outline(page)).toEqual([...DEMO, '@y26', '  @m01', '  @m10']);
+    await rebuild();
+    await expect(page.locator('.toast')).toContainText('Перестраивать календарь не нужно');
+  });
+
   test('the menu puts it last at the top level and goes to today, filled, with no caret; undo takes it back', async ({ page }) => {
     await create(page);
     await expect(title(page)).toHaveText(today);
@@ -1129,7 +1157,7 @@ test.describe('structure and calendar', () => {
     // The bullet under "todo" is plain, as under the notes: no checkbox.
     await expect(page.locator('.row').nth(3).locator('.check')).toHaveCount(0);
     await expect(caret(page)).toHaveCount(0);
-    for (const crumb of [`Q${quarter}`, new RegExp(`^${yearCrumb}$`), new RegExp(`^${monthCrumb}$`), /^Неделя \d+$/]) {
+    for (const crumb of [new RegExp(`^${yearCrumb}$`), new RegExp(`^${monthCrumb}$`), /^Неделя \d+$/]) {
       await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);
     }
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
@@ -1193,7 +1221,7 @@ test.describe('structure and calendar', () => {
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
-  test('"Главная" opening the top level is an overview: each quarter shows its years folded; years left open before get folded once', async ({ page }) => {
+  test('"Главная" opening the top level is an overview: a year shows its months folded; periods left open before get folded once', async ({ page }) => {
     await page.goto('/?db=e2e-calendar-fold');
     await expect(title(page)).toHaveText(today);
     const home = page.locator('.crumbs .crumb', { hasText: 'Главная' });
@@ -1203,19 +1231,18 @@ test.describe('structure and calendar', () => {
     await page.locator('.row', { hasText: 'PARA' }).locator('.toggle').click();
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => !t.startsWith(' ')));
     await level.click();
-    // The Kanban holds the Today that today's day mirrors.
-    const QUARTERS = STRUCTURE.flatMap((t) => (t.startsWith('@q') ? [t, `  ${year}`] : t === '  Backlog' ? [t, '  Today'] : [t]));
-    expect(await outline(page)).toEqual(QUARTERS);
-    // A year opened as earlier versions left them, on a device that has not folded them yet.
-    await page.locator('.row', { hasText: year }).first().locator('.toggle').click();
-    expect((await outline(page)).length).toBeGreaterThan(QUARTERS.length);
+    // Opening the year shows twelve folded months; the Today remains in Kanban.
+    const MONTHS = Array.from({ length: 12 }, (_, i) => `  @m${two(i + 1)}`);
+    const OPEN = STRUCTURE.flatMap((t) => t === year ? [t, ...MONTHS] : t === '  Backlog' ? [t, '  Today'] : [t]);
+    expect(await outline(page)).toEqual(OPEN);
+    await page.locator('.row', { hasText: '@m01' }).locator('.toggle').click();
+    expect((await outline(page)).length).toBeGreaterThan(OPEN.length);
     await page.waitForTimeout(300);
     await page.evaluate(() => localStorage.removeItem('listik-calendar-folded:e2e-calendar-fold'));
     await page.reload();
-    // A reload stays on the home page, the years folded at the start.
     await expect(page.locator('.row').first()).toBeVisible();
     await expect(title(page)).toHaveCount(0);
-    await expect.poll(() => outline(page)).toEqual(QUARTERS);
+    await expect.poll(() => outline(page)).toEqual(STRUCTURE.flatMap((t) => t === '  Backlog' ? [t, '  Today'] : [t]));
   });
 
   test('a task in PARA puts its checkbox into the structure\'s Kanban Backlog', async ({ page }) => {
@@ -1249,7 +1276,7 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.task-project')).toHaveText(['Проект: Alpha', 'Проект: Alpha']);
     const rows = await outline(page);
     const at = rows.indexOf('Kanban');
-    expect(rows.slice(at, at + 6)).toEqual(['Kanban', '  Backlog', '    write', '    read', '  Today', '@q1']);
+    expect(rows.slice(at, at + 6)).toEqual(['Kanban', '  Backlog', '    write', '    read', '  Today', year]);
     await page.locator('.row').filter({ has: page.locator('.text', { hasText: /^Backlog$/ }) }).locator('.bullet').click();
     await page.screenshot({ path: 'test-results/kanban-light.png', fullPage: true, animations: 'disabled' });
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -1469,6 +1496,24 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.toast')).toContainText('В Backlog: 1 задача', { timeout: 10_000 });
   });
 
+  test('crossing New Year creates one root year with twelve months and no quarters', async ({ page }) => {
+    await page.clock.install({ time: new Date(2026, 11, 31, 12) });
+    await create(page);
+    await expect(title(page)).toHaveText(dayText(new Date(2026, 11, 31)));
+    await page.getByRole('button', { name: 'Следующий день' }).click();
+    await expect(title(page)).toHaveText(dayText(new Date(2027, 0, 1)));
+    expect(await outline(page)).toEqual(DAY);
+    await page.getByRole('button', { name: 'Предыдущий день' }).click();
+    await page.getByRole('button', { name: 'Следующий день' }).click();
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    const roots = page.locator('.row[data-depth="0"] .text');
+    const texts = await roots.allTextContents();
+    expect(texts.filter((t) => /^@y/.test(t))).toEqual(['@y26', '@y27']);
+    expect(texts.some((t) => /^@q/.test(t))).toBe(false);
+    await page.locator('.row', { hasText: '@y27' }).locator('.bullet').click();
+    expect(await outline(page)).toEqual(Array.from({ length: 12 }, (_, i) => `@m${two(i + 1)}`));
+  });
+
   test('in a day, ‹ › go to the day before and after by dates, across the month\'s end; not in a week or the outline', async ({ page }) => {
     await create(page);
     // Creating the structure leaves in today's day.
@@ -1539,8 +1584,8 @@ test.describe('structure and calendar', () => {
     // The logo goes on into today, in that year: no second one is made.
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    await page.locator('.crumbs .crumb', { hasText: `Q${quarter}` }).click();
-    expect(await outline(page)).toEqual([year]);
+    await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    expect((await outline(page)).filter((t) => t === year)).toHaveLength(1);
   });
 
   test('a long path scrolls with a mouse: the wheel turns it, a drag moves it and presses no crumb', async ({ page }) => {
@@ -1634,10 +1679,10 @@ test.describe('structure and calendar', () => {
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));
-    await page.locator('.row', { hasText: '@q1' }).locator('.bullet').click();
+    await page.locator('.row', { hasText: new RegExp(`^${year}$`) }).locator('.bullet').click();
     await page.waitForTimeout(300);
     await page.reload();
-    await expect(title(page)).toHaveText('@q1');
+    await expect(title(page)).toHaveText(year);
   });
 
   test('a reload is the same view, not today: home stays home, the search and the scroll come back; a new start opens today', async ({ page }) => {
