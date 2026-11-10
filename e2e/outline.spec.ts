@@ -1150,6 +1150,39 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.toast')).toContainText('Перестраивать календарь не нужно');
   });
 
+  for (const quarters of [true, false]) test(`the rebuild menu adds weeks to old 2016 dates (${quarters ? 'quarter' : 'root year'})`, async ({ page }) => {
+    const day = '@d31 @m07 @y16 @Воскресенье';
+    await edit(page, 'Том второй');
+    await page.keyboard.press('Enter');
+    await editing(page).evaluate((el, { quarters, day }) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', quarters
+        ? `- @q3\n  - @y16\n    - @m07\n      - ${day}\n        - Старая запись\n`
+        : `- @y16\n  - @m07\n    - ${day}\n      - Старая запись\n`);
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, { quarters, day });
+    await page.keyboard.press('Escape');
+    const id = await page.locator('.row', { hasText: day }).getAttribute('data-id');
+    const before = await outline(page);
+    const rebuild = async () => {
+      await page.locator('.menu-button').click();
+      await page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true }).click();
+    };
+    page.once('dialog', (dialog) => dialog.accept());
+    await rebuild();
+    await expect(page.locator('.toast')).toContainText('Календарь перестроен');
+    expect(await outline(page)).toEqual([...DEMO, '@y16', '  @m07', '    @w30']);
+    await page.keyboard.press('Control+z');
+    expect(await outline(page)).toEqual(before);
+    await page.keyboard.press('Control+Shift+z');
+    expect(await outline(page)).toEqual([...DEMO, '@y16', '  @m07', '    @w30']);
+    await rebuild();
+    await expect(page.locator('.toast')).toContainText('Перестраивать календарь не нужно');
+    await page.locator('.row', { hasText: '@w30' }).locator('.toggle').click();
+    await expect(page.locator('.row', { hasText: day })).toHaveAttribute('data-id', id!);
+    expect(await outline(page)).toContain('        Старая запись');
+  });
+
   test('the menu puts it last at the top level and goes to today, filled, with no caret; undo takes it back', async ({ page }) => {
     await create(page);
     await expect(title(page)).toHaveText(today);

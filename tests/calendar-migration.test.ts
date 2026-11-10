@@ -87,7 +87,7 @@ describe('rebuild calendar', () => {
     ['@q1', '  @y26', '    @m01', '@q2', '  @y2026', '    @m01 дубль'],
     ['@q1', '  @y26', '    @m99'],
     ['@y26', '@y2026', '@q1', '  @y26 old', '    @m01'],
-    ['@q1', '  @y26', '    @m01', '      @d01 @m01'],
+    ['@q1', '  @y26', '    @m01', '      @d01 @m02'],
   ])('rejects conflicts without partial mutations: %j', (...lines) => {
     const { doc, ctx, run } = setup(lines);
     const before = serialize(doc);
@@ -108,8 +108,11 @@ describe('rebuild calendar', () => {
     expect(rootTexts(doc)).toEqual(['@y26']);
   });
 
-  it('concurrent migrations converge through the sync merge and rebase without duplicating nodes', () => {
-    const { doc: base } = setup(legacy);
+  it.each([
+    legacy,
+    ['@q4', '  @y26', '    @m10', '      @d19 @m10 @y16', '@q1', '  @y2026', '    @m01', '      @d01 @m01 @y16'],
+  ])('concurrent migrations converge through sync and rebase without duplicating nodes: %j', (...lines) => {
+    const { doc: base } = setup(lines);
     const a = deserialize(serialize(base)), b = deserialize(serialize(base)), server = deserialize(serialize(base));
     const migrate = (doc: typeof base) => doc.transact(() => rebuildCalendar({ doc, rows: new VisibleRows(doc) }));
     const fromA = migrate(a), fromB = migrate(b);
@@ -124,6 +127,80 @@ describe('rebuild calendar', () => {
       expect(doc.get('@y2026').children).toEqual(['@m01', '@m10']);
       checkInvariants(doc);
     }
+  });
+
+  it('groups the reported 2016 date by its parent year, preserving IDs, notes, links, mirrors and undo', () => {
+    const day = '@d31 @m07 @y16 @Воскресенье';
+    const { doc, ctx, run } = setup(['Inbox', '@q3', '  @y16', '    @m07 [+]', `      ${day} [+]`, '        Запись', 'Ссылка', 'Зеркало']);
+    run(() => {
+      doc.apply({ t: 'setNote', id: day, from: '', to: 'Моя заметка' });
+      doc.apply({ t: 'setText', id: 'Ссылка', from: 'Ссылка', to: `[[${day}]]` });
+      doc.apply({ t: 'setMirror', id: 'Зеркало', from: null, to: day });
+    });
+    const before = dump(doc);
+    const history = new History();
+    const ops = doc.transact(() => expect(rebuildCalendar(ctx).changed).toBe(true));
+    history.record({ ops, before: null, after: null });
+    const week = doc.get(day).parent!;
+    expect(doc.get(week).text).toBe('@w30');
+    expect(doc.get(week).parent).toBe('@m07');
+    expect(doc.get('@m07').parent).toBe('@y16');
+    expect(doc.get('@y16').parent).toBe(doc.root);
+    expect(doc.get(day).note).toBe('Моя заметка');
+    expect(doc.get(day).collapsed).toBe(true);
+    expect(doc.get(day).children).toEqual(['Запись']);
+    expect(doc.get('Зеркало').mirrorOf).toBe(day);
+    expect(resolveLink(doc, new TextIndex(doc), day)).toBe(day);
+    expect(run(() => rebuildCalendar(ctx)).changed).toBe(false);
+    const after = dump(doc);
+    history.undo(doc);
+    expect(dump(doc)).toEqual(before);
+    history.redo(doc);
+    expect(dump(doc)).toEqual(after);
+    checkInvariants(doc);
+  });
+
+  it('uses the parent year rather than a stale day tag and reuses an existing week in a mixed root calendar', () => {
+    const { doc, ctx, run } = setup([
+      '@y26', '  @m07', '    @d31 @m07 @y16 @Воскресенье',
+      '    @w31 [+]', '      @d30 @m07 @y26', '      Личная запись',
+      '    созвон @d29 @m07',
+    ]);
+    expect(run(() => rebuildCalendar(ctx)).changed).toBe(true);
+    expect(doc.get('@m07').children).toEqual(['@w31', 'созвон @d29 @m07']);
+    expect(doc.get('@w31').children).toEqual(['@d30 @m07 @y26', '@d31 @m07 @y16 @Воскресенье', 'Личная запись']);
+    expect(doc.get('@w31').collapsed).toBe(true);
+    expect(doc.get('@d31 @m07 @y16 @Воскресенье').text).toBe('@d31 @m07 @y16 @Воскресенье');
+    expect(run(() => rebuildCalendar(ctx)).changed).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('orders boundary ISO weeks chronologically in each month, creates no missing days and accepts leap day', () => {
+    const { doc, ctx, run } = setup([
+      '@y16', '  @m01', '    @d04 @m01', '    @d01 @m01',
+      '  @m02', '    @d29 @m02',
+      '@y24', '  @m12', '    @d31 @m12', '    @d29 @m12',
+    ]);
+    expect(run(() => rebuildCalendar(ctx)).changed).toBe(true);
+    expect(doc.get('@m01').children.map((id) => doc.get(id).text)).toEqual(['@w53', '@w01']);
+    expect(doc.get('@m12').children.map((id) => doc.get(id).text)).toEqual(['@w52', '@w01']);
+    expect(doc.get(doc.get('@d29 @m02').parent!).text).toBe('@w09');
+    expect(doc.get('@m02').children).toHaveLength(1);
+    checkInvariants(doc);
+  });
+
+  it.each([
+    ['@y25', '  @m02', '    @d29 @m02'],
+    ['@q1', '  @y25', '    @m02', '      @d29 @m02'],
+    ['@y26', '  @m01', '    @d01 @m01', '    @w01', '      @d01 @m01 дубль'],
+    ['@y26', '  @m01', '    @d01 @m01', '    @w01', '    @w01 дубль'],
+    ['@y26', '  @m01', '    @d01 @m02'],
+    ['@y26', '  @m04', '    @d31 @m04'],
+  ])('rejects invalid flat dates or duplicate days/weeks before moving anything: %j', (...lines) => {
+    const { doc, ctx, run } = setup(lines);
+    const before = serialize(doc);
+    expect(run(() => rebuildCalendar(ctx)).error).toBeTruthy();
+    expect(serialize(doc)).toEqual(before);
   });
 
   it('recognizes root-year dates and normalizes their tags without touching entries inside days', () => {

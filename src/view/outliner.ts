@@ -1134,7 +1134,7 @@ export class Outliner {
     if (plan.error) return this.notify(plan.error);
     if (!plan.years.length) return this.notify('Перестраивать календарь не нужно');
     const years = plan.years.map(({ y }) => y).join(', ');
-    if (!confirm(`Перестроить календарь за ${years}? Месяцы будут собраны под годами в корне. Содержимое дней сохранится. Перенос можно отменить через Ctrl+Z.`)) return;
+    if (!confirm(`Перестроить календарь за ${years}? Месяцы будут собраны под годами в корне. Для дней без недель будут созданы ISO-недели. Содержимое дней сохранится. Перенос можно отменить через Ctrl+Z.`)) return;
     this.run((ctx) => {
       const result = rebuildCalendar(ctx);
       this.notify(result.error ?? (result.changed

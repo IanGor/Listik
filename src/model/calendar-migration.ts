@@ -1,6 +1,6 @@
-import { deleteNode, type Ctx } from './commands';
+import { deleteNode, placeTrees, type Ctx } from './commands';
 import type { Doc } from './doc';
-import { labelOf, periodAt } from './calendar';
+import { daysIn, isoWeek, labelOf, periodAt, weeksOf } from './calendar';
 import { titleOf } from './links';
 import { normalize } from './search';
 import { LINK_RE } from './format';
@@ -9,16 +9,19 @@ import type { NodeId } from './types';
 export interface CalendarPlan {
   years: { y: number; target: NodeId; sources: NodeId[]; months: NodeId[] }[];
   quarters: NodeId[];
+  flatMonths: { month: NodeId; weeks: { w: number; id?: NodeId; days: NodeId[] }[] }[];
   error?: string;
 }
 
 /** Read-only preflight; no partial migration when the calendar is ambiguous. */
 export function calendarPlan(doc: Doc): CalendarPlan {
-  const plan: CalendarPlan = { years: [], quarters: [] };
+  const plan: CalendarPlan = { years: [], quarters: [], flatMonths: [] };
   const groups = new Map<number, NodeId[]>();
   const rootYears = new Map<number, NodeId[]>();
   const add = (map: Map<number, NodeId[]>, y: number, id: NodeId) => map.set(y, [...(map.get(y) ?? []), id]);
-  const fail = (id: NodeId) => { plan.error = `Не удалось перестроить календарь: проверьте дубли и структуру у «${doc.get(id).text}».`; };
+  const fail = (id: NodeId, reason = 'проверьте дубли и структуру') => {
+    plan.error ??= `Не удалось перестроить календарь: ${reason} у «${doc.get(id).text}».`;
+  };
   const calendarTag = (text: string) => /^@[ymwdq]\d/.test(text.trim());
   const roots = doc.get(doc.root).children;
   for (const id of roots) {
@@ -40,6 +43,14 @@ export function calendarPlan(doc: Doc): CalendarPlan {
       add(groups, p.y, id);
     } else if (calendarTag(doc.get(id).text) && labelOf(doc.get(id).text)?.kind !== 'year') fail(id);
   }
+  // Root years may already have been moved manually, while their days still lack weeks.
+  for (const [y, years] of rootYears) {
+    if (years.some((year) => doc.get(year).children.some((month) =>
+      labelOf(doc.get(month).text)?.kind === 'month' && doc.get(month).children.some((id) =>
+        calendarTag(doc.get(id).text) && labelOf(doc.get(id).text)?.kind !== 'week')))) {
+      if (!groups.has(y)) groups.set(y, []);
+    }
+  }
   for (const [y, sources] of groups) {
     const existing = rootYears.get(y) ?? [];
     if (existing.length > 1) fail(existing[1]);
@@ -53,16 +64,53 @@ export function calendarPlan(doc: Doc): CalendarPlan {
       }
       if (months.has(p.m) || doc.get(id).mirrorOf) fail(id);
       months.set(p.m, id);
-      // Validate calendar levels only, never inspect a day's personal contents.
-      for (const w of doc.get(id).children) {
-        const wp = periodAt(doc, w);
-        if (wp?.kind !== 'week') { if (calendarTag(doc.get(w).text)) fail(w); continue; }
-        if (doc.get(w).mirrorOf) fail(w);
-        for (const d of doc.get(w).children) {
-          const dp = periodAt(doc, d);
-          if (calendarTag(doc.get(d).text) && dp?.kind !== 'day') fail(d);
-          if (dp?.kind === 'day' && doc.get(d).mirrorOf) fail(d);
+      const weeks = new Map<number, NodeId>();
+      const days = new Map<number, NodeId>();
+      const flatDays: { id: NodeId; d: number; w: number }[] = [];
+      const collectDay = (day: NodeId, flat: boolean) => {
+        const label = labelOf(doc.get(day).text);
+        if (label?.kind !== 'day') {
+          if (calendarTag(doc.get(day).text)) fail(day, 'не удалось определить дату');
+          return;
         }
+        // Personal entries such as "call @d31 @m07" are not calendar day nodes.
+        if (!calendarTag(doc.get(day).text)) return;
+        if (label.m !== p.m || label.d > daysIn(y, p.m)) {
+          fail(day, `дата не соответствует месяцу ${p.m} и родительскому году ${y}`);
+          return;
+        }
+        if (days.has(label.d)) fail(day, `день ${label.d} повторяется в месяце ${p.m} года ${y}`);
+        if (doc.get(day).mirrorOf) fail(day, 'календарный день является зеркалом');
+        days.set(label.d, day);
+        if (flat) flatDays.push({ id: day, d: label.d, w: isoWeek(y, p.m, label.d) });
+      };
+      // Validate only calendar levels; never traverse personal contents inside days.
+      for (const child of doc.get(id).children) {
+        const label = labelOf(doc.get(child).text);
+        if (label?.kind === 'day') { collectDay(child, true); continue; }
+        if (label?.kind !== 'week') {
+          if (calendarTag(doc.get(child).text)) fail(child, 'не удалось определить неделю или день');
+          continue;
+        }
+        if (weeks.has(label.w)) fail(child, `неделя ${label.w} повторяется`);
+        if (doc.get(child).mirrorOf) fail(child, 'календарная неделя является зеркалом');
+        weeks.set(label.w, child);
+        for (const day of doc.get(child).children) collectDay(day, false);
+      }
+      if (flatDays.length) {
+        const order = weeksOf(y, p.m);
+        for (const [w, week] of weeks) {
+          if (!order.includes(w)) fail(week, `неделя ${w} не относится к месяцу ${p.m} года ${y}`);
+        }
+        const byWeek = new Map<number, NodeId[]>();
+        for (const [d, day] of [...days].sort(([a], [b]) => a - b)) {
+          const w = isoWeek(y, p.m, d);
+          const actual = doc.get(day).parent!;
+          if (actual !== id && actual !== weeks.get(w)) fail(day, `день находится не в своей ISO-неделе ${w}`);
+          byWeek.set(w, [...(byWeek.get(w) ?? []), day]);
+        }
+        plan.flatMonths.push({ month: id, weeks: order.filter((w) => weeks.has(w) || byWeek.has(w))
+          .map((w) => ({ w, id: weeks.get(w), days: byWeek.get(w) ?? [] })) });
       }
     }
     if (doc.get(target).mirrorOf) fail(target);
@@ -101,12 +149,27 @@ export function rebuildCalendar(ctx: Ctx): { changed: boolean; retained: string[
     else deleteNode(ctx, id);
   };
   const root = [...doc.get(doc.root).children];
-  const anchor = Math.min(...plan.quarters.map((id) => root.indexOf(id)));
+  const anchors = [...plan.quarters, ...plan.years.map(({ target }) => target).filter((id) => doc.get(id).parent === doc.root)];
+  const anchor = Math.min(...anchors.map((id) => root.indexOf(id)));
   for (const year of plan.years) {
     if (doc.get(year.target).parent !== doc.root) move(doc, year.target, doc.root, anchor);
     // Move in sorted order before any personal children, preserving their relative order.
     year.months.forEach((id, index) => move(doc, id, year.target, index));
     for (const source of year.sources) if (source !== year.target) cleanup(source);
+  }
+  for (const month of plan.flatMonths) {
+    month.weeks.forEach((week, index) => {
+      let id = week.id;
+      if (!id) {
+        const created = placeTrees(ctx, month.month, index, [{
+          id: `${month.month}~week${week.w}`, text: `@w${String(week.w).padStart(2, '0')}`,
+          collapsed: true, children: [],
+        }]);
+        id = created!.id;
+      }
+      move(doc, id, month.month, index);
+      week.days.forEach((day, position) => move(doc, day, id!, position));
+    });
   }
   for (const q of plan.quarters) cleanup(q);
   const years = doc.get(doc.root).children.filter((id) => periodAt(doc, id)?.kind === 'year')
