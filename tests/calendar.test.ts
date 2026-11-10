@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as cmd from '../src/model/commands';
 import {
-  HOURS, SLOTS, STRUCTURE, addYear, calendarName, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
+  SLOTS, STRUCTURE, addYear, calendarName, createStructure, dayOf, fillDay, findInbox, findPeriod, firstWord, findQuarter, hasStructure, isoWeek, periodAt,
   openPeriods, periodName, periodText, structureTrees, weeksOf, yearTags, yearTree, type Period,
 } from '../src/model/calendar';
 import { invert, type Doc } from '../src/model/doc';
@@ -210,7 +210,7 @@ describe('built on two devices at once', () => {
       const tags = new TagIndex(doc);
       for (let q = 1; q <= 4; q++) expect(doc.get(findQuarter(doc, tags, q)!).children.map((y) => doc.get(y).text)).toEqual(['@y26', '@y27']);
       const d = findPeriod(doc, tags, day(2026, 10, 21))!;
-      expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', '', HOURS]);
+      expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#daynote', '', ...SLOTS]);
       expect(doc.get(d).children.filter((k) => doc.get(k).mirrorOf)).toHaveLength(1);
       checkInvariants(doc);
     }
@@ -225,7 +225,7 @@ describe('built on two devices at once', () => {
     run(() => fillDay(ctx, d));
     for (const k of [...doc.get(d).children]) run(() => cmd.deleteNode(ctx, k));
     expect(run(() => fillDay(ctx, d))).toBe(true);
-    expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#notes', HOURS]);
+    expect(doc.get(d).children.map((k) => doc.get(k).text)).toEqual(['#daynote', ...SLOTS]);
     checkInvariants(doc);
   });
 });
@@ -348,14 +348,16 @@ describe('calendarName', () => {
 });
 
 describe('fillDay', () => {
-  it('gives an empty day notes with an empty plain bullet, then the hours folded in one bullet, once', () => {
+  it('gives an empty day a childless daynote and flat half-hour slots, once', () => {
     const { doc, ctx, run } = setup(['@d19 @m10 @понедельник']);
     const id = '@d19 @m10 @понедельник';
     expect(run(() => fillDay(ctx, id))).toBe(true);
-    expect(dump(doc)).toEqual([id, '  #notes', '    ', `  ${HOURS} [+]`, ...SLOTS.map((s) => `    ${s}`)]);
-    expect(HOURS).toBe('Часы 09:00–18:00');
+    expect(dump(doc)).toEqual([id, '  #daynote', ...SLOTS.map((s) => `  ${s}`)]);
     const [notes] = doc.get(id).children;
-    expect(doc.get(doc.get(notes).children[0]).todo).toBe(false);
+    for (const child of doc.get(id).children) {
+      expect(doc.get(child).children).toEqual([]);
+      expect(doc.get(child).todo).toBe(false);
+    }
     expect(doc.get(notes).note).toBe('');
     expect(SLOTS[0]).toBe('09:00');
     expect(SLOTS.at(-1)).toBe('18:00');
@@ -372,7 +374,7 @@ describe('fillDayToday', () => {
     const { doc, ctx, run } = setup([id]);
     expect(run(() => fillDayToday(ctx, id))).toBe(true);
     const kids = doc.get(id).children;
-    expect(kids.map((c) => doc.get(c).text)).toEqual(['#notes', '', HOURS]);
+    expect(kids.map((c) => doc.get(c).text)).toEqual(['#daynote', '', ...SLOTS]);
     const today = findToday(doc)!;
     expect(doc.get(today).text).toBe('Today');
     expect(doc.get(today).note).toBe('@work @home');
@@ -381,6 +383,27 @@ describe('fillDayToday', () => {
     expect(doc.get(kids[1]).collapsed).toBe(false);
     expect(todayMirrorOf(doc, id)).toBe(kids[1]);
     expect(run(() => fillDayToday(ctx, id))).toBe(false);
+    checkInvariants(doc);
+  });
+
+  it('leaves a populated old day unchanged and fills an empty day from Create structure', () => {
+    const { doc, ctx, run } = setup([]);
+    run(() => createStructure(ctx, 2026));
+    const tags = new TagIndex(doc);
+    const oldDay = findPeriod(doc, tags, day(2026, 10, 19))!;
+    const newDay = findPeriod(doc, tags, day(2026, 10, 20))!;
+    run(() => cmd.placeTrees(ctx, oldDay, 0, [
+      { text: '#notes', children: [{ text: 'Старая запись', children: [] }] },
+      { text: 'Часы 09:00–18:00', collapsed: true, children: [{ text: '09:00', children: [] }] },
+    ]));
+    const before = serialize(doc);
+    expect(run(() => fillDayToday(ctx, oldDay))).toBe(false);
+    expect(serialize(doc)).toEqual(before);
+    expect(run(() => fillDayToday(ctx, newDay))).toBe(true);
+    const children = doc.get(newDay).children;
+    expect(children).toHaveLength(21);
+    expect(children.map((id) => doc.content(id).text)).toEqual(['#daynote', 'Today', ...SLOTS]);
+    expect(doc.get(children[1]).mirrorOf).toBe(findToday(doc));
     checkInvariants(doc);
   });
 

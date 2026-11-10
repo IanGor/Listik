@@ -1107,13 +1107,13 @@ test.describe('structure and calendar', () => {
   const year = `@y${two(now.getFullYear() % 100)}`;
   const quarter = Math.floor(now.getMonth() / 3) + 1;
   const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', '@q1', '@q2', '@q3', '@q4'];
-  // The day's hours, folded in one bullet (model/calendar.ts HOURS).
-  const HOURS = 'Часы 09:00–18:00';
+  // The day's 19 half-hour slots are direct children, after the Today mirror.
+  const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   // The path names the calendar by dates (model/calendar.ts calendarName).
   const yearCrumb = String(now.getFullYear());
   const monthCrumb = now.toLocaleString('ru', { month: 'long' }).replace(/^./, (c) => c.toUpperCase());
-  /** A day as it is first entered: notes and a todo list, each with an empty bullet, then the hours. */
-  const DAY = ['#notes', '  ', 'Today', HOURS];
+  /** A day as it is first entered: a childless daynote, the Today mirror, then flat hours. */
+  const DAY = ['#daynote', 'Today', ...SLOTS];
   const title = (page: Page) => page.locator('.zoom-title');
   const caret = (page: Page) => page.locator('.text[contenteditable]:focus');
   /** Opens the title for editing: a click past its text, as a day's title is all tags and a click on one filters. */
@@ -1178,16 +1178,18 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
     await expect(title(page)).toHaveText(today);
-    await page.locator('.row .text').nth(1).click();
+    await edit(page, '#daynote');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
     await page.keyboard.type('утро');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
-    expect(await outline(page)).toEqual(['#notes', '  утро', 'Today', HOURS]);
-    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(['#daynote', '  утро', 'Today', ...SLOTS]);
+    await page.locator('.row', { hasText: '#daynote' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['#daynote', 'Today', ...SLOTS]);
     expect(new URL(page.url()).hash).not.toBe('');
   });
 
@@ -1570,7 +1572,9 @@ test.describe('structure and calendar', () => {
 
   test('a day\'s template the app makes on the way is no undo step: Ctrl+Z takes back the last edit and the view stays', async ({ page }) => {
     await create(page);
-    await page.locator('.row .text').nth(1).click();
+    await edit(page, '#daynote');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
     await page.keyboard.type('запись');
     await page.keyboard.press('Escape');
     // Another day of this year, entered for the first time: filled.
@@ -1586,7 +1590,8 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DAY);
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(DAY);
+    // Undo removes the typed text, preserving the child the user created.
+    expect(await outline(page)).toEqual(['#daynote', '  ', 'Today', ...SLOTS]);
   });
 
   test('"today" in "Перейти к…": today\'s day first, Enter goes there as the logo does', async ({ page }) => {
@@ -1612,18 +1617,20 @@ test.describe('structure and calendar', () => {
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
     expect(await outline(page)).toEqual(DAY);
-    await page.locator('.row .text').nth(1).click();
+    await edit(page, '#daynote');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
     await page.keyboard.type('запись');
     await page.waitForTimeout(500);
     await page.goto('/?db=e2e-calendar');
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', '  запись', 'Today', HOURS]);
-    await page.locator('.row', { hasText: '#notes' }).locator('.toggle').click();
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(['#daynote', '  запись', 'Today', ...SLOTS]);
+    await page.locator('.row', { hasText: '#daynote' }).locator('.toggle').click();
+    expect(await outline(page)).toEqual(['#daynote', 'Today', ...SLOTS]);
     await page.waitForTimeout(500);
     await page.reload();
     await expect(title(page)).toHaveText(today);
-    expect(await outline(page)).toEqual(['#notes', 'Today', HOURS]);
+    expect(await outline(page)).toEqual(['#daynote', 'Today', ...SLOTS]);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));

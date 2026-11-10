@@ -15,7 +15,7 @@ import type { NodeId } from './types';
  * `@q4` → `@y26` → `@m10` → week `@w43` (ISO, from Monday; a week that
  * spans two months is in both, with its own days) → day
  * `@d19 @m10 @y26 @понедельник`. A year comes whole, its days empty; a day gets
- * its template (#notes, todo, 09:00…18:00) when it is first entered.
+ * its template (#daynote, a Today mirror, 09:00…18:00) when it is first entered.
  *
  * Bullets are named by tags. Numbers have two digits, as a tag in the
  * search box matches by its start (`@m1` would find `@m10`). A day carries
@@ -173,19 +173,15 @@ export function structureTrees(y: number): Tree[] {
 /** The caption (note) of the Kanban's Today: its contexts, ready to filter the tasks by work or by home. */
 export const TODO_NOTE = '@work @home';
 
-/** The bullet the day's hours go in, folded: one line, not a wall of 19 empty ones (UX audit, 29 October 2026). */
-export const HOURS = `Часы ${SLOTS[0]}–${SLOTS[SLOTS.length - 1]}`;
-
 /**
- * What a day gets when it is first entered: notes with an empty bullet to
- * write in, then the hours, folded in one bullet. Between them goes a mirror
- * of the Kanban's Today in place of a list of its own (model/kanban.ts
- * `fillDayToday`).
+ * What an empty day gets when first entered: a note bullet and half-hour
+ * slots as direct children. `fillDayToday` inserts the Kanban Today mirror
+ * between the note and the slots. Populated days keep their existing layout.
  */
 export function dayTemplate(): Tree[] {
   return [
-    { text: '#notes', children: [{ text: '', children: [] }] },
-    { text: HOURS, collapsed: true, children: SLOTS.map((text) => ({ text, children: [] })) },
+    { text: '#daynote', children: [] },
+    ...SLOTS.map((text) => ({ text, children: [] })),
   ];
 }
 
