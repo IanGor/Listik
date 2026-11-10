@@ -1,8 +1,9 @@
+import { Sidebar } from './Sidebar';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { keyboard, phone, touch } from './screen';
+import { keyboard, narrow, phone, touch } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -373,8 +374,8 @@ export function Outline(props: { o: Outliner }) {
   };
 
   return (
-    <div class="outline">
-      <TopBar o={o} />
+    <div class="outline" classList={{ 'has-navigation': !phone() && !narrow() }}>
+      <TopBar o={o} navigation={!phone() && !narrow()} />
       <Shortcuts o={o} />
       <Show when={o.opened && !o.readOnly}>
         <SyncDialog o={o} />
@@ -415,6 +416,7 @@ export function Outline(props: { o: Outliner }) {
       <QuickCapture o={o} />
       <GoTo o={o} />
       <div class="workspace">
+        <Show when={!phone() && !narrow()}><Sidebar o={o} /></Show>
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
         <Show when={o.sketchShown()} keyed>

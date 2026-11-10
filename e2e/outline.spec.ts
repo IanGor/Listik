@@ -28,9 +28,15 @@ const DEMO = [
   'Том второй',
 ];
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, info) => {
   await page.goto('/?demo');
   await expect(page.locator('.row')).toHaveCount(DEMO.length);
+  // Existing editor scenarios use the expanded navigation's search field.
+  // Sidebar-specific scenarios exercise the actual compact default.
+  if (!info.titlePath.includes('navigation sidebar')) {
+    const toggle = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
+    if (await toggle.count()) await toggle.click();
+  }
 });
 
 test('a button lights the instant it is pressed, not on release', async ({ page }) => {
@@ -4606,5 +4612,131 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await page.keyboard.press('Control+Home');
     await page.keyboard.press('Backspace');
     expect((await outline(page)).at(-1)).toBe('  Часть втораяТом второй');
+  });
+});
+
+test.describe('navigation sidebar', () => {
+  test('keeps independent tree folds while navigating and collapsing the panel', async ({ page }) => {
+    const sidebar = page.getByRole('complementary', { name: 'Навигация по документу' });
+    await expect(sidebar).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    const tree = sidebar.getByRole('tree');
+    await tree.getByRole('button', { name: 'Развернуть Том первый', exact: true }).click();
+    expect(await outline(page)).toEqual(DEMO);
+    await tree.getByRole('treeitem', { name: 'Часть вторая', exact: true }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+    await expect(tree.getByRole('treeitem', { name: 'Часть первая', exact: true })).toBeVisible();
+    await sidebar.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
+    await expect(tree).toHaveCount(0);
+    await sidebar.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await expect(sidebar.getByRole('treeitem', { name: 'Часть первая', exact: true })).toBeVisible();
+    await expect(sidebar.getByRole('treeitem', { name: 'Часть вторая', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.screenshot({ path: '/tmp/listik-sidebar-desktop.png' });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(sidebar.locator('.home-button')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await page.screenshot({ path: '/tmp/listik-sidebar-dark.png' });
+    await page.locator('.zoom-title').click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' — правка');
+    await page.keyboard.press('Escape');
+    await expect(sidebar.getByRole('treeitem', { name: 'Часть вторая — правка', exact: true })).toBeVisible();
+  });
+
+  test('persists separate branch expansions with the document across reload', async ({ page }) => {
+    await page.goto('/?db=e2e-navigation-persistence&empty');
+    await page.locator('.row .text').click();
+    await editing(page).evaluate((el) => {
+      const data = new DataTransfer();
+      data.setData('text/plain', '- Project\n  - Branch\n- Other\n  - Leaf\n');
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    const tree = page.getByRole('tree');
+    await tree.getByRole('button', { name: 'Развернуть Project', exact: true }).click();
+    await tree.getByRole('button', { name: 'Развернуть Other', exact: true }).click();
+    await tree.getByRole('treeitem', { name: 'Branch', exact: true }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Branch');
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect(page.locator('.zoom-title')).toHaveText('Branch');
+    await expect(page.getByRole('treeitem', { name: 'Leaf', exact: true })).toBeVisible();
+    await expect(page.getByRole('treeitem', { name: 'Branch', exact: true })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('compact search works with Ctrl+F and filters the main branch only', async ({ page }) => {
+    await page.keyboard.press('Control+f');
+    await expect(page.locator('.navigation-search .search')).toBeFocused();
+    await page.locator('.navigation-search .search').fill('Том');
+    await expect(page.locator('.row')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await page.locator('.navigation-search .search').fill('ничего');
+    await expect(page.getByRole('treeitem', { name: 'Том первый', exact: true })).toBeVisible();
+    await expect(page.getByRole('treeitem', { name: 'Том второй', exact: true })).toBeVisible();
+    await expect(page.locator('.topbar .search')).toHaveCount(0);
+  });
+
+  test('an iPad-width overlay collapses after selecting a branch', async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 1080 });
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await expect(page.locator('.navigation-sidebar')).toHaveClass(/overlay/);
+    await page.getByRole('treeitem', { name: 'Том второй', exact: true }).click();
+    await expect(page.locator('.zoom-title')).toHaveText('Том второй');
+    await expect(page.getByRole('tree')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Открыть панель навигации', exact: true })).toBeVisible();
+  });
+
+  test('restores the wide-window preference after temporary overlay navigation', async ({ page }) => {
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await page.setViewportSize({ width: 820, height: 1080 });
+    await expect(page.getByRole('tree')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await page.getByRole('treeitem', { name: 'Том второй', exact: true }).click();
+    await expect(page.getByRole('tree')).toHaveCount(0);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(page.getByRole('tree')).toBeVisible();
+    await page.keyboard.press('Control+f');
+    await page.setViewportSize({ width: 820, height: 1080 });
+    await expect(page.locator('.navigation-search .search')).toBeFocused();
+  });
+
+  test.describe('touch iPad', () => {
+    test.use({ viewport: { width: 820, height: 1180 }, screen: { width: 820, height: 1180 }, hasTouch: true, isMobile: true });
+    test('uses finger targets and an overlay, with no hover required', async ({ page }) => {
+      await expect(page.locator('html')).toHaveClass(/tablet/);
+      const toggle = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
+      const box = (await toggle.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      await toggle.tap();
+      const expand = page.getByRole('button', { name: 'Развернуть Том первый', exact: true });
+      await expand.tap();
+      await page.screenshot({ path: '/tmp/listik-sidebar-ipad.png' });
+      await page.getByRole('treeitem', { name: 'Часть вторая', exact: true }).tap();
+      await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
+      await expect(page.getByRole('tree')).toHaveCount(0);
+    });
+  });
+
+  test('a phone retains its original top bar without a sidebar', async ({ page }) => {
+    await page.setViewportSize({ width: 412, height: 915 });
+    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
+    await expect(page.locator('.topbar .search')).toBeVisible();
+    await expect(page.locator('.topbar .today-button')).toBeVisible();
+    await expect(page.locator('.topbar .home-button')).toBeVisible();
+  });
+
+  test('a large root tree renders only a viewport and is keyboard navigable', async ({ page }) => {
+    await page.goto('/?sample=200000');
+    await expect(page.locator('.row').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    const items = page.getByRole('treeitem');
+    expect(await items.count()).toBeLessThan(100);
+    await items.first().focus();
+    await page.keyboard.press('End');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.zoom-title')).toBeVisible();
   });
 });

@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createSignal, on } from 'solid-js';
+import { For, Show, createEffect, createSignal, on, onCleanup } from 'solid-js';
 import { normalize } from '../model/search';
 import type { Outliner } from './outliner';
 import { MOD, narrow } from './screen';
@@ -25,10 +25,13 @@ function Star(props: { filled: boolean; size: number }) {
  * last saved first, narrowed to those holding what is typed; a press runs
  * one, its × takes it out. The list scrolls past its height (index.css).
  */
-export function SearchBar(props: { o: Outliner }) {
+export function SearchBar(props: { o: Outliner; onRequest?: () => void }) {
   const o = props.o;
   let input!: HTMLInputElement;
   const [focused, setFocused] = createSignal(false);
+  // Responsive layout may move search between the header and the sidebar.
+  // Restore an active search after the replacement input has mounted.
+  onCleanup(() => { if (focused()) queueMicrotask(() => o.requestSearch()); });
   const saved = () => o.isSaved(o.query());
   /** Saved searches to offer: all of them, or those holding what is typed (not the very same). */
   const offered = () => {
@@ -66,8 +69,8 @@ export function SearchBar(props: { o: Outliner }) {
   };
 
   createEffect(on(o.searchRequests, () => {
-    input.focus();
-    input.select();
+    props.onRequest?.();
+    queueMicrotask(() => { input.focus(); input.select(); });
   }, { defer: true }));
 
   const onKeyDown = (e: KeyboardEvent) => {

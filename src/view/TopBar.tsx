@@ -11,15 +11,29 @@ import { watchWindowControls } from './window-controls';
  * (`aria-current`), as Apple's guides ask of navigation. On a phone they are
  * their symbols alone. Quick capture has its own button on every screen.
  */
-export function TopBar(props: { o: Outliner }) {
+export function TopBar(props: { o: Outliner; navigation?: boolean }) {
   // In an iPadOS window the controls lie over the header's left corner: the places step aside.
   onCleanup(watchWindowControls());
+  return (
+    <header class="topbar" classList={{ 'with-navigation': props.navigation }}>
+      <Show when={!props.navigation}>
+        <Places o={props.o} />
+        <SearchBar o={props.o} />
+      </Show>
+      <div class="topbar-actions">
+        <Show when={!props.navigation}><CaptureButton o={props.o} /></Show>
+        <DocumentMenu o={props.o} />
+      </div>
+    </header>
+  );
+}
+
+export function Places(props: { o: Outliner; onNavigate?: () => void }) {
   // Today's number on the calendar symbol: past midnight it turns over by itself.
   const [day, setDay] = createSignal(new Date().getDate());
   const tick = setInterval(() => setDay(new Date().getDate()), 60_000);
   onCleanup(() => clearInterval(tick));
   return (
-    <header class="topbar">
       <nav class="places" aria-label="Места">
         <button data-action="TopBar.1"
           type="button"
@@ -27,7 +41,7 @@ export function TopBar(props: { o: Outliner }) {
           title="Сегодняшний день в календаре"
           aria-label="Сегодня"
           aria-current={props.o.placeNow() === 'today' ? 'page' : undefined}
-          onClick={() => props.o.goToday()}
+          onClick={() => { props.o.goToday(); props.onNavigate?.(); }}
         >
           <svg class="place-icon" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3.5" y="4.5" width="17" height="16" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -43,7 +57,7 @@ export function TopBar(props: { o: Outliner }) {
           title="На главную"
           aria-label="Главная"
           aria-current={props.o.zoom() === null ? 'page' : undefined}
-          onClick={() => props.o.goHome()}
+          onClick={() => { props.o.goHome(); props.onNavigate?.(); }}
         >
           <svg class="place-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
@@ -52,15 +66,16 @@ export function TopBar(props: { o: Outliner }) {
           <span class="place-label">Главная</span>
         </button>
       </nav>
-      <SearchBar o={props.o} />
-      <div class="topbar-actions">
+  );
+}
+
+export function CaptureButton(props: { o: Outliner; labelled?: boolean }) {
+  return (
         <Show when={!props.o.readOnly}>
           <button data-action="TopBar.3" type="button" class="icon-button" title="Записать в Inbox" aria-label="Записать в Inbox" onPointerDown={(e) => e.preventDefault()} onClick={() => props.o.openCapture()}>
             <WriteIcon />
+            <Show when={props.labelled}><span class="place-label">Записать в Inbox</span></Show>
           </button>
         </Show>
-        <DocumentMenu o={props.o} />
-      </div>
-    </header>
   );
 }
