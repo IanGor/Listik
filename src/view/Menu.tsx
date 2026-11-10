@@ -260,10 +260,6 @@ export function DocumentMenu(props: { o: Outliner }) {
               Создать структуру <span class="hint">PARA и календарь</span>
               <CALENDAR />
             </button>
-            <button data-action="calendar.rebuild" type="button" role="menuitem" onClick={() => { close(); o.rebuildCalendar(); }}>
-              Перестроить календарь
-              <CALENDAR />
-            </button>
           </Show>
           <div class="menu-sep" role="separator" />
           <button data-action="Menu.14" type="button" role="menuitem" aria-expanded={filesOpen()} onClick={() => setFilesOpen(!filesOpen())}>

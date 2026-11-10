@@ -79,6 +79,7 @@ async function open(name: string, opened: Opened): Promise<Outliner | { damaged:
   outliner.backup = await Backup.open(name, doc);
   outliner.syncHandle = await startSync(doc, opened, persistence);
   outliner.watchSync();
+  outliner.packCalendar();
   outliner.tagYears();
   outliner.tagProjects(name);
   outliner.sweepBacklog();

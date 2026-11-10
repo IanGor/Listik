@@ -1105,7 +1105,7 @@ test.describe('structure and calendar', () => {
   const shifted = (days: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
   const today = dayText(now);
   const year = `@y${two(now.getFullYear() % 100)}`;
-  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', year];
+  const STRUCTURE = ['📥 Inbox', 'PARA', '  Projects', '  Areas', '  Resources', '  Archive', 'Kanban', '  Backlog', 'Calendar'];
   // The day's 19 half-hour slots are direct children, after the Today mirror.
   const SLOTS = Array.from({ length: 19 }, (_, i) => `${two(9 + Math.floor(i / 2))}:${i % 2 ? '30' : '00'}`);
   // The path names the calendar by dates (model/calendar.ts calendarName).
@@ -1121,66 +1121,49 @@ test.describe('structure and calendar', () => {
     await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
   };
 
-  test('the rebuild menu previews the migration, can cancel, and moves a legacy calendar with one undo', async ({ page }) => {
-    await edit(page, 'Том второй');
-    await page.keyboard.press('Enter');
+  test('auto-packs existing root years on reload and removes the rebuild menu command', async ({ page }) => {
+    await page.goto('/?db=e2e-calendar-container&empty');
+    await page.locator('.row .text').click();
     await editing(page).evaluate((el) => {
       const data = new DataTransfer();
-      data.setData('text/plain', '- @q1\n  - @y26\n    - @m01\n- @q4\n  - @y2026\n    - @m10\n');
+      data.setData('text/plain', '- Inbox\n- @y25\n  - Запись 2025\n- 📅 My Calendar — личное\n  - Личное\n- @y26\n  - Запись 2026\n');
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
     });
     await page.keyboard.press('Escape');
-    const before = await outline(page);
-    const rebuild = async () => {
-      await page.locator('.menu-button').click();
-      await page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true }).click();
-    };
-    page.once('dialog', (dialog) => dialog.dismiss());
-    await rebuild();
-    expect(await outline(page)).toEqual(before);
-    page.once('dialog', (dialog) => dialog.accept());
-    await rebuild();
-    await expect(page.locator('.toast')).toContainText('Календарь перестроен');
-    expect(await outline(page)).toEqual([...DEMO, '@y26', '  @m01', '  @m10']);
-    await page.keyboard.press('Control+z');
-    expect(await outline(page)).toEqual(before);
-    await page.keyboard.press('Control+Shift+z');
-    expect(await outline(page)).toEqual([...DEMO, '@y26', '  @m01', '  @m10']);
-    await rebuild();
-    await expect(page.locator('.toast')).toContainText('Перестраивать календарь не нужно');
+    const id = await page.locator('.row', { hasText: 'Запись 2025' }).getAttribute('data-id');
+    await page.waitForTimeout(500);
+    await page.reload();
+    await expect.poll(() => page.locator('.row[data-depth="0"] .text').allTextContents()).toEqual(['Inbox', '📅 My Calendar — личное']);
+    await page.locator('.row', { hasText: '📅 My Calendar' }).locator('.bullet').click();
+    expect(await outline(page)).toEqual(['@y26', '  Запись 2026', '@y25', '  Запись 2025', 'Личное']);
+    await page.locator('.row', { hasText: '@y25' }).locator('.bullet').click();
+    await expect(page.locator('.row', { hasText: 'Запись 2025' })).toHaveAttribute('data-id', id!);
+    await page.locator('.menu-button').click();
+    await expect(page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.reload();
+    expect(await outline(page)).toEqual(['Запись 2025']);
   });
 
-  for (const quarters of [true, false]) test(`the rebuild menu adds weeks to old 2016 dates (${quarters ? 'quarter' : 'root year'})`, async ({ page }) => {
-    const day = '@d31 @m07 @y16 @Воскресенье';
-    await edit(page, 'Том второй');
-    await page.keyboard.press('Enter');
-    await editing(page).evaluate((el, { quarters, day }) => {
-      const data = new DataTransfer();
-      data.setData('text/plain', quarters
-        ? `- @q3\n  - @y16\n    - @m07\n      - ${day}\n        - Старая запись\n`
-        : `- @y16\n  - @m07\n    - ${day}\n      - Старая запись\n`);
-      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
-    }, { quarters, day });
-    await page.keyboard.press('Escape');
-    const id = await page.locator('.row', { hasText: day }).getAttribute('data-id');
-    const before = await outline(page);
-    const rebuild = async () => {
-      await page.locator('.menu-button').click();
-      await page.getByRole('menuitem', { name: 'Перестроить календарь', exact: true }).click();
-    };
-    page.once('dialog', (dialog) => dialog.accept());
-    await rebuild();
-    await expect(page.locator('.toast')).toContainText('Календарь перестроен');
-    expect(await outline(page)).toEqual([...DEMO, '@y16', '  @m07', '    @w30']);
-    await page.keyboard.press('Control+z');
-    expect(await outline(page)).toEqual(before);
-    await page.keyboard.press('Control+Shift+z');
-    expect(await outline(page)).toEqual([...DEMO, '@y16', '  @m07', '    @w30']);
-    await rebuild();
-    await expect(page.locator('.toast')).toContainText('Перестраивать календарь не нужно');
-    await page.locator('.row', { hasText: '@w30' }).locator('.toggle').click();
-    await expect(page.locator('.row', { hasText: day })).toHaveAttribute('data-id', id!);
-    expect(await outline(page)).toContain('        Старая запись');
+  test('read-only and pending initial sync do not move existing years', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const load = (path: string) => import(/* @vite-ignore */ path);
+      const { build, dump } = (await load('/tests/helpers.ts')) as typeof import('../tests/helpers');
+      const { Outliner } = (await load('/src/view/outliner.ts')) as typeof import('../src/view/outliner');
+      const read = build(['@y26']);
+      const readOnly = new Outliner(read, { readOnly: true });
+      readOnly.packCalendar();
+      const waiting = build(['@y25']);
+      const o = new Outliner(waiting);
+      o.syncing = () => true;
+      o.packCalendar();
+      const beforeSync = dump(waiting);
+      o.watchSync(); // With no engine, releases deferred tasks through heardFromServer.
+      return { read: dump(read), beforeSync, afterSync: dump(waiting) };
+    });
+    expect(result.read).toEqual(['@y26']);
+    expect(result.beforeSync).toEqual(['@y25']);
+    expect(result.afterSync).toEqual(['Calendar [+]', '  @y25']);
   });
 
   test('the menu puts it last at the top level and goes to today, filled, with no caret; undo takes it back', async ({ page }) => {
@@ -1190,7 +1173,7 @@ test.describe('structure and calendar', () => {
     // The bullet under "todo" is plain, as under the notes: no checkbox.
     await expect(page.locator('.row').nth(3).locator('.check')).toHaveCount(0);
     await expect(caret(page)).toHaveCount(0);
-    for (const crumb of [new RegExp(`^${yearCrumb}$`), new RegExp(`^${monthCrumb}$`), /^Неделя \d+$/]) {
+    for (const crumb of ['Calendar', new RegExp(`^${yearCrumb}$`), new RegExp(`^${monthCrumb}$`), /^Неделя \d+$/]) {
       await expect(page.locator('.crumbs .crumb', { hasText: crumb })).toHaveCount(1);
     }
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
@@ -1265,17 +1248,16 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => !t.startsWith(' ')));
     await level.click();
     // Opening the year shows twelve folded months; the Today remains in Kanban.
-    const MONTHS = Array.from({ length: 12 }, (_, i) => `  @m${two(i + 1)}`);
-    const OPEN = STRUCTURE.flatMap((t) => t === year ? [t, ...MONTHS] : t === '  Backlog' ? [t, '  Today'] : [t]);
+    const OPEN = STRUCTURE.flatMap((t) => t === 'Calendar' ? [t, `  ${year}`] : t === '  Backlog' ? [t, '  Today'] : [t]);
     expect(await outline(page)).toEqual(OPEN);
-    await page.locator('.row', { hasText: '@m01' }).locator('.toggle').click();
+    await page.locator('.row', { hasText: year }).locator('.toggle').click();
     expect((await outline(page)).length).toBeGreaterThan(OPEN.length);
     await page.waitForTimeout(300);
     await page.evaluate(() => localStorage.removeItem('listik-calendar-folded:e2e-calendar-fold'));
     await page.reload();
     await expect(page.locator('.row').first()).toBeVisible();
     await expect(title(page)).toHaveCount(0);
-    await expect.poll(() => outline(page)).toEqual(STRUCTURE.flatMap((t) => t === '  Backlog' ? [t, '  Today'] : [t]));
+    await expect.poll(() => outline(page)).toEqual(OPEN);
   });
 
   test('a task in PARA puts its checkbox into the structure\'s Kanban Backlog', async ({ page }) => {
@@ -1309,7 +1291,7 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.task-project')).toHaveText(['Проект: Alpha', 'Проект: Alpha']);
     const rows = await outline(page);
     const at = rows.indexOf('Kanban');
-    expect(rows.slice(at, at + 6)).toEqual(['Kanban', '  Backlog', '    write', '    read', '  Today', year]);
+    expect(rows.slice(at, at + 6)).toEqual(['Kanban', '  Backlog', '    write', '    read', '  Today', 'Calendar']);
     await page.locator('.row').filter({ has: page.locator('.text', { hasText: /^Backlog$/ }) }).locator('.bullet').click();
     await page.screenshot({ path: 'test-results/kanban-light.png', fullPage: true, animations: 'disabled' });
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -1529,7 +1511,7 @@ test.describe('structure and calendar', () => {
     await expect(page.locator('.toast')).toContainText('В Backlog: 1 задача', { timeout: 10_000 });
   });
 
-  test('crossing New Year creates one root year with twelve months and no quarters', async ({ page }) => {
+  test('crossing New Year inserts one new year first in Calendar with twelve months', async ({ page }) => {
     await page.clock.install({ time: new Date(2026, 11, 31, 12) });
     await create(page);
     await expect(title(page)).toHaveText(dayText(new Date(2026, 11, 31)));
@@ -1541,7 +1523,9 @@ test.describe('structure and calendar', () => {
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     const roots = page.locator('.row[data-depth="0"] .text');
     const texts = await roots.allTextContents();
-    expect(texts.filter((t) => /^@y/.test(t))).toEqual(['@y26', '@y27']);
+    expect(texts.filter((t) => /^@y/.test(t))).toEqual([]);
+    await page.locator('.row', { hasText: 'Calendar' }).locator('.bullet').click();
+    expect(await outline(page)).toEqual(['@y27', '@y26']);
     expect(texts.some((t) => /^@q/.test(t))).toBe(false);
     await page.locator('.row', { hasText: '@y27' }).locator('.bullet').click();
     expect(await outline(page)).toEqual(Array.from({ length: 12 }, (_, i) => `@m${two(i + 1)}`));
@@ -1618,6 +1602,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.today-button').click();
     await expect(title(page)).toHaveText(today);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
+    await page.locator('.row', { hasText: 'Calendar' }).locator('.bullet').click();
     expect((await outline(page)).filter((t) => t === year)).toHaveLength(1);
   });
 
@@ -1712,6 +1697,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     // In place of the lone empty bullet.
     expect(await outline(page)).toEqual(STRUCTURE.filter((t) => t !== '  Backlog'));
+    await page.locator('.row', { hasText: 'Calendar' }).locator('.bullet').click();
     await page.locator('.row', { hasText: new RegExp(`^${year}$`) }).locator('.bullet').click();
     await page.waitForTimeout(300);
     await page.reload();

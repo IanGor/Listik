@@ -1,8 +1,7 @@
-import { calendarPlan, rebuildCalendar } from '../model/calendar-migration';
 import { trackUsage } from './analytics';
 import { batch, createSignal, type Accessor, type Setter } from 'solid-js';
 import {
-  addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, openPeriods, periodAt, periodName, hasYear, sameDate, yearTags, type DayDate, type Period,
+  addDays, addYear, createStructure, dayOf, findInbox, findPeriod, hasStructure, packCalendar, calendarPackingPlan, openPeriods, periodAt, periodName, hasYear, sameDate, yearTags, type DayDate, type Period,
 } from '../model/calendar';
 import { appendTrees, collapseChildren, deleteMany, deleteNode, mergeUp, moveManyInto, relink, setCollapsed, setDone, setNote, setText, sinkDone, toggleDone, toggleTask, untask, type Ctx, makeMirror } from '../model/commands';
 import { invert, newId, TRASH, type Doc } from '../model/doc';
@@ -1109,7 +1108,7 @@ export class Outliner {
     });
   }
 
-  /** Is a calendar present (root year or legacy quarter, model/calendar.ts)? Reactive. */
+  /** Is a calendar present (Calendar or legacy layout, model/calendar.ts)? Reactive. */
   structure(): boolean {
     this.rowsVersion();
     return hasStructure(this.doc, this.tags);
@@ -1122,25 +1121,22 @@ export class Outliner {
   createStructure(): void {
     trackUsage('action.createStructure');
     if (this.readOnly) return;
+    const plan = calendarPackingPlan(this.doc);
+    if (plan.error) return this.notify(plan.error);
     this.run((ctx) => void createStructure(ctx, new Date().getFullYear()));
     this.goToday();
   }
 
-  /** Explicit, undoable migration; old documents are never moved at startup. */
-  rebuildCalendar(): void {
+  /** Auto-pack root years after initial sync, without adding a user undo step. */
+  packCalendar(): void {
     if (this.readOnly) return;
-    if (this.syncing() && !this.synced) return this.notify('Дождитесь завершения синхронизации');
-    const plan = calendarPlan(this.doc);
-    if (plan.error) return this.notify(plan.error);
-    if (!plan.years.length) return this.notify('Перестраивать календарь не нужно');
-    const years = plan.years.map(({ y }) => y).join(', ');
-    if (!confirm(`Перестроить календарь за ${years}? Месяцы будут собраны под годами в корне. Для дней без недель будут созданы ISO-недели. Содержимое дней сохранится. Перенос можно отменить через Ctrl+Z.`)) return;
-    this.run((ctx) => {
-      const result = rebuildCalendar(ctx);
-      this.notify(result.error ?? (result.changed
-        ? `Календарь перестроен${result.retained.length ? `. Сохранены: ${result.retained.join('; ')}` : ''}`
-        : 'Перестраивать календарь не нужно'));
-    });
+    const run = () => {
+      const plan = calendarPackingPlan(this.doc);
+      if (plan.error) return this.notify(plan.error);
+      if (plan.years.length) this.scaffold((ctx) => { packCalendar(ctx); });
+    };
+    if (this.syncing() && !this.synced) this.afterSync.push(run);
+    else run();
   }
 
   /**

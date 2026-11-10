@@ -5,7 +5,7 @@ import type { Tree } from './outline-text';
 import { parseTags, type TagIndex } from './tags';
 import type { NodeId } from './types';
 
-/** Calendar: root year → month → ISO week → day. Legacy quarters remain readable. */
+/** Calendar → year → month → ISO week → day. Legacy root years/quarters remain readable. */
 
 const two = (n: number) => String(n).padStart(2, '0');
 
@@ -121,6 +121,75 @@ export function yearTree(y: number, q?: number): Tree {
   return { text: yearTag(y), collapsed: true, children: months };
 }
 
+/** A root container with the whole word Calendar, allowing emoji and other words. */
+export function findCalendar(doc: Doc): NodeId | null {
+  const id = doc.get(doc.root).children.find((id) => calendarTitle(doc.content(id).text));
+  return id === undefined ? null : doc.host(id)?.id ?? null;
+}
+
+const calendarTitle = (text: string) => titleOf(text).normalize('NFKC').toLowerCase()
+  .match(/[\p{L}\p{N}_]+/gu)?.includes('calendar') ?? false;
+
+function calendarHost(doc: Doc, id: NodeId): boolean {
+  if (!(doc.get(id).parent === doc.root && calendarTitle(doc.content(id).text)) && !doc.hasMirrors(id)) return false;
+  return findCalendar(doc) === id;
+}
+
+function yearParent(doc: Doc, id: NodeId): boolean {
+  const parent = doc.get(id).parent;
+  return parent === doc.root || (parent !== null && calendarHost(doc, parent));
+}
+
+/** Auto-created containers use a shared ID so simultaneous starts converge. */
+function ensureCalendar(ctx: Ctx, index = ctx.doc.get(ctx.doc.root).children.length): NodeId {
+  const found = findCalendar(ctx.doc);
+  if (found !== null) return found;
+  return placeTrees(ctx, ctx.doc.root, index, [{ id: `${ctx.doc.root}~calendar`, text: 'Calendar', collapsed: true, children: [] }])!.id;
+}
+
+/** Preflight auto-packing, before creating a container or moving any year. */
+export function calendarPackingPlan(doc: Doc): { years: NodeId[]; calendar: NodeId | null; error?: string } {
+  const calendar = findCalendar(doc);
+  const years = doc.get(doc.root).children.filter((id) => periodAt(doc, id)?.kind === 'year');
+  const seen = new Set<number>();
+  const error = (text: string) => ({ years, calendar, error: `Calendar: ${text}. Годы не перемещены.` });
+  if (!years.length) return { years, calendar };
+  if (calendar !== null) {
+    for (const id of doc.get(calendar).children) {
+      const label = labelOf(doc.content(id).text);
+      if (label?.kind === 'year') seen.add(label.y);
+    }
+  }
+  for (const id of years) {
+    const p = periodAt(doc, id)!;
+    if (seen.has(p.y)) return error(`год ${p.y} повторяется в корне или календаре`);
+    if (calendar !== null && doc.within(calendar, id)) return error('контейнер находится внутри переносимого года');
+    seen.add(p.y);
+  }
+  years.sort((a, b) => periodAt(doc, b)!.y - periodAt(doc, a)!.y);
+  return { years, calendar };
+}
+
+/** Service migration: move existing root years, preserving all node content and state. */
+export function packCalendar(ctx: Ctx): { changed: boolean; error?: string } {
+  const { doc, rows } = ctx;
+  const plan = calendarPackingPlan(doc);
+  if (plan.error || !plan.years.length) return { changed: false, error: plan.error };
+  const index = Math.min(...plan.years.map((id) => doc.index(id)));
+  const calendar = plan.calendar ?? ensureCalendar(ctx, index);
+  rows.expectMany();
+  plan.years.forEach((id, i) => {
+    const n = doc.get(id);
+    doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: calendar, order: doc.orderAt(calendar, i) } });
+  });
+  return { changed: true };
+}
+
+function calendarYearChildren(doc: Doc): NodeId[] {
+  const calendar = findCalendar(doc);
+  return calendar === null ? [] : doc.get(calendar).children;
+}
+
 /**
  * Years, months and weeks of the calendar left open. They are made folded,
  * so that opening a quarter (or "Главная" opening the top level) is an
@@ -138,7 +207,7 @@ export function openPeriods(doc: Doc): NodeId[] {
       if (rank < RANK.week) walk(c, rank + 1);
     }
   };
-  for (const id of doc.get(doc.root).children) {
+  for (const id of [...doc.get(doc.root).children, ...calendarYearChildren(doc)]) {
     const label = labelOf(doc.get(id).text);
     if (label?.kind === 'quarter') walk(id, RANK.year);
     if (label?.kind === 'year') {
@@ -149,14 +218,14 @@ export function openPeriods(doc: Doc): NodeId[] {
   return out;
 }
 
-/** The whole structure, with a folded root year. */
+/** The whole structure, with a Calendar container and a folded year. */
 export function structureTrees(y: number): Tree[] {
   return [
     ...STRUCTURE.map(({ text, children }) => ({
       text, ...(text === 'Kanban' ? { collapsed: true } : {}),
       children: children.map((c) => ({ text: c, children: [] })),
     })),
-    yearTree(y),
+    { text: 'Calendar', collapsed: true, children: [yearTree(y)] },
   ];
 }
 
@@ -257,7 +326,7 @@ function quarterAt(doc: Doc, id: NodeId): number | null {
 
 /**
  * The period the bullet `id` stands for: its own label, with the year (and
- * for a week, the month) of the periods around it, inside a root year
+ * for a week, the month) of the periods around it, inside Calendar or a legacy root year
  * or a legacy top-level quarter. Null for any other bullet, for one inside a period as fine or
  * finer (an entry `созвон @d24 @m10` written in another day is not 24
  * October), and for a day not right in a week (the same entry written in
@@ -265,20 +334,22 @@ function quarterAt(doc: Doc, id: NodeId): number | null {
  */
 export function periodAt(doc: Doc, id: NodeId): Period | null {
   const own = labelOf(doc.get(id).text);
-  if (!own || own.kind === 'quarter') return null;
+  if (!own || own.kind === 'quarter' || calendarHost(doc, id) ||
+    (doc.get(id).parent === doc.root && calendarTitle(doc.content(id).text))) return null;
   // A day lies right in a week: `созвон @today` written in a month is an entry.
   if (own.kind === 'day' && labelOf(doc.get(doc.get(id).parent ?? doc.root).text)?.kind !== 'week') return null;
   let y: number | null = null;
   let m: number | null = null;
   let q: number | null = null;
-  let rooted = own.kind === 'year' && doc.get(id).parent === doc.root;
+  let rooted = own.kind === 'year' && yearParent(doc, id);
   for (let p = doc.get(id).parent; p !== null && p !== doc.root; p = doc.get(p).parent) {
+    if (calendarHost(doc, p)) break;
     const outer = labelOf(doc.get(p).text);
     if (!outer) continue;
     if (RANK[outer.kind] >= RANK[own.kind]) return null;
     if (outer.kind === 'year') {
       y ??= outer.y;
-      if (doc.get(p).parent === doc.root) rooted = true;
+      if (yearParent(doc, p)) rooted = true;
     } else if (outer.kind === 'month') m ??= outer.m;
     else q = quarterAt(doc, p);
   }
@@ -341,9 +412,9 @@ export function findInbox(doc: Doc): NodeId | null {
   return id === undefined ? null : doc.host(id)?.id ?? null;
 }
 
-/** New root year or legacy root quarter. */
+/** A Calendar container, legacy root year or legacy root quarter. */
 export const hasStructure = (doc: Doc, tags: TagIndex) =>
-  doc.get(doc.root).children.some((id) => periodAt(doc, id)?.kind === 'year') ||
+  findCalendar(doc) !== null || doc.get(doc.root).children.some((id) => periodAt(doc, id)?.kind === 'year') ||
   [1, 2, 3, 4].some((q) => findQuarter(doc, tags, q) !== null);
 
 /** The bullet of a period: the highest one whose own tags and surroundings make it that period. */
@@ -378,14 +449,25 @@ export function quarterPeriod(p: Period): Period {
 
 /**
  * "Создать структуру": the structure goes in as the last top-level bullets,
- * a folded root year, whatever is there already. Returns
+ * Calendar reused when present, adding a missing year first. Returns
  * its first bullet.
  */
 export function createStructure(ctx: Ctx, y: number): NodeId {
   const { doc } = ctx;
-  placeTrees(ctx, doc.root, doc.get(doc.root).children.length, structureTrees(y));
-  const kids = doc.get(doc.root).children;
-  return kids[kids.length - STRUCTURE.length - 1];
+  if (packCalendar(ctx).error) return doc.root;
+  const trees = structureTrees(y);
+  const calendarTree = trees.pop()!;
+  const first = placeTrees(ctx, doc.root, doc.get(doc.root).children.length, trees)!.id;
+  const calendar = findCalendar(doc);
+  if (calendar === null) {
+    placeTrees(ctx, doc.root, doc.get(doc.root).children.length, [calendarTree]);
+  } else if (!doc.get(calendar).children.some((id) => {
+    const label = labelOf(doc.content(id).text);
+    return label?.kind === 'year' && label.y === y;
+  })) {
+    placeTrees(ctx, calendar, 0, [yearTree(y)]);
+  }
+  return first;
 }
 
 /** Any year already present, including the old quarter layout. */
@@ -397,16 +479,10 @@ export function hasYear(doc: Doc, tags: TagIndex, y: number): boolean {
 export function addYear(ctx: Ctx, tags: TagIndex, y: number): boolean {
   const { doc } = ctx;
   if (hasYear(doc, tags, y)) return false;
-  const kids = doc.get(doc.root).children;
-  let index = kids.findIndex((id) => {
-    const p = periodAt(doc, id);
-    return p?.kind === 'year' && p.y > y;
-  });
-  if (index < 0) {
-    const years = kids.filter((id) => periodAt(doc, id)?.kind === 'year');
-    index = years.length ? kids.indexOf(years[years.length - 1]) + 1 : kids.length;
-  }
-  placeTrees(ctx, doc.root, index, fixedIds([yearTree(y)], `${doc.root}~calendar~y${y}~`));
+  const packed = packCalendar(ctx);
+  if (packed.error) return false;
+  const calendar = ensureCalendar(ctx);
+  placeTrees(ctx, calendar, 0, fixedIds([yearTree(y)], `${doc.root}~calendar~y${y}~`));
   return true;
 }
 
@@ -450,7 +526,7 @@ export function yearTags(doc: Doc): { id: NodeId; text: string }[] {
     if (text !== n.text) out.push({ id: n.id, text });
     if (p.kind !== 'day') for (const child of n.children) visit(child);
   };
-  for (const id of doc.get(doc.root).children) {
+  for (const id of [...doc.get(doc.root).children, ...calendarYearChildren(doc)]) {
     if (quarterAt(doc, id) !== null) for (const child of doc.get(id).children) visit(child);
     else visit(id);
   }
