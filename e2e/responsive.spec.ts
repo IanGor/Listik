@@ -435,6 +435,44 @@ test('desktop and touch share compact navigation, backlinks, menu and search met
 });
 
 
+test('open sketch takes three quarters beside or above the outline', async ({ page }) => {
+  for (const { width, height, trash } of [
+    { width: 1440, height: 900, trash: false },
+    { width: 1024, height: 768, trash: false },
+    { width: 834, height: 1194, trash: false },
+    { width: 945, height: 1061, trash: false },
+    { width: 1194, height: 834, trash: true },
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/?demo');
+    await page.locator('.row').first().locator('.bullet').click();
+    await page.locator('.sketch-toggle').click();
+    if (trash) {
+      await page.getByRole('button', { name: 'Меню документа' }).click();
+      await page.getByRole('menuitem', { name: /Корзина/ }).click();
+      await expect(page.locator('.trash')).toBeVisible();
+      await page.locator('.trash').evaluate(async (el) => {
+        await Promise.all(el.getAnimations().map((animation) => animation.finished));
+      });
+    }
+    const desk = (await page.locator('.desk').boundingBox())!;
+    const sketch = (await page.locator('.sketch').boundingBox())!;
+    const main = (await page.locator('.desk > .main').boundingBox())!;
+    const vertical = width <= 1023 || height > width || trash;
+    const axis = vertical ? 'height' : 'width';
+    expect(Math.abs(sketch[axis] - desk[axis] * 0.75)).toBeLessThanOrEqual(1);
+    expect(Math.abs(main[axis] - desk[axis] * 0.25)).toBeLessThanOrEqual(1);
+    if (vertical) expect(main.y).toBeCloseTo(sketch.y + sketch.height, 0);
+    else expect(main.x).toBeCloseTo(sketch.x + sketch.width, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.locator('.sketch-close').click();
+    await expect(page.locator('.sketch')).toHaveCount(0);
+    const full = (await page.locator('.desk > .main').boundingBox())!;
+    expect(full.width).toBeCloseTo(desk.width, 0);
+    expect(full.height).toBeCloseTo(desk.height, 0);
+  }
+});
+
 test('sheet frame keeps all four margins and corners at every width', async ({ page }) => {
   for (const width of [320, 390, 767, 768, 834, 1440]) {
     await page.setViewportSize({ width, height: 900 });

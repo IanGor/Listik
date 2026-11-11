@@ -3182,7 +3182,7 @@ body.is-dragging * {
 .sketch {
   position: relative;
   flex: none;
-  width: min(50%, calc(100% - 480px));
+  width: 75%;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--hairline);
@@ -3190,16 +3190,16 @@ body.is-dragging * {
 
 .desk:has(.sketch) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(480px, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 .desk > .sketch { width: auto; min-height: 0; }
 @media (max-width: 1023px), (orientation: portrait) {
-  .desk:has(.sketch) { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 55fr) minmax(0, 45fr); }
+  .desk:has(.sketch) { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 1fr); }
   .desk > .sketch { border-right: 0; border-bottom: 1px solid var(--hairline); }
 }
 @media (max-width: 1439px) {
-  .workspace:has(> .trash) .desk:has(.sketch) { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 55fr) minmax(0, 45fr); }
+  .workspace:has(> .trash) .desk:has(.sketch) { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 3fr) minmax(0, 1fr); }
 }
 
 /* `?ink`: how fast the pen gave points (Sketch.tsx), over the tools. */
