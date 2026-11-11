@@ -4610,7 +4610,7 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     expect(await page.evaluate(() => innerHeight)).toBe(layout);
     await expect(bar).toBeVisible();
     const box = (await bar.boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(801);
+    expect(box.y + box.height).toBeCloseTo(800, 0);
     await bar.getByRole('button', { name: 'Задача', exact: true }).tap();
     await expect(editing(page)).toBeFocused();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
@@ -4620,6 +4620,34 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await expect(editing(page)).toBeFocused();
     await page.keyboard.type(' с клавиатуры');
     await expect(editing(page)).toContainText('с клавиатуры');
+  });
+
+  test('iPad keyboard bar stays attached after page scroll and repeated openings', async ({ page }) => {
+    await page.locator('.row .text').first().tap();
+    const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
+    // Safari may scroll the document to reveal the focused editor independently
+    // of the outline's own scroller. Give Chromium room to emulate that scroll.
+    await page.evaluate(() => { document.body.style.minHeight = '2400px'; });
+    for (const size of [{ width: 834, height: 1194 }, { width: 1194, height: 834 }]) {
+      await page.setViewportSize(size);
+      await visualViewport(page, size.height);
+      for (const offset of [0, 20, 0]) {
+        await visualViewport(page, 500, 1, offset);
+        await expect(bar).toBeVisible();
+        for (const scroll of [80, 480, 0]) {
+          await page.evaluate((y) => window.scrollTo(0, y), scroll);
+          await expect.poll(() => page.evaluate(() => scrollY)).toBe(scroll);
+          await expect.poll(async () => {
+            const box = (await bar.boundingBox())!;
+            return Math.abs(box.y + box.height - (500 + offset));
+          }).toBeLessThanOrEqual(1);
+          await expect(editing(page)).toBeFocused();
+        }
+        await visualViewport(page, size.height);
+        await expect(bar).toBeHidden();
+        await expect(editing(page)).toBeFocused();
+      }
+    }
   });
 
   test('iPad pinch zoom is not a keyboard; landscape software keyboard is detected', async ({ page }) => {

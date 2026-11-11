@@ -114,7 +114,7 @@ body,
 
 /* Safari keeps the layout viewport tall when its on-screen keyboard covers it. */
 #root {
-  height: var(--keyboard-visible-height, 100%);
+  height: var(--keyboard-document-height, 100%);
 }
 
 /* The interface in the system's font: bars, the path, menus, panels,

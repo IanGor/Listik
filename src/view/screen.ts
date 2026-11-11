@@ -70,10 +70,20 @@ export const keyboard: Accessor<boolean> = (() => {
     setUp(visible);
     const root = document.documentElement;
     if (visible && viewport && viewport.height < innerHeight) {
-      root.style.setProperty('--keyboard-visible-height', `${Math.min(innerHeight, viewport.height + viewport.offsetTop)}px`);
-    } else root.style.removeProperty('--keyboard-visible-height');
+      const bottom = viewport.height + viewport.offsetTop;
+      root.style.setProperty('--keyboard-visible-height', `${Math.min(innerHeight, bottom)}px`);
+      // The root starts in document coordinates. Safari can scroll the page
+      // while revealing the caret, independently of visualViewport.offsetTop.
+      // Its height must reach the keyboard in document coordinates as well;
+      // capping at innerHeight would leave a gap on a scrolled/zoomed page.
+      root.style.setProperty('--keyboard-document-height', `${bottom + window.scrollY}px`);
+    } else {
+      root.style.removeProperty('--keyboard-visible-height');
+      root.style.removeProperty('--keyboard-document-height');
+    }
   };
   addEventListener('resize', update);
+  addEventListener('scroll', update, { passive: true });
   viewport?.addEventListener('resize', update);
   viewport?.addEventListener('scroll', update);
   update();
