@@ -549,21 +549,6 @@ kbd {
   background: var(--surface-2);
 }
 
-/* Finger-sized rows on a touch screen. */
-@media (pointer: coarse) {
-  .search-menu {
-    max-height: min(calc(8.5 * 44px + 28px), 40dvh);
-  }
-
-  .saved-search-run {
-    height: 44px;
-  }
-
-  .saved-search-remove {
-    width: 44px;
-    height: 44px;
-  }
-}
 
 .icon-button {
   display: grid;
@@ -1316,13 +1301,6 @@ mark,
   border-style: dashed;
 }
 
-/* A finger needs room. */
-@media (pointer: coarse) {
-  .backlink {
-    min-height: 44px;
-    padding: 0 12px;
-  }
-}
 
 /* "+" under a zoomed-in list: a bare plus centred on the bullet column; the
    circle behind it shows on hover. Height is mirrored by ADD_HEIGHT. */
@@ -1358,7 +1336,6 @@ mark,
 /* Phones. The width is mirrored by view/screen.ts. */
 @media (max-width: 767px) {
   :root {
-    --font-size: calc(16px * var(--text-scale));
     --indent: 28px;
     /* Deeper than 4 levels, 12px a level: at depth 10 the text still has
        ~12 characters, not one letter a line. */
@@ -1640,16 +1617,6 @@ mark,
   background: none;
 }
 
-@media (pointer: coarse) {
-  .menu button {
-    min-height: 44px;
-  }
-
-  .menu .step {
-    width: 44px;
-    height: 44px;
-  }
-}
 
 .menu-fonts-title {
   padding: 6px 12px 2px;
@@ -2034,12 +2001,6 @@ mark,
   color: var(--muted);
 }
 
-/* Finger-sized rows; mirrored by rowHeight in Suggest.tsx. */
-@media (pointer: coarse) {
-  .suggest-item {
-    height: 44px;
-  }
-}
 
 /* --- Swipe (swipe.ts) -------------------------------------------------------- */
 
@@ -2928,16 +2889,6 @@ body.is-dragging * {
   background: var(--surface);
 }
 
-/* Finger-sized rows on a touch screen. */
-@media (pointer: coarse) {
-  .goto-list {
-    max-height: min(calc(8.5 * 44px + 28px), 40dvh);
-  }
-
-  .goto-place {
-    height: 44px;
-  }
-}
 
 /* A phone ("Куда…"): at the top, above the keyboard, the width of the screen. */
 @media (max-width: 767px) {
@@ -3199,12 +3150,6 @@ body.is-dragging * {
     inset: -2px -8px;
   }
 
-  /* 44pt, Apple's least for a finger (Human Interface Guidelines). */
-  .sketch-toggle,
-  .level-toggle {
-    width: 44px;
-    height: 44px;
-  }
 
   /* A finger's worth (~44px) to hit, the look unchanged: the "+" under the
      list and the trash's × grow an invisible margin. */
@@ -3219,16 +3164,7 @@ body.is-dragging * {
     position: relative;
   }
 
-  /* The crumbs: taller to hit, the path no closer to the rows. */
-  .crumbs {
-    padding-block: 10px;
-    margin-block: -10px;
-  }
 
-  .crumb {
-    padding-block: 8px;
-    margin-block: -6px;
-  }
 }
 
 
@@ -3539,7 +3475,6 @@ body.is-dragging * {
 .navigation-search .searchbar { width: 100%; height: 42px; gap: 7px; padding: 0 11px; margin: 0; }
 .navigation-search .searchbar kbd { display: none; }
 .navigation-search .search { min-width: 0; font-size: 16px; }
-.navigation-search .searchbar .star { flex: none; width: 24px; }
 .navigation-search .search-menu { z-index: 31; left: 0; right: 0; max-height: min(420px, 55vh); }
 .navigation-sidebar:not(.expanded) .navigation-search.visible {
   position: absolute;
@@ -3594,11 +3529,6 @@ body.is-dragging * {
 /* Window-control guesses must not reserve an entire empty sidebar column. */
 .has-navigation .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
 .has-navigation:has(.touch-navigation) .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
-.touch-navigation .navigation-actions .place,
-.touch-navigation .navigation-capture .icon-button,
-.touch-navigation .navigation-toggle { min-height: 44px; height: 44px; }
-.touch-navigation .navigation-toggle { width: 44px; }
-.touch-navigation .navigation-disclosure { flex-basis: 44px; }
 /* One-column navigation keeps the same mounted tree and search field. */
 @media (max-width: 767px) {
   .has-navigation .workspace { padding: 0; gap: 0; flex-direction: column; padding-top: env(safe-area-inset-top); }
@@ -3630,9 +3560,6 @@ body.is-dragging * {
   .window { left: 20px; right: 12px; }
   .zoom-header { padding-inline: 20px 12px; }
 }
-:root.touch-capable .crumbbar :is(.level-toggle, .sketch-toggle, .menu-button) { width: 44px; height: 44px; flex: none; }
-:root.touch-capable .menu button { min-height: 44px; height: auto; padding-block: 8px; }
-:root.touch-capable .saved-search-run, :root.touch-capable .saved-search-remove { min-height: 44px; }
 .menu { max-height: min(calc(100dvh - 72px), calc(var(--keyboard-visible-height, 100dvh) - 72px)); }
 .row-menu { max-height: calc(var(--keyboard-visible-height, 100dvh) - 16px); }
 
@@ -3683,7 +3610,6 @@ body.is-dragging * {
 .navigation-collapse-all { display: grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--muted); cursor: pointer; }
 .navigation-collapse-all:disabled { opacity: .35; cursor: default; }
 :where(:root.mouse) .navigation-collapse-all:not(:disabled):hover { background: var(--surface-2); }
-.touch-navigation .navigation-collapse-all { width: 44px; height: 44px; }
 .sidebar-favorites { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; max-height: 34%; }
 .sidebar-favorites > .navigation-divider { flex: none; margin: 6px 8px; }
 .favorite-scroll { min-height: 0; max-height: min(25vh, 220px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
@@ -3701,13 +3627,7 @@ body.is-dragging * {
 .saved-search-run { width: 100%; }
 
 /* Touch capability persists with a connected trackpad. */
-:root.touch-capable :is(.crumbbar .icon-button, .level-toggle, .sketch-toggle, .day-step, .topbar .icon-button) { width: 44px; height: 44px; }
-:root.touch-capable .crumb { min-height: 44px; box-sizing: border-box; }
-:root.touch-capable .searchbar { min-height: 48px; }
-:root.touch-capable .searchbar :is(.star, .clear) { width: 44px; height: 44px; flex: 0 0 44px; }
 :root.touch-capable .navigation-search .searchbar { gap: 2px; padding-inline: 11px; }
-:root.touch-capable .menu button { min-height: 44px; }
-:root.touch-capable .menu .step { width: 44px; height: 44px; }
 :root.touch-capable .capture { min-height: 60px; height: auto; padding: 6px 10px; gap: 6px; }
 .capture-save, .capture-close { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--control-radius); font-family: var(--font-ui); cursor: pointer; }
 .capture-save { color: var(--on-primary); background: var(--primary); }
@@ -3750,4 +3670,54 @@ body.is-dragging * {
 
 .navigation-search .searchbar > svg { width: 20px; flex: 0 0 20px; }
 
-.touch-navigation { --navigation-action-height: 44px; }
+
+/* Shared density: input capability changes interaction, not layout spacing.
+   These sizes match the desktop defaults and virtualizer metrics. */
+:root { --header-action: 40px; --workspace-top: 16px; }
+.has-navigation .workspace,
+.has-navigation:has(.touch-navigation) .workspace {
+  padding-top: max(var(--workspace-top), env(safe-area-inset-top));
+}
+.backlink { min-height: 28px; padding-inline: 10px; }
+.navigation-sidebar { --navigation-action-height: 42px; }
+.navigation-actions .place,
+.navigation-capture .icon-button,
+.touch-navigation .navigation-actions .place,
+.touch-navigation .navigation-capture .icon-button,
+.touch-navigation .navigation-toggle { min-height: 42px; height: 42px; }
+.navigation-toggle, .touch-navigation .navigation-toggle { width: 42px; }
+.navigation-disclosure, .touch-navigation .navigation-disclosure { flex-basis: 24px; }
+.navigation-collapse-all, .touch-navigation .navigation-collapse-all { width: 34px; height: 34px; }
+.menu button { min-height: 38px; padding-block: 8px; }
+.menu .step, :root.touch-capable .menu .step { width: 32px; height: 32px; min-height: 0; padding: 0; }
+.saved-search-run, :root.touch-capable .saved-search-run { height: 36px; min-height: 36px; }
+.saved-search-remove, :root.touch-capable .saved-search-remove { width: 28px; height: 28px; min-height: 0; }
+.goto-place { height: 36px; }
+.suggest-item { height: 32px; }
+.search-menu, .goto-list { max-height: min(calc(8.5 * 36px + 28px), 40dvh); }
+.searchbar, :root.touch-capable .searchbar,
+.navigation-sidebar .navigation-search .searchbar { height: 44px; min-height: 44px; }
+.searchbar :is(.star, .clear) { width: 32px; height: 32px; flex-basis: 32px; }
+.headingbar { min-height: 54px; }
+.node-favorite { width: 40px; height: 40px; }
+.zoom-heading .zoom-title, .zoom-heading .zoom-date { padding-right: 44px; }
+.has-navigation .document-header .crumbbar { min-height: 48px; }
+.crumbbar :is(.icon-button, .level-toggle, .sketch-toggle, .day-step),
+:root.touch-capable .crumbbar :is(.icon-button, .level-toggle, .sketch-toggle, .day-step, .menu-button) {
+  flex: none; width: var(--header-action); height: var(--header-action);
+}
+.crumb { min-height: 0; }
+.crumbs { padding-block: 4px; margin-block: -4px; }
+.crumb { padding-block: 2px; margin-block: 0; }
+@media (max-width: 767px) {
+  .headingbar { min-height: 52px; }
+  .navigation-hamburger { width: var(--header-action); height: var(--header-action); }
+  .has-navigation .document-header .crumbbar { padding-left: calc(max(8px, env(safe-area-inset-left)) + var(--header-action) + 4px); }
+  .crumbbar .crumbs { padding-block: 4px; margin: 0; }
+}
+@media (max-height: 300px) {
+  .outline.has-navigation .workspace,
+  .outline.has-navigation:has(.touch-navigation) .workspace { padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: 2px; }
+  .headingbar { min-height: 42px; }
+  .has-navigation .document-header .crumbbar { min-height: 40px; padding-block: 0; }
+}

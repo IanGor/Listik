@@ -436,12 +436,12 @@ export function Outline(props: { o: Outliner }) {
         <div class="main">
           <header ref={observeHeader} class="document-header">
             <div class="headingbar">
-              <div class="zoom-heading">
-                <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
-              </div>
               <Show when={narrow()}>
                 <button class="navigation-hamburger icon-button" type="button" data-action="navigation.open" aria-label="Открыть навигацию" aria-expanded={navigationOpen()} aria-controls="document-navigation" onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
               </Show>
+              <div class="zoom-heading">
+                <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
+              </div>
             </div>
             <Crumbs o={o} scrolled={scrollTop() > 0} navigation />
           </header>

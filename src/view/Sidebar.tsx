@@ -27,7 +27,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
   const [focused, setFocused] = createSignal<string | null>(null);
   const [preferred, setPreferred] = createSignal<string>();
   let aside!: HTMLElement, scroller!: HTMLDivElement, tree!: HTMLDivElement, toggleButton!: HTMLButtonElement;
-  const rowHeight = touchCapable() ? 44 : 34;
+  const rowHeight = 34;
   const rows = createMemo(() => { version(); return navigationRows(o.doc, expanded()); });
   const selection = createMemo(() => navigationSelection(rows(), o.doc, o.zoom(), preferred()));
   const start = () => Math.max(0, Math.floor(scroll() / rowHeight) - 8);

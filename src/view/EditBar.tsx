@@ -5,7 +5,7 @@ import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
 import { formatSelection } from './keymap';
 import type { Outliner } from './outliner';
-import { touchCapable } from './screen';
+import { keyboard, touchCapable } from './screen';
 
 /** Which set the bar shows: the main one, or one of the sets it leads to. */
 type SetName = 'main' | 'move' | 'extra';
@@ -158,8 +158,10 @@ export const barInWords = (): string =>
 
 /**
  * A bar of editing actions at the bottom of a touch screen while a bullet is
- * edited, with either a software or hardware keyboard: the keyboard has no Tab,
- * Ctrl+L or Ctrl+Z, and # and [[ hide on its symbol pages. Available for as long as the row is edited. It sits in the page's flow, so it rests right on the keyboard
+ * edited, while a docked software keyboard is visible: the keyboard has no Tab,
+ * Ctrl+L or Ctrl+Z, and # and [[ hide on its symbol pages. Hidden when the
+ * software keyboard closes, even if editing retains focus. It sits in the
+ * page's flow, so it rests right on the keyboard
  * (index.html). Its buttons never take focus: the keyboard stays open.
  *
  * Several sets share its place (ROW_MAIN, SETS). A button with a set behind
@@ -245,7 +247,7 @@ export function EditBar(props: { o: Outliner }) {
   };
 
   return (
-    <Show when={touchCapable() && !o.readOnly && (o.focus() || inTitle())}>
+    <Show when={touchCapable() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <div ref={(el) => scrolling(el, 'main')} class="editbar-set editbar-main" inert={shown() !== 'main'}>
           <For each={groups()}>

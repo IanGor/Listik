@@ -4,7 +4,6 @@ import { titleOf } from '../model/links';
 import { pathOf } from '../model/places';
 import type { Outliner } from './outliner';
 import { Star } from './SearchBar';
-import { touchCapable } from './screen';
 
 type Entry = { kind: 'node'; id: string } | { kind: 'search'; query: string };
 
@@ -15,7 +14,7 @@ export function FavoriteList(props: { o: Outliner; labelVersion: () => number; n
     const nodes = o.favoriteNodes(), queries = o.savedSearches();
     return [...nodes.map((id): Entry => ({ kind: 'node', id })), ...queries.map((query): Entry => ({ kind: 'search', query }))];
   });
-  const rowHeight = touchCapable() ? 48 : 42;
+  const rowHeight = 42;
   const gap = () => o.favoriteNodes().length && o.savedSearches().length ? 8 : 0;
   const position = (index: number) => index * rowHeight + (index >= o.favoriteNodes().length ? gap() : 0);
   const totalHeight = () => entries().length * rowHeight + gap();

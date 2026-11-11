@@ -52,7 +52,7 @@ let accept: (i: number) => void = () => {};
 /** Follows the caret; `now` computes link suggestions on the spot rather than after the next frame. */
 let refresh = (_now?: boolean) => {};
 
-const rowHeight = () => (touch() ? 40 : 32);
+const rowHeight = () => 32;
 const keyOf = (id: RowKey, note: boolean, t: Token) => `${id}\n${note}\n${t.start}`;
 
 /**

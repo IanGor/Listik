@@ -2912,10 +2912,10 @@ test.describe('touch screen', () => {
     await action(page, 'Заметка').tap();
     await expect(editing(page)).toBeFocused();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.note')).toHaveText('с телефона');
-    // With the keyboard hidden the row remains edited and its buttons stay available.
+    // Dismissing the keyboard hides its accessory bar while keeping the editor focused.
     await expect(action(page, 'Готово')).toHaveCount(0);
     await keyboard(page, false);
-    await expect(bar(page)).toBeVisible();
+    await expect(bar(page)).toBeHidden();
     await expect(editing(page)).toBeFocused();
     await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
@@ -2963,12 +2963,19 @@ test.describe('touch screen', () => {
     expect(gap).toBeGreaterThanOrEqual(0.5);
   });
 
-  test('editing buttons remain available with the keyboard down and address bar changing', async ({ page }) => {
+  test('editing buttons stay hidden with hardware typing and address bar changes', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await expect(editing(page)).toBeFocused();
-    await expect(bar(page)).toBeVisible();
+    await expect(bar(page)).toBeHidden();
     await page.setViewportSize({ width: 412, height: 859 });
+    await expect(bar(page)).toBeHidden();
+    await page.keyboard.type(' hardware');
+    await expect(editing(page)).toContainText('hardware');
+    await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
+    await keyboard(page, false);
+    await expect(bar(page)).toBeHidden();
+    await expect(editing(page)).toBeFocused();
   });
 
   test('suggestions: fewer with the keyboard up, above the bar, taken with a tap', async ({ page }) => {
@@ -2982,8 +2989,8 @@ test.describe('touch screen', () => {
     });
     await page.keyboard.type(' #');
     const tags = page.getByRole('listbox', { name: 'Теги' });
-    // 540 px × 0.3 / 40 px rows.
-    await expect(tags.getByRole('option')).toHaveCount(4);
+    // 540 px × 0.3 / shared 32 px rows.
+    await expect(tags.getByRole('option')).toHaveCount(5);
     const box = (await tags.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(412);
@@ -3378,11 +3385,12 @@ test.describe('touch screen', () => {
     await expect(page.locator('.editbar')).toHaveCount(0);
   });
 
-  test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
+  test('compact navigation keeps its targets reachable and gutter actions working', async ({ page }) => {
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
     for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
     await page.keyboard.press('Escape');
-    expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
+    expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
+    expect((await page.locator('.crumb').first().boundingBox())!.height).toBeLessThan(32);
     // The bullet reaches into the gutter on its left; its dot stays where the row's guide line meets it.
     const bullet = page.locator('.row .bullet').first();
     expect((await bullet.boundingBox())!.width).toBeGreaterThanOrEqual(38);
@@ -4522,10 +4530,10 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     }, { height, scale, offsetTop });
   }
 
-  test('iPad software keyboard shows the quick keys above it; hardware keyboard and hiding software keyboard keep the buttons available', async ({ page }) => {
+  test('iPad software keyboard shows quick keys and hiding it hides the bar without losing focus', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
-    await expect(bar).toBeVisible();
+    await expect(bar).toBeHidden();
     const layout = await page.evaluate(() => innerHeight);
     await visualViewport(page, 780, 1, 20);
     expect(await page.evaluate(() => innerHeight)).toBe(layout);
@@ -4537,7 +4545,7 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
     // Connecting hardware / dismissing the software keyboard restores the visual viewport.
     await visualViewport(page, layout);
-    await expect(bar).toBeVisible();
+    await expect(bar).toBeHidden();
     await expect(editing(page)).toBeFocused();
     await page.keyboard.type(' с клавиатуры');
     await expect(editing(page)).toContainText('с клавиатуры');
@@ -4547,15 +4555,15 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await page.locator('.row .text').first().tap();
     const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
     await visualViewport(page, 597, 2);
-    await expect(bar).toBeVisible();
+    await expect(bar).toBeHidden();
     await visualViewport(page, 1194);
     await page.setViewportSize({ width: 1194, height: 834 });
     await visualViewport(page, 834);
-    await expect(bar).toBeVisible();
+    await expect(bar).toBeHidden();
     await visualViewport(page, 500);
     await expect(bar).toBeVisible();
     await visualViewport(page, 834);
-    await expect(bar).toBeVisible();
+    await expect(bar).toBeHidden();
   });
 
   test('iPad with a primary trackpad still gets quick keys with the software keyboard', async ({ page }) => {
@@ -4572,13 +4580,13 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await visualViewport(page, 780);
     await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
     await visualViewport(page, 1194);
-    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeHidden();
   });
 
   test('iPad keyboard can open while the page is pinch zoomed', async ({ page }) => {
     await page.locator('.row .text').first().tap();
     await visualViewport(page, 597, 2);
-    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeHidden();
     await visualViewport(page, 350, 2);
     await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
   });
@@ -4722,12 +4730,12 @@ test.describe('navigation sidebar', () => {
 
   test.describe('touch iPad', () => {
     test.use({ viewport: { width: 820, height: 1180 }, screen: { width: 820, height: 1180 }, hasTouch: true, isMobile: true });
-    test('uses finger targets and an overlay, with no hover required', async ({ page }) => {
+    test('uses desktop density and an overlay, with no hover required', async ({ page }) => {
       await expect(page.locator('html')).toHaveClass(/tablet/);
       const toggle = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
       const box = (await toggle.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(44);
-      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.width).toBe(42);
+      expect(box.height).toBe(42);
       await toggle.tap();
       const expand = page.getByRole('button', { name: 'Развернуть Том первый', exact: true });
       await expand.tap();
@@ -4898,16 +4906,16 @@ test.describe('Apple HIG interface', () => {
     expect(overlap).toBe(true);
   });
 
-  test('iPad with a fine primary pointer retains touch targets and capture saves by button', async ({ browser }) => {
+  test('iPad with a fine primary pointer keeps compact controls and capture saves by button', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 1194, height: 834 }, hasTouch: true });
     const p = await context.newPage();
     await p.goto('/?demo');
     await p.locator('.row').first().waitFor();
     await p.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     await p.locator('input.search').fill('#салон');
-    for (const locator of [p.locator('.searchbar .star'), p.locator('.searchbar .clear'), p.locator('.menu-button'), p.locator('.level-toggle')]) {
-      const box = (await locator.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(44); expect(box.height).toBeGreaterThanOrEqual(44);
+    for (const [selector, size] of [['.searchbar .star', 32], ['.searchbar .clear', 32], ['.menu-button', 40], ['.level-toggle', 40]] as const) {
+      const box = (await p.locator(selector).boundingBox())!;
+      expect(box.width).toBe(size); expect(box.height).toBe(size);
     }
     await p.locator('input.search').press('Escape');
     await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();

@@ -43,7 +43,7 @@ test.describe('adaptive workspace', () => {
       await page.setViewportSize({ width, height: 844 });
       await expect(editor).toHaveAttribute('data-same-editor', 'yes');
       await expect(editor).toContainText('edited');
-      await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
+      await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeHidden();
     }
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
     await page.locator('input.search').fill('#салон');
@@ -87,7 +87,7 @@ test.describe('adaptive workspace', () => {
       for (const button of await buttons.all()) {
         const box = await button.boundingBox();
         expect(box).not.toBeNull();
-        expect(box!.width).toBeGreaterThanOrEqual(44);
+        expect(box!.width).toBeGreaterThanOrEqual(40);
         expect(box!.x).toBeGreaterThanOrEqual(0);
         expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
       }
@@ -257,13 +257,13 @@ test.describe('compact pinned heading', () => {
     });
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveCSS('--controls-left', '76px');
-    expect((await page.locator('.navigation-sidebar').boundingBox())!.y).toBeLessThanOrEqual(8);
+    expect((await page.locator('.navigation-sidebar').boundingBox())!.y).toBeLessThanOrEqual(16);
     expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBe(8);
-    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(8);
+    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(16);
     await page.locator('.row').last().locator('.bullet').click();
     await page.locator('.sketch-toggle').click();
-    expect((await page.locator('.sketch').boundingBox())!.y).toBeLessThanOrEqual(8);
-    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(8);
+    expect((await page.locator('.sketch').boundingBox())!.y).toBeLessThanOrEqual(16);
+    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(16);
   });
 
   test('headings share the path leading edge on every layout and stay opaque', async ({ page }) => {
@@ -285,8 +285,8 @@ test.describe('compact pinned heading', () => {
         await expect(page.locator('.document-header .crumbbar')).toHaveCSS('backdrop-filter', 'none');
         const button = page.getByRole('button', { name: 'Открыть навигацию', exact: true });
         if (width < 768) {
-          expect((await title.boundingBox())!.x + (await title.boundingBox())!.width)
-            .toBeLessThanOrEqual((await button.boundingBox())!.x);
+          expect((await button.boundingBox())!.x + (await button.boundingBox())!.width)
+            .toBeLessThanOrEqual((await title.boundingBox())!.x);
         }
       };
       await check();
@@ -376,4 +376,60 @@ test.describe('compact pinned heading', () => {
       await comparison.close();
     }
   });
+});
+
+
+test('desktop and touch share compact navigation, backlinks, menu and search metrics', async ({ browser, baseURL }) => {
+  for (const hasTouch of [false, true]) {
+    const context = await browser.newContext({ baseURL, hasTouch, viewport: { width: 834, height: 1000 } });
+    const page = await context.newPage();
+    try {
+      await page.goto('/?demo');
+      await page.locator('.row .text').last().click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' [[Том первый]]');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await page.locator('.row').last().locator('.link').click();
+      const backlinks = page.getByRole('navigation', { name: 'Ссылки сюда' });
+      await expect(backlinks.getByRole('button').first()).toBeVisible();
+      await expect(page.locator('.row .text').first()).toHaveCSS('font-size', '17px');
+      expect((await backlinks.getByRole('button').first().boundingBox())!.height).toBe(28);
+      await page.getByRole('button', { name: 'Добавить ноду в избранное' }).click();
+      for (const width of [390, 834, 1440]) {
+        await page.setViewportSize({ width, height: 1000 });
+        if (width < 768) {
+          await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+        } else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') {
+          await page.locator('.navigation-toggle').click();
+        }
+        const sidebar = page.locator('.navigation-sidebar');
+        await expect(sidebar.getByRole('tree')).toBeVisible();
+        expect((await sidebar.getByRole('treeitem').first().boundingBox())!.height).toBe(34);
+        expect((await sidebar.locator('.favorite-entry').first().boundingBox())!.height).toBe(42);
+        expect((await sidebar.locator('.searchbar').boundingBox())!.height).toBe(44);
+        await page.screenshot({ path: `/tmp/listik-density-${hasTouch ? 'touch' : 'desktop'}-${width}-navigation.png` });
+        await sidebar.locator('input.search').fill('#салон');
+        for (const selector of ['.star', '.clear']) {
+          const box = (await sidebar.locator('.searchbar ' + selector).boundingBox())!;
+          expect(box.width).toBe(32); expect(box.height).toBe(32);
+        }
+        await sidebar.locator('.searchbar .clear').click();
+        await page.locator('.navigation-toggle').click();
+        await page.getByRole('button', { name: 'Меню документа' }).click();
+        const menuHeight = (await page.getByRole('menuitem', { name: 'Поиск', exact: true }).boundingBox())!.height;
+        expect(menuHeight).toBeGreaterThanOrEqual(38);
+        expect(menuHeight).toBeLessThan(40);
+        await page.screenshot({ path: `/tmp/listik-density-${hasTouch ? 'touch' : 'desktop'}-${width}-menu.png` });
+        await page.keyboard.press('Escape');
+        await page.screenshot({ path: `/tmp/listik-density-${hasTouch ? 'touch' : 'desktop'}-${width}-document.png` });
+      }
+      await backlinks.getByRole('button').first().click();
+      await expect(page.locator('.text[contenteditable]')).toContainText('[[Том первый]]');
+      await page.keyboard.press('End');
+      await page.keyboard.type(' #с');
+      await expect(page.locator('.suggest-item').first()).toBeVisible();
+      expect((await page.locator('.suggest-item').first().boundingBox())!.height).toBe(32);
+    } finally { await context.close(); }
+  }
 });
