@@ -275,11 +275,6 @@ button {
   flex: none;
 }
 
-/* Today's calendar is the mark's colour: the app's own place. */
-.today-button .place-icon {
-  color: var(--primary);
-}
-
 .searchbar {
   position: relative;
   display: flex;
@@ -2906,12 +2901,12 @@ body.is-dragging * {
 
 /* --- Quick capture (view/QuickCapture.tsx) ------------------------------ */
 
-/* One line under the header, over the outline: nothing dims, nothing moves. */
+/* Centre the desktop line over the app; leave the document layout in place. */
 .capture {
   position: fixed;
-  top: 76px;
+  top: calc(var(--keyboard-visible-height, 100dvh) / 2);
   left: 50%;
-  z-index: 35;
+  z-index: 61;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2923,14 +2918,14 @@ body.is-dragging * {
   border-radius: 12px;
   background: var(--canvas);
   box-shadow: 0 0 0 4px var(--ring), var(--shadow-pop);
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   animation: capture-in 180ms var(--ease-out);
 }
 
 @keyframes capture-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -6px);
+    transform: translate(-50%, calc(-50% - 6px));
   }
 }
 
@@ -2966,7 +2961,7 @@ body.is-dragging * {
 @media (max-width: 767px) {
   .capture {
     top: auto;
-    bottom: 0;
+    bottom: max(0px, calc(100dvh - var(--keyboard-visible-height, 100dvh)));
     left: 0;
     width: 100%;
     height: 56px;
@@ -3441,7 +3436,7 @@ body.is-dragging * {
 .navigation-sidebar:not(.expanded) .navigation-surface { height: auto; }
 .navigation-sidebar.expanded .navigation-actions :is(.place, .icon-button) { background: none; border-radius: var(--control-radius); }
 .navigation-sidebar.expanded .navigation-actions .place[aria-current="page"] { background: var(--chip); }
-.navigation-head { display: flex; flex: none; align-items: center; gap: 8px; min-height: 42px; }
+.navigation-head { display: flex; flex: none; flex-direction: column; align-items: stretch; gap: 0; min-height: 42px; }
 .navigation-heading { font-weight: 600; font-size: 15px; color: var(--text); }
 .navigation-toggle { flex: none; width: 42px; height: 42px; border-radius: 14px; }
 .navigation-sidebar:not(.expanded) .navigation-heading,
@@ -3627,9 +3622,8 @@ body.is-dragging * {
 /* Touch capability persists with a connected trackpad. */
 :root.touch-capable .navigation-search .searchbar { gap: 2px; padding-inline: 11px; }
 :root.touch-capable .capture { min-height: 60px; height: auto; padding: 6px 10px; gap: 6px; }
-.capture-save, .capture-close { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--control-radius); font-family: var(--font-ui); cursor: pointer; }
+.capture-save { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--control-radius); font-family: var(--font-ui); cursor: pointer; }
 .capture-save { color: var(--on-primary); background: var(--primary); }
-.capture-close { color: var(--text); background: none; }
 .capture { background: var(--popover-solid); background: var(--popover); backdrop-filter: blur(var(--popover-blur)); -webkit-backdrop-filter: blur(var(--popover-blur)); }
 .searchbar { border-color: var(--control-border); }
 @supports not (backdrop-filter: blur(1px)) {
@@ -3664,7 +3658,7 @@ body.is-dragging * {
 .navigation-sidebar.expanded .navigation-actions button:active { background: var(--surface-2); }
 :where(:root.mouse) .navigation-sidebar.expanded .navigation-actions .place[aria-current="page"]:hover { background: var(--chip); }
 :where(:root.mouse) .favorite-link[aria-current="page"]:hover { background: var(--chip); }
-.capture-save, .capture-close { font-size: 15px; line-height: 1.2; }
+.capture-save { font-size: 15px; line-height: 1.2; }
 
 .navigation-search .searchbar > svg { width: 20px; flex: 0 0 20px; }
 
@@ -3734,3 +3728,11 @@ body.is-dragging * {
 @media (min-height: 301px) {
   .has-navigation:has(.editbar) .workspace { padding-bottom: 8px; }
 }
+
+/* Expanded navigation uses one leading row; labels remain accessible names. */
+.navigation-sidebar.expanded .navigation-head { flex-direction: row; align-items: center; gap: 4px; }
+.navigation-sidebar.expanded .navigation-actions { flex-direction: row; align-items: center; gap: 4px; margin: 0; }
+.navigation-sidebar .place-label, .navigation-sidebar.expanded .place-label { display: none; }
+.navigation-sidebar.expanded .navigation-actions :is(.place, .icon-button) { flex: none; width: 42px; height: 42px; padding: 0; justify-content: center; }
+.capture-dismiss { position: fixed; inset: 0; z-index: 60; background: transparent; }
+.capture-save { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; }

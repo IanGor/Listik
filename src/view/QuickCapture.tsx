@@ -1,4 +1,5 @@
 import { Show, onMount } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { dateWordBefore } from '../model/dates';
 import { timeCommandBefore, timeOfDay, TIME_COMMAND } from '../model/time';
 import type { Outliner } from './outliner';
@@ -8,18 +9,18 @@ import { touchCapable } from './screen';
  * Quick capture: one line over the outline for a thought that came up
  * mid-work, to the Inbox, without going there (`Outliner.capture`). Not a
  * dialog: nothing is dimmed and the outline does not move. Enter keeps it,
- * Esc (or leaving the line) closes it, what was typed waiting for next time;
+ * Esc or clicking outside closes it, what was typed waiting for next time;
  * either way the caret goes back where it was in the outline. Tags, links
  * and `/time` work as in a bullet, being text.
  *
- * Under the header on a computer; on a phone, a sheet over the keyboard.
+ * In the application centre on a computer; on a phone, a sheet over the keyboard.
  * Opened by Ctrl+Shift+Space, the tray in the header, or the menu.
  */
 export function QuickCapture(props: { o: Outliner }) {
   const o = props.o;
   return (
     <Show when={o.captureOpen()}>
-      <Line o={o} />
+      <Portal><Line o={o} /></Portal>
     </Show>
   );
 }
@@ -73,6 +74,8 @@ function Line(props: { o: Outliner }) {
   };
 
   return (
+    <>
+    <div class="capture-dismiss" aria-hidden="true" on:pointerdown={(e) => { e.preventDefault(); e.stopPropagation(); }} on:click={(e) => { e.stopPropagation(); close(); }} />
     <div class="capture" role="dialog" aria-label="Запись в Inbox" onFocusOut={(e) => { if (e.relatedTarget instanceof Node && !e.currentTarget.contains(e.relatedTarget)) close(); }}>
       <svg class="capture-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M22 12h-6l-2 3h-4l-2-3H2" />
@@ -88,12 +91,13 @@ function Line(props: { o: Outliner }) {
         aria-label="Запись в Inbox"
         onKeyDown={onKeyDown}
         onInput={onInput}
-        onBlur={(e) => { if (!(e.relatedTarget instanceof Node) || !e.currentTarget.parentElement?.contains(e.relatedTarget)) close(); }}
       />
       <Show when={touchCapable()} fallback={<span class="capture-hint" aria-hidden="true">Enter — записать · Esc</span>}>
-        <button class="capture-save" type="button" onPointerDown={(e) => e.preventDefault()} onClick={save}>Записать</button>
-        <button class="capture-close" type="button" aria-label="Закрыть быструю заметку" onPointerDown={(e) => e.preventDefault()} onClick={close}>Закрыть</button>
+        <button class="capture-save" type="button" aria-label="Записать в Inbox" title="Записать в Inbox" onPointerDown={(e) => e.preventDefault()} onClick={save}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9L2 9l20-7ZM22 2 11 13" /></svg>
+        </button>
       </Show>
     </div>
+    </>
   );
 }

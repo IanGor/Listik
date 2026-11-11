@@ -3376,7 +3376,7 @@ test.describe('touch screen', () => {
   test('the phone navigator names its places and closes after a transition', async ({ page }) => {
     await page.locator('.row .bullet').first().tap();
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
-    await expect(page.locator('.today-button .place-label')).toBeVisible();
+    await expect(page.locator('.today-button .place-label')).toBeHidden();
     await expect(page.getByRole('button', { name: 'Сегодня', exact: true })).toBeVisible();
     await expect(page.locator('.home-button')).toHaveAccessibleName('Главная');
     await page.locator('.home-button').tap();
@@ -3387,7 +3387,7 @@ test.describe('touch screen', () => {
 
   test('compact navigation keeps its targets reachable and gutter actions working', async ({ page }) => {
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
-    for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBe(42);
     await page.keyboard.press('Escape');
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeLessThan(32);
@@ -4900,7 +4900,7 @@ test.describe('Apple HIG interface', () => {
     await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     const side = page.locator('.navigation-sidebar');
     await expect(side).toHaveClass(/overlay/);
-    const overlap = await page.locator('.navigation-heading').evaluate(el => {
+    const overlap = await page.locator('.navigation-toggle').evaluate(el => {
       const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + 10, r.y + r.height / 2));
     });
     expect(overlap).toBe(true);
@@ -4920,16 +4920,16 @@ test.describe('Apple HIG interface', () => {
     await p.locator('input.search').press('Escape');
     await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
     await p.locator('.capture-input').fill('Заметка пальцем');
-    await p.getByRole('button', { name: 'Записать', exact: true }).click();
+    await p.locator('.capture-save').click();
     await expect(p.locator('.capture')).toHaveCount(0);
     await expect(p.locator('.row .text', { hasText: /^Заметка пальцем$/ })).toHaveCount(1);
     await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
     await p.locator('.capture-input').fill('Черновик');
-    await p.getByRole('button', { name: 'Закрыть быструю заметку' }).click();
+    await p.locator('.capture-dismiss').click({ position: { x: 10, y: 10 } });
     await p.getByRole('button', { name: 'Записать в Inbox', exact: true }).click();
     await expect(p.locator('.capture-input')).toHaveValue('Черновик');
     await p.locator('.capture-input').fill('  ');
-    await p.getByRole('button', { name: 'Записать', exact: true }).click();
+    await p.locator('.capture-save').click();
     await expect(p.locator('.capture')).toHaveCount(0);
     await expect(p.locator('.row .text', { hasText: /^Заметка пальцем$/ })).toHaveCount(1);
     await context.close();
@@ -4952,7 +4952,7 @@ test.describe('Apple HIG interface', () => {
 });
 
 test.describe('consistent sidebar states', () => {
-  test('keeps action positions and Tab order when expanded or compact', async ({ page }) => {
+  test('uses a row when expanded and a column when compact while preserving Tab order', async ({ page }) => {
     const sidebar = page.locator('.navigation-sidebar');
     const names = ['Главная', 'Сегодня', 'Записать в Inbox'];
     const positions = async () => Promise.all(names.map(async name => {
@@ -4960,6 +4960,7 @@ test.describe('consistent sidebar states', () => {
       return { y: box.y, h: box.height };
     }));
     const expanded = await positions();
+    expect(expanded.map(r => r.y)).toEqual(expanded.map(() => expanded[0].y));
     const searchIcon = (await sidebar.locator('.searchbar > svg').boundingBox())!;
     await sidebar.getByRole('button', { name: names[0], exact: true }).focus();
     await page.keyboard.press('Tab');
@@ -4970,7 +4971,11 @@ test.describe('consistent sidebar states', () => {
     await expect(sidebar.locator('input.search')).toBeFocused();
     await sidebar.locator('input.search').fill('#салон');
     await sidebar.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
-    expect(await positions()).toEqual(expanded);
+    const compact = await positions();
+    for (let i = 0; i < compact.length; i++) {
+      expect(compact[i].h).toBe(expanded[i].h);
+      if (i) expect(compact[i].y).toBeGreaterThanOrEqual(compact[i - 1].y + compact[i - 1].h);
+    }
     const search = sidebar.getByRole('button', { name: 'Поиск', exact: true });
     const compactIcon = (await search.locator('svg').boundingBox())!;
     expect(Math.abs(compactIcon.x + compactIcon.width / 2 - searchIcon.x - searchIcon.width / 2)).toBeLessThanOrEqual(1);

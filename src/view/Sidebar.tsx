@@ -144,11 +144,13 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
     if (desk) mutation.observe(desk, { childList: true });
     mutation.observe(aside, { attributes: true, attributeFilter: ['class'] });
     const outside = (e: PointerEvent) => {
+      if (o.captureOpen()) return;
       if (aside.contains(e.target as Node) || (e.target as Element).closest('.navigation-hamburger')) return;
       if (searchOpen()) setSearchOpen(false);
       if (overlay() && open()) setMode(false);
     };
     const escape = (e: KeyboardEvent) => {
+      if (o.captureOpen()) return;
       if (e.key !== 'Escape') return;
       if (searchOpen() || (overlay() && open())) {
         e.preventDefault(); e.stopPropagation();
@@ -170,14 +172,13 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
           <button ref={toggleButton} class="navigation-toggle icon-button" type="button" aria-label={open() ? 'Свернуть панель навигации' : 'Открыть панель навигации'} aria-expanded={open()} onClick={() => setMode(!open())} title={open() ? 'Свернуть панель' : 'Открыть панель'}>
             <NavigationIcon />
           </button>
-          <span class="navigation-heading">Навигация</span>
-        </div>
-        <div class="navigation-actions">
-          <Places o={o} homeFirst onNavigate={() => { if (overlay()) collapse(); }} />
-          <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
-          <button class="navigation-search-button place" type="button" aria-label="Поиск" title="Поиск в текущей ветке" onClick={search}>
-            <svg class="place-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" stroke-linecap="round" /></svg><span class="place-label">Поиск</span>
-          </button>
+          <div class="navigation-actions">
+            <Places o={o} homeFirst onNavigate={() => { if (overlay()) collapse(); }} />
+            <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
+            <button class="navigation-search-button place" type="button" aria-label="Поиск" title="Поиск в текущей ветке" onClick={search}>
+              <svg class="place-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" stroke-linecap="round" /></svg><span class="place-label">Поиск</span>
+            </button>
+          </div>
         </div>
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
           <SearchBar o={o} onRequest={() => { if (narrow()) setOpen(true); if (!open()) setSearchOpen(true); }} />
