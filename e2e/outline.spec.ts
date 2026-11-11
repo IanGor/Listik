@@ -720,7 +720,7 @@ test.describe('zoom', () => {
     expect(await outline(page)).toEqual(DEMO.slice(1, 5).map((l) => l.slice(2)));
   });
 
-  test('the title scrolls away with the list; the path stays, ending at the bullet', async ({ page }) => {
+  test('the title and path stay in place while the list scrolls', async ({ page }) => {
     await page.goto('/?sample=300');
     await expect(page.locator('.row').first()).toBeVisible();
     await page.locator('.row .bullet').first().click();
@@ -733,7 +733,7 @@ test.describe('zoom', () => {
     // The rows start under the title, not over it.
     expect(first.y).toBeGreaterThan(before + (await title(page).boundingBox())!.height);
     await page.locator('.scroller').evaluate((el) => (el.scrollTop = 200));
-    await expect.poll(async () => (await title(page).boundingBox())!.y).toBeLessThan(before - 150);
+    await expect.poll(async () => (await title(page).boundingBox())!.y).toBe(before);
     expect((await page.locator('.crumbbar').boundingBox())!.y).toBe(path);
     await expect(page.locator('.crumbs [aria-current="page"]')).toBeVisible();
   });
@@ -4738,10 +4738,10 @@ test.describe('navigation sidebar', () => {
     });
   });
 
-  test('a phone opens the full navigator from a hamburger beside its path', async ({ page }) => {
+  test('a phone opens the full navigator from a shared sidebar icon above its path', async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 915 });
     await expect(page.locator('.navigation-sidebar')).toBeHidden();
-    await expect(page.locator('.crumbbar .navigation-hamburger')).toBeVisible();
+    await expect(page.locator('.headingbar .navigation-hamburger')).toBeVisible();
     await page.locator('.navigation-hamburger').click();
     await expect(page.locator('.navigation-sidebar .search')).toBeVisible();
     await expect(page.locator('.navigation-sidebar .today-button')).toBeVisible();

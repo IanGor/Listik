@@ -10,14 +10,14 @@ import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCar
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces, pasteLink } from './Row';
-import { ALT, MOD, narrow } from './screen';
+import { ALT, MOD } from './screen';
 import { plural } from '../util/plural';
 
 /**
  * The path from the root to where you are, the place itself included:
  * "Главная" alone on the home page. Crumbs navigate; a separate button
  * folds or unfolds the first level. The path stays above the list while the
- * zoomed-in bullet's title (ZoomTitle) scrolls away with it, as in Workflowy.
+ * zoomed-in title stays above it; only the description and rows scroll.
  * One line that never shortens a crumb: a long path scrolls sideways and
  * stays at its end, so the bullets next to where you are show whole.
  */
@@ -74,7 +74,7 @@ function mouseScroll(nav: HTMLElement): void {
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
-export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean; navigationOpen?: boolean; onNavigation?: () => void }) {
+export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean }) {
   const o = props.o;
   let nav!: HTMLElement;
   const level = createMemo(() => o.levelState());
@@ -122,10 +122,26 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
 
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
-      <Show when={narrow()}>
-        <button class="navigation-hamburger icon-button" type="button" data-action="navigation.open" aria-label="Открыть навигацию" aria-expanded={props.navigationOpen} aria-controls="document-navigation" onMouseDown={(e) => e.preventDefault()} onClick={props.onNavigation}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
+      {/* Calendar days keep their two horizontal navigation buttons together. */}
+      <Show when={o.zoomDay()}>
+        <div class="day-steps">
+          <For each={[-1, 1] as const}>
+            {(step) => (
+              <button data-action="ZoomHeader.2"
+                type="button"
+                class="day-step"
+                title={step < 0 ? `Предыдущий день (${MOD}+${ALT}+←)` : `Следующий день (${MOD}+${ALT}+→)`}
+                aria-label={step < 0 ? 'Предыдущий день' : 'Следующий день'}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => o.stepDay(step)}
+              >
+                <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d={step < 0 ? 'M6 1.5 1.5 6 6 10.5' : 'M2 1.5 6.5 6 2 10.5'} />
+                </svg>
+              </button>
+            )}
+          </For>
+        </div>
       </Show>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
         {/* Home. A crumb only leads somewhere: folding the level is the button at the bar's end (UX audit, 29 October 2026). */}
@@ -150,27 +166,6 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           )}
         </For>
       </nav>
-      {/* In a day of the calendar: the day before and the day after, by dates (not by weeks, months, quarters). */}
-      <Show when={o.zoomDay()}>
-        <div class="day-steps">
-          <For each={[-1, 1] as const}>
-            {(step) => (
-              <button data-action="ZoomHeader.2"
-                type="button"
-                class="day-step"
-                title={step < 0 ? `Предыдущий день (${MOD}+${ALT}+←)` : `Следующий день (${MOD}+${ALT}+→)`}
-                aria-label={step < 0 ? 'Предыдущий день' : 'Следующий день'}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => o.stepDay(step)}
-              >
-                <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d={step < 0 ? 'M6 1.5 1.5 6 6 10.5' : 'M2 1.5 6.5 6 2 10.5'} />
-                </svg>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
       {/* What a search found: beside the path, the field keeping its room for the query (Apple's search fields
           carry no count). Nothing found has its own words over the list ("Ничего не найдено"). */}
       <Show when={o.filter()?.count}>
@@ -244,13 +239,22 @@ function Crumb(props: { o: Outliner; id: NodeId; current: boolean }) {
 }
 
 /**
- * The zoomed-in bullet's text and, under it, its whole note. Both show like
- * a row's: tags filter on a click, links lead to their bullet, bold and
+ * The fixed zoom title and the separately mounted, scrolling note show like
+ * a row: tags filter on a click, links lead to their bullet, bold and
  * italic are styled. A click elsewhere makes that part editable where the
  * click was (TitleEditable, TitleNoteEditable); so does Ctrl+↑ from the
  * first row (`titleRequests`), and Shift+Enter goes between the two.
  */
 export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
+  return <ZoomContent {...props} part="title" />;
+}
+
+export function ZoomNote(props: { o: Outliner; id: NodeId }) {
+  return <ZoomContent {...props} part="note" />;
+}
+
+/** Both locations share Outliner's editing state, with one editor per part. */
+function ZoomContent(props: { o: Outliner; id: NodeId; part: 'title' | 'note' }) {
   const o = props.o;
   const id = props.id;
   o.nodes.acquire(id);
@@ -264,8 +268,10 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   // Kept by the Outliner, so the editing bar on a touch screen sees it too.
   const edit = o.titleEdit;
   const setEdit = o.editTitle;
-  setEdit(null);
-  onCleanup(() => setEdit(null));
+  if (props.part === 'title') {
+    setEdit(null);
+    onCleanup(() => setEdit(null));
+  }
   /** An editor lost focus: editing ends, unless it has moved to the other part already. */
   const leave = (isNote: boolean) => edit()?.note === isNote && setEdit(null);
   const query = () => o.highlightFor(id);
@@ -275,7 +281,7 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
   /** A day (month, week…) of the calendar: its date in words above its tags, which turn small. */
   const dated = createMemo(() => (text(), o.doc.has(id) ? calendarName(o.doc, id, 'title') : null));
 
-  createEffect(on(o.titleRequests, () => !o.readOnly && setEdit({ note: false, caret: text().length }), { defer: true }));
+  if (props.part === 'title') createEffect(on(o.titleRequests, () => !o.readOnly && setEdit({ note: false, caret: text().length }), { defer: true }));
 
   const onMouseDown = (isNote: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -295,41 +301,45 @@ export function ZoomTitle(props: { o: Outliner; id: NodeId }) {
 
   return (
     <>
-      <button class="node-favorite" type="button" disabled={o.readOnly}
-        aria-label={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
-        title={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
-        aria-pressed={!!node()?.favorite}
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => o.toggleFavorite(id)}>
-        <Star filled={!!node()?.favorite} size={22} />
-      </button>
-      <Show
-        when={edit() && !edit()!.note}
-        fallback={
-          <>
-            <Show when={dated()}>
-              <div class="zoom-date" aria-hidden="true">{dated()}</div>
+      <Show when={props.part === 'title'}>
+        <button class="node-favorite" type="button" disabled={o.readOnly}
+          aria-label={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
+          title={node()?.favorite ? 'Убрать ноду из избранного' : 'Добавить ноду в избранное'}
+          aria-pressed={!!node()?.favorite}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => o.toggleFavorite(id)}>
+          <Star filled={!!node()?.favorite} size={22} />
+        </button>
+        <Show
+          when={edit() && !edit()!.note}
+          fallback={
+            <>
+              <Show when={dated()}>
+                <div class="zoom-date" aria-hidden="true">{dated()}</div>
+              </Show>
+              <div class="zoom-title" classList={{ dated: !!dated() }} onMouseDown={onMouseDown(false)}>
+                <Pieces o={o} pieces={pieces()} query={query()} />
+              </div>
+            </>
+          }
+        >
+          <TitleEditable o={o} id={id} text={text} caret={edit()!.caret} edit={setEdit} leave={() => leave(false)} />
+        </Show>
+      </Show>
+      <Show when={props.part === 'note'}>
+        <Show
+          when={edit()?.note}
+          fallback={
+            <Show when={note()}>
+              <div class="note zoom-note" onMouseDown={onMouseDown(true)}>
+                <Pieces o={o} pieces={notePieces()} query={query()} />
+              </div>
             </Show>
-            <div class="zoom-title" classList={{ dated: !!dated() }} onMouseDown={onMouseDown(false)}>
-              <Pieces o={o} pieces={pieces()} query={query()} />
-            </div>
-          </>
-        }
-      >
-        <TitleEditable o={o} id={id} text={text} caret={edit()!.caret} edit={setEdit} leave={() => leave(false)} />
-      </Show>
-      <Show
-        when={edit()?.note}
-        fallback={
-          <Show when={note()}>
-            <div class="note zoom-note" onMouseDown={onMouseDown(true)}>
-              <Pieces o={o} pieces={notePieces()} query={query()} />
-            </div>
-          </Show>
-        }
-      >
-        <TitleNoteEditable o={o} id={id} note={note} caret={edit()!.caret} edit={setEdit} leave={() => leave(true)} textLength={() => text().length} />
-      </Show>
+          }
+        >
+          <TitleNoteEditable o={o} id={id} note={note} caret={edit()!.caret} edit={setEdit} leave={() => leave(true)} textLength={() => text().length} />
+        </Show>
+        </Show>
     </>
   );
 }
@@ -457,8 +467,9 @@ function TitleNoteEditable(props: TitleEditorProps & { note: () => string; textL
   }, { defer: true }));
 
   const onInput = () => {
-    // Other browsers may insert <br> for a new line: turn it back into text.
-    if (el.querySelector('br')) {
+    // Pasting/filling multiline content can insert <br> or block elements.
+    // Preserve those line boundaries before normalizing to plain text.
+    if (el.querySelector('br, div, p')) {
       const caret = selectionIn(el)?.[0];
       write(el.innerText.replace(/\n$/, ''));
       if (caret !== undefined) setCaret(el, caret);

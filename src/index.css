@@ -657,10 +657,10 @@ kbd {
   color: var(--muted);
   cursor: pointer;
 }
-:root.touch-capable .row-actions { width: 44px; height: 44px; }
-:root.touch-capable .row { padding-right: 44px; min-height: 44px; box-sizing: border-box; }
-:root.touch-capable:not(.tablet) .row:has(.toggle) .row-actions { right: 44px; }
-:root.touch-capable:not(.tablet) .row:has(.toggle) { padding-right: 88px; }
+:root.touch-capable .row-actions { width: 32px; height: 30px; }
+:root.touch-capable .row { padding-right: 32px; min-height: 30px; box-sizing: border-box; }
+:root.touch-capable:not(.tablet) .row:has(.toggle) .row-actions { right: 32px; }
+:root.touch-capable:not(.tablet) .row:has(.toggle) { padding-right: 64px; }
 .selectionbar {
   display: flex;
   flex: none;
@@ -1022,6 +1022,51 @@ mark,
 
 /* The path stays above the list (Crumbs in ZoomHeader.tsx); the title
    scrolls with the rows, at the top of the spacer (Outline.tsx measures it). */
+.document-header {
+  flex: none;
+  position: relative;
+  z-index: 28;
+  background: var(--material-solid);
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0;
+}
+.headingbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  box-sizing: border-box;
+  max-width: calc(var(--column) + 6ch);
+  margin-inline: auto;
+  padding: 12px 2.5ch 2px 3.5ch;
+}
+.zoom-heading { position: relative; flex: 1; min-width: 0; }
+.zoom-heading :is(.zoom-title, .zoom-date), .document-home-title {
+  font-size: calc(28px * var(--text-scale));
+  line-height: 1.2;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.zoom-heading .zoom-title.dated { font-size: 14px; font-weight: 400; }
+.zoom-heading :is(.zoom-title, .zoom-date):not([contenteditable]) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.zoom-heading .zoom-title[contenteditable] { max-height: min(35dvh, 240px); overflow-y: auto; text-wrap: wrap; }
+.zoom-heading .node-favorite { top: 0; }
+.document-header .crumbbar { background: none; border-radius: 0; }
+@media (max-width: 767px) {
+  .document-header { border-radius: 0; }
+  .headingbar { max-width: none; padding: 8px 8px 0 calc(4px + var(--controls-left, 0px)); }
+  .zoom-heading { padding-top: 4px; }
+  .document-home-title { min-height: 34px; }
+  .zoomhead { left: 20px; right: 12px; }
+}
+@media (max-height: 300px) {
+  .headingbar { padding-block: 4px 0; }
+  .zoom-heading :is(.zoom-title, .zoom-date):not([contenteditable]) { -webkit-line-clamp: 1; }
+}
+
 .crumbbar {
   flex: none;
   width: 100%;
@@ -1122,7 +1167,7 @@ mark,
   top: 0;
   left: 3.5ch;
   right: 2.5ch;
-  padding-top: 14px;
+  padding-top: 0;
 }
 
 .crumb {
@@ -1194,7 +1239,7 @@ mark,
 
 /* The zoomed-in bullet's note: whole, under the title. */
 .zoom-note {
-  margin-top: 6px;
+  margin: 10px 0 4px;
 }
 
 .zoom-title:empty::before {
@@ -1392,7 +1437,7 @@ mark,
      keeps free: the arrows stand in one line at any depth, the text wraps
      short of them, and the bullet on the left is left to zoom with a tap. */
   :where(:root:not(.tablet)) .row {
-    --fold: 44px;
+    --fold: 32px;
   }
 
   :where(:root:not(.tablet)) .row .body {
@@ -3543,7 +3588,10 @@ body.is-dragging * {
 .navigation-empty { padding: 12px 8px; color: var(--muted); font-size: 13px; }
 /* Standalone iPad window buttons occupy a reserved top-left strip. */
 .has-navigation .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
-.has-navigation:has(.touch-navigation) .workspace { padding-top: max(8px, var(--controls-left, 0px), env(safe-area-inset-top)); }
+.has-navigation:has(.touch-navigation) .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
+@media (min-width: 768px) {
+  .navigation-sidebar { margin-inline-start: var(--controls-left, 0px); }
+}
 .touch-navigation .navigation-actions .place,
 .touch-navigation .navigation-capture .icon-button,
 .touch-navigation .navigation-toggle { min-height: 44px; height: 44px; }
@@ -3552,14 +3600,14 @@ body.is-dragging * {
 /* One-column navigation keeps the same mounted tree and search field. */
 @media (max-width: 767px) {
   .has-navigation .workspace { padding: 0; gap: 0; flex-direction: column; padding-top: env(safe-area-inset-top); }
-  .has-navigation:has(.touch-navigation) .workspace { padding-top: max(env(safe-area-inset-top), var(--controls-left, 0px)); }
+  .has-navigation:has(.touch-navigation) .workspace { padding-top: env(safe-area-inset-top); }
   .has-navigation .main { border-radius: 0; }
   .has-navigation .crumbbar { gap: 0; min-height: 52px; padding: 4px max(4px, env(safe-area-inset-right)) 4px max(4px, env(safe-area-inset-left)); z-index: 28; }
   .has-navigation .crumbbar > .menu-anchor { margin-left: 0; }
   .navigation-hamburger { width: 44px; height: 44px; }
   .crumbbar .crumbs { margin: 0; padding: 4px; }
-  .crumbbar .day-steps { flex-direction: column; gap: 0; margin: 0; }
-  .crumbbar .day-step { height: 22px; width: 44px; }
+  .crumbbar .day-steps { flex-direction: row; flex-wrap: nowrap; gap: 0; margin: 0; }
+  .crumbbar .day-step { height: 44px; width: 44px; }
   .crumbbar .count { position: absolute; top: 100%; right: 8px; background: var(--canvas); border-radius: 6px; }
   .navigation-sidebar, .navigation-sidebar.expanded:not(.overlay) { position: absolute; inset: 0 auto 0 0; width: 0; flex: none; pointer-events: none; z-index: 35; }
   .navigation-sidebar.overlay.expanded { width: min(360px, calc(100vw - 16px)); }
@@ -3573,8 +3621,8 @@ body.is-dragging * {
   .navigation-sidebar .navigation-search .searchbar { height: 44px; }
   .navigation-sidebar .search-menu { max-height: min(240px, 35dvh); }
   .desk:has(.sketch) { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
-  .desk .sketch { position: absolute; inset: 52px 0 0; width: auto; height: auto; z-index: 29; background: var(--canvas); border: 0; }
-  .workspace:has(> .trash) > .desk { min-height: 52px; flex: none; height: 52px; }
+  .desk .sketch { position: absolute; inset: var(--document-header-height, 100px) 0 0; width: auto; height: auto; z-index: 29; background: var(--canvas); border: 0; }
+  .workspace:has(> .trash) > .desk { min-height: var(--document-header-height, 100px); flex: none; height: var(--document-header-height, 100px); }
   .workspace > .trash { flex: 1; min-height: 0; height: auto; width: auto; box-shadow: none; border-radius: 0; }
   .workspace:has(> .trash) .desk .sketch { display: none; }
   .window { left: 20px; right: 12px; }
@@ -3594,6 +3642,13 @@ body.is-dragging * {
   .navigation-sidebar.expanded .navigation-scroll { flex: none; min-height: 120px; max-height: 240px; }
 }
 
+@media (max-height: 300px) {
+  .outline.has-navigation .workspace { padding-block: 2px; }
+  .outline.has-navigation:has(.touch-navigation) .workspace { padding-top: max(2px, env(safe-area-inset-top)); }
+  .document-header .headingbar { padding-block: 2px 0; }
+  .has-navigation .document-header .crumbbar { min-height: 44px; padding-block: 0; }
+}
+
 @media (prefers-reduced-transparency: reduce) {
   :root { --material: var(--material-solid); --popover: var(--popover-solid); --material-blur: 0px; --popover-blur: 0px; }
 }
@@ -3602,7 +3657,7 @@ body.is-dragging * {
 }
 
 /* Stars belong to the open node; the title remains an ordinary editor. */
-.zoomhead .zoom-title, .zoomhead .zoom-date { padding-right: 48px; }
+.zoom-heading .zoom-title, .zoom-heading .zoom-date { padding-right: 48px; }
 .node-favorite {
   position: absolute;
   right: 0;

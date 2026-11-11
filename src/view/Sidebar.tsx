@@ -5,7 +5,7 @@ import { titleOf } from '../model/links';
 import { navigationRows, navigationSelection, revealNavigation } from './navigation-tree';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
-import { CaptureButton, Places } from './TopBar';
+import { CaptureButton, NavigationIcon, Places } from './TopBar';
 import { narrow, touchCapable } from './screen';
 
 function read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
@@ -168,7 +168,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
       <div class="navigation-surface">
         <div class="navigation-head">
           <button ref={toggleButton} class="navigation-toggle icon-button" type="button" aria-label={open() ? 'Свернуть панель навигации' : 'Открыть панель навигации'} aria-expanded={open()} onClick={() => setMode(!open())} title={open() ? 'Свернуть панель' : 'Открыть панель'}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4" /><path d="M9 4v16M5.8 8h.4M5.8 12h.4" stroke-linecap="round" /></svg>
+            <NavigationIcon />
           </button>
           <span class="navigation-heading">Навигация</span>
         </div>

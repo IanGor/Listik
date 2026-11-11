@@ -5,7 +5,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { phone, touch, touchCapable } from './screen';
+import { narrow, phone, touch, touchCapable } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -21,7 +21,8 @@ import { QuickCapture } from './QuickCapture';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
 import { SyncDialog } from './SyncDialog';
-import { Crumbs, ZoomTitle } from './ZoomHeader';
+import { NavigationIcon } from './TopBar';
+import { Crumbs, ZoomNote, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
 import { fontStack } from './fonts';
 import { textScale } from './textsize';
@@ -40,7 +41,7 @@ const NOTE_LINES = 3;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
 /** The column kept free at the end of every row for the fold arrow on a touch screen, px (`--fold` in index.css). */
-const FOLD_COLUMN = 44;
+const FOLD_COLUMN = 32;
 /** Air kept between the caret's line and the edge it nears, in lines: room for descenders (р, у, д). */
 const CARET_ROOM = 0.6;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
@@ -62,6 +63,13 @@ export function Outline(props: { o: Outliner }) {
   let indentProbe!: HTMLSpanElement;
   let spacer!: HTMLDivElement;
 
+  const observeHeader = (el: HTMLElement) => {
+    const desk = el.closest<HTMLElement>('.desk')!;
+    const observer = new ResizeObserver(() => desk.style.setProperty('--document-header-height', `${el.getBoundingClientRect().height}px`));
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+  };
+
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewport, setViewport] = createSignal(0);
   const [layout, bumpLayout] = createSignal(undefined, { equals: false });
@@ -69,7 +77,7 @@ export function Outline(props: { o: Outliner }) {
   const v = new Virtualizer(o.rows, () => 24);
   onCleanup(() => v.dispose());
 
-  /** Height of the zoomed-in bullet's title, which scrolls with the list above its first row. */
+  /** Only the description scrolls above the first row; the title stays in the header. */
   const [head, setHead] = createSignal(0);
   const headObserver = new ResizeObserver(([entry]) => setHead(entry.borderBoxSize[0].blockSize));
   onCleanup(() => headObserver.disconnect());
@@ -151,7 +159,7 @@ export function Outline(props: { o: Outliner }) {
     const indent = indentation(indentProbe);
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
-      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (touchCapable() ? 44 : 32) + (phone() ? FOLD_COLUMN : 0)) / ch));
+      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + 32 + (phone() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
@@ -160,7 +168,7 @@ export function Outline(props: { o: Outliner }) {
         for (const line of n.note.split('\n')) shown += lines(line);
         h += Math.min(NOTE_LINES, shown) * lh * NOTE_SCALE;
       }
-      return Math.max(touchCapable() ? 44 : 0, h);
+      return Math.max(touchCapable() ? 30 : 0, h);
     });
     const [start] = range();
     Array.from(windowEl.children).forEach((el, k) => v.measure(start + k, el.getBoundingClientRect().height));
@@ -426,7 +434,17 @@ export function Outline(props: { o: Outliner }) {
           {(id) => <Sketch o={o} id={id} />}
         </Show>
         <div class="main">
-          <Crumbs o={o} scrolled={scrollTop() > 0} navigation navigationOpen={navigationOpen()} onNavigation={() => setNavigationRequests((n) => n + 1)} />
+          <header ref={observeHeader} class="document-header">
+            <div class="headingbar">
+              <Show when={narrow()}>
+                <button class="navigation-hamburger icon-button" type="button" data-action="navigation.open" aria-label="Открыть навигацию" aria-expanded={navigationOpen()} aria-controls="document-navigation" onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
+              </Show>
+              <div class="zoom-heading">
+                <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
+              </div>
+            </div>
+            <Crumbs o={o} scrolled={scrollTop() > 0} navigation />
+          </header>
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
@@ -434,7 +452,7 @@ export function Outline(props: { o: Outliner }) {
               <Show when={o.zoom()} keyed>
                 {(id) => (
                   <div ref={observeHead} class="zoomhead">
-                    <ZoomTitle o={o} id={id} />
+                    <ZoomNote o={o} id={id} />
                   </div>
                 )}
               </Show>

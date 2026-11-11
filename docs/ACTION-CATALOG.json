@@ -89,7 +89,7 @@
   "ZoomHeader.4": "src/view/ZoomHeader.tsx",
   "ZoomHeader.5": "src/view/ZoomHeader.tsx",
   "ZoomHeader.6": "src/view/ZoomHeader.tsx",
-  "navigation.open": "src/view/ZoomHeader.tsx",
+  "navigation.open": "src/view/Outline.tsx",
   "Row.4": "src/view/Row.tsx",
   "RowMenu.10": "src/view/RowMenu.tsx",
   "RowMenu.11": "src/view/RowMenu.tsx",
