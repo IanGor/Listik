@@ -3466,7 +3466,9 @@ body.is-dragging * {
 .navigation-sidebar.expanded .navigation-search-button { display: none; }
 .navigation-search { display: none; flex: none; position: relative; margin: 5px 0 4px; }
 .navigation-search.visible { display: block; }
-.navigation-search .searchbar { width: 100%; height: 42px; gap: 7px; padding: 0 11px; margin: 0; }
+.navigation-search .searchbar { width: 100%; height: 42px; gap: 7px; padding: 0 11px; margin: 0; background: var(--canvas); border-color: transparent; }
+:where(:root.mouse) .navigation-search .searchbar:hover { background: var(--surface); }
+.navigation-search .searchbar:focus-within { background: var(--canvas); border-color: var(--hairline); }
 .navigation-search .searchbar kbd { display: none; }
 .navigation-search .search { min-width: 0; font-size: 16px; }
 .navigation-search .search-menu { z-index: 31; left: 0; right: 0; max-height: min(420px, 55vh); }
