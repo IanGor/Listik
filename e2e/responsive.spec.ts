@@ -258,11 +258,48 @@ test.describe('compact pinned heading', () => {
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveCSS('--controls-left', '76px');
     expect((await page.locator('.navigation-sidebar').boundingBox())!.y).toBeLessThanOrEqual(8);
+    expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBe(8);
     expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(8);
     await page.locator('.row').last().locator('.bullet').click();
     await page.locator('.sketch-toggle').click();
     expect((await page.locator('.sketch').boundingBox())!.y).toBeLessThanOrEqual(8);
     expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(8);
+  });
+
+  test('headings share the path leading edge on every layout and stay opaque', async ({ page }) => {
+    for (const width of [320, 390, 834, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/?demo');
+      const header = page.locator('.document-header');
+      const check = async () => {
+        const title = page.locator('.zoom-title, .document-home-title');
+        const path = page.locator('.crumbs');
+        const leading = await path.evaluate((el) => {
+          const css = getComputedStyle(el);
+          return el.getBoundingClientRect().x + parseFloat(css.paddingLeft);
+        });
+        expect((await title.boundingBox())!.x).toBeCloseTo(leading, 0);
+        await expect(header).toHaveCSS('position', 'sticky');
+        await expect(header).toHaveCSS('top', '0px');
+        await expect(header).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        await expect(page.locator('.document-header .crumbbar')).toHaveCSS('backdrop-filter', 'none');
+        const button = page.getByRole('button', { name: 'Открыть навигацию', exact: true });
+        if (width < 768) {
+          expect((await title.boundingBox())!.x + (await title.boundingBox())!.width)
+            .toBeLessThanOrEqual((await button.boundingBox())!.x);
+        }
+      };
+      await check();
+      await page.locator('.row').last().locator('.bullet').click();
+      await check();
+      if (width >= 768) {
+        await page.locator('.navigation-toggle').click();
+        await check();
+        await page.locator('.sketch-toggle').click();
+        await check();
+      }
+      await page.screenshot({ path: `/tmp/listik-aligned-header-${width}.png` });
+    }
   });
 
   test('touch rows stay compact without overlapping their action buttons', async ({ page }) => {
