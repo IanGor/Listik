@@ -1,25 +1,25 @@
 import { FavoriteList } from './FavoriteList';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type Accessor } from 'solid-js';
 import { calendarName } from '../model/calendar';
 import { titleOf } from '../model/links';
 import { navigationRows, navigationSelection, revealNavigation } from './navigation-tree';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
 import { CaptureButton, Places } from './TopBar';
-import { touchCapable } from './screen';
+import { narrow, touchCapable } from './screen';
 
 function read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function write(key: string, value: string): void { try { localStorage.setItem(key, value); } catch { /* Optional local preferences. */ } }
 
-export function Sidebar(props: { o: Outliner }) {
+export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpenChange: (open: boolean) => void }) {
   const o = props.o;
   const storage = o.docName ? `listik-navigation:${o.docName}` : null;
   let saved: { expanded?: string[]; scroll?: number } = {};
   try { const value = JSON.parse(storage ? read(storage) ?? '{}' : '{}'); if (value && typeof value === 'object') saved = value; } catch { /* Start folded. */ }
   const [expanded, setExpanded] = createSignal(new Set(Array.isArray(saved.expanded) ? saved.expanded.filter((k) => typeof k === 'string') : []));
-  const [open, setOpen] = createSignal(read('listik-navigation-open') === 'true');
+  const [open, setOpen] = createSignal(!narrow() && read('listik-navigation-open') === 'true');
   const [searchOpen, setSearchOpen] = createSignal(false);
-  const [overlay, setOverlay] = createSignal(false);
+  const [overlay, setOverlay] = createSignal(narrow());
   const [version, setVersion] = createSignal(0);
   const [labels, setLabels] = createSignal(0);
   const [scroll, setScroll] = createSignal(Math.max(0, Number(saved.scroll) || 0));
@@ -39,7 +39,7 @@ export function Sidebar(props: { o: Outliner }) {
     setOpen(value); setSearchOpen(false);
     if (!overlay()) write('listik-navigation-open', String(value));
   };
-  const collapse = () => { setMode(false); queueMicrotask(() => toggleButton.focus()); };
+  const collapse = () => { setMode(false); queueMicrotask(() => (narrow() ? document.querySelector<HTMLButtonElement>('.navigation-hamburger') : toggleButton)?.focus()); };
   const observeScroller = (el: HTMLDivElement) => {
     scroller = el;
     const resize = new ResizeObserver(() => { if (el.clientHeight) setHeight(el.clientHeight); });
@@ -68,7 +68,14 @@ export function Sidebar(props: { o: Outliner }) {
     o.setFocus(null); o.zoomTo(row.id);
     if (overlay()) collapse();
   };
-  const search = () => { setSearchOpen(true); o.requestSearch(); };
+  const search = () => { if (narrow()) setOpen(true); setSearchOpen(true); o.requestSearch(); };
+  createEffect(() => props.onOpenChange(open()));
+  createEffect(on(props.requests, () => setMode(!open()), { defer: true }));
+  createEffect(on(narrow, (compact) => {
+    const searching = !!aside?.contains(document.activeElement) && document.activeElement?.matches('input.search');
+    setOpen(!!searching || (!compact && !overlay() && read('listik-navigation-open') === 'true'));
+    setSearchOpen(!!searching);
+  }, { defer: true }));
   const treeKeys = (e: KeyboardEvent) => {
     if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
     const index = rows().findIndex((r) => r.key === focused());
@@ -98,7 +105,7 @@ export function Sidebar(props: { o: Outliner }) {
   }));
   createEffect(on(overlay, (over) => {
     const searching = aside?.contains(document.activeElement) && document.activeElement?.matches('input.search');
-    setOpen(over ? false : read('listik-navigation-open') === 'true');
+    setOpen(over ? !!searching : read('listik-navigation-open') === 'true');
     setSearchOpen(!!searching);
     if (searching) queueMicrotask(() => o.requestSearch());
   }, { defer: true }));
@@ -121,10 +128,11 @@ export function Sidebar(props: { o: Outliner }) {
   onMount(() => {
     const workspace = aside.parentElement!;
     const measure = () => {
-      // Leave enough room for the editor, even with the trash or sketch open.
-      const extras = workspace.querySelector('.trash')?.getBoundingClientRect().width ?? 0;
-      const sketch = workspace.querySelector('.sketch')?.getBoundingClientRect().width ?? 0;
-      setOverlay(workspace.clientWidth - extras - sketch < 1020);
+      // Reserve panel budgets from the window, not their current flex widths:
+      // measuring an overlay's effect on its own breakpoint can oscillate.
+      const extras = workspace.querySelector('.trash') && !narrow() ? 290 : 0;
+      const sketch = workspace.querySelector('.sketch') && workspace.clientWidth >= 1024 ? 400 : 0;
+      setOverlay(narrow() || workspace.clientWidth - extras - sketch < 1024);
       if (scroller?.clientHeight) setHeight(scroller.clientHeight);
     };
     const observer = new ResizeObserver(measure);
@@ -136,7 +144,7 @@ export function Sidebar(props: { o: Outliner }) {
     if (desk) mutation.observe(desk, { childList: true });
     mutation.observe(aside, { attributes: true, attributeFilter: ['class'] });
     const outside = (e: PointerEvent) => {
-      if (aside.contains(e.target as Node)) return;
+      if (aside.contains(e.target as Node) || (e.target as Element).closest('.navigation-hamburger')) return;
       if (searchOpen()) setSearchOpen(false);
       if (overlay() && open()) setMode(false);
     };
@@ -156,7 +164,7 @@ export function Sidebar(props: { o: Outliner }) {
   });
 
   return (
-    <aside ref={aside} class="navigation-sidebar" classList={{ expanded: open(), overlay: overlay(), 'search-visible': searchOpen(), 'touch-navigation': touchCapable() }} aria-label="Навигация по документу">
+    <aside id="document-navigation" ref={aside} inert={narrow() && !open()} class="navigation-sidebar" classList={{ expanded: open(), overlay: overlay(), 'search-visible': searchOpen(), 'touch-navigation': touchCapable() }} aria-label="Навигация по документу">
       <div class="navigation-surface">
         <div class="navigation-head">
           <button ref={toggleButton} class="navigation-toggle icon-button" type="button" aria-label={open() ? 'Свернуть панель навигации' : 'Открыть панель навигации'} aria-expanded={open()} onClick={() => setMode(!open())} title={open() ? 'Свернуть панель' : 'Открыть панель'}>
@@ -172,13 +180,13 @@ export function Sidebar(props: { o: Outliner }) {
           </button>
         </div>
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
-          <SearchBar o={o} onRequest={() => { if (!open()) setSearchOpen(true); }} />
+          <SearchBar o={o} onRequest={() => { if (narrow()) setOpen(true); if (!open()) setSearchOpen(true); }} />
         </div>
         <Show when={open()}>
           <FavoriteList o={o} labelVersion={labels} navigate={(id) => {
             o.setFocus(null); o.zoomTo(id);
             if (overlay()) collapse();
-          }} search={(query) => { o.setQuery(query, true); o.requestSearch(); }} />
+          }} search={(query) => { o.setQuery(query, true); if (overlay()) collapse(); else o.requestSearch(); }} />
           <div class="navigation-tree-heading">
             <span class="navigation-divider" role="separator" />
             <button class="navigation-collapse-all" type="button" aria-label="Свернуть дерево" title="Свернуть дерево" disabled={!rows().some((row) => row.children && expanded().has(row.key))}

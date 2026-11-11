@@ -151,6 +151,7 @@ export function DocumentMenu(props: { o: Outliner }) {
       <Show when={open()}>
         <div class="menu" role="menu">
           {/* Grouped by what for (UX audit, 29 October 2026): going and writing; undo; the look; the document; files; help. */}
+          <button type="button" data-action="document.search" role="menuitem" onClick={() => { close(); o.requestSearch(); }}>Поиск</button>
           {/* Going to a place by its name: on a phone too, the line at the top of the screen as for "Куда…". */}
           <button data-action="Menu.2" type="button" role="menuitem" onClick={() => { close(); o.openGoTo(); }}>
             Перейти к пункту… <Show when={!phone()}><span class="hint">{MOD}+K</span></Show>
@@ -313,7 +314,8 @@ export function DocumentMenu(props: { o: Outliner }) {
                   <>
                     <Switch>
                       <Match when={b().state === 'unsupported'}>
-                        <p class="menu-note">Автокопия в папку работает в Chrome и Edge</p>
+                        <p class="menu-note">Этот браузер не поддерживает автозапись в папку. Можно скачать копию документа.</p>
+                        <button type="button" data-action="backup.download" role="menuitem" onClick={() => exportAs('md')}>Скачать копию сейчас</button>
                       </Match>
                       <Match when={b().state === 'off'}>
                         <button data-action="Menu.18" type="button" role="menuitem" onClick={act(() => o.backup?.choose())}>

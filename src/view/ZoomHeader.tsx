@@ -10,7 +10,7 @@ import { caretOnFirstLine, caretOnLastLine, offsetFromPoint, selectionIn, setCar
 import { formatKeys, onGlobalKeys } from './keymap';
 import type { Outliner, TitleEdit } from './outliner';
 import { Pieces, pasteLink } from './Row';
-import { ALT, MOD } from './screen';
+import { ALT, MOD, narrow } from './screen';
 import { plural } from '../util/plural';
 
 /**
@@ -74,7 +74,7 @@ function mouseScroll(nav: HTMLElement): void {
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
-export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean }) {
+export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean; navigationOpen?: boolean; onNavigation?: () => void }) {
   const o = props.o;
   let nav!: HTMLElement;
   const level = createMemo(() => o.levelState());
@@ -122,6 +122,11 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
 
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
+      <Show when={narrow()}>
+        <button class="navigation-hamburger icon-button" type="button" data-action="navigation.open" aria-label="Открыть навигацию" aria-expanded={props.navigationOpen} aria-controls="document-navigation" onMouseDown={(e) => e.preventDefault()} onClick={props.onNavigation}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+      </Show>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
         {/* Home. A crumb only leads somewhere: folding the level is the button at the bar's end (UX audit, 29 October 2026). */}
         <button data-action="ZoomHeader.1"

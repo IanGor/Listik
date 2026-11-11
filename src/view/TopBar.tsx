@@ -1,32 +1,6 @@
 import { Show, createSignal, onCleanup } from 'solid-js';
-import { DocumentMenu, WriteIcon } from './Menu';
+import { WriteIcon } from './Menu';
 import type { Outliner } from './outliner';
-import { SearchBar } from './SearchBar';
-import { watchWindowControls } from './window-controls';
-
-/**
- * The header: the two places a day starts from — today's day and the
- * home page — then search and the menu. The places are named, not a logo to
- * guess at, and stand together at the leading edge, the one you are in lit
- * (`aria-current`), as Apple's guides ask of navigation. On a phone they are
- * their symbols alone. Quick capture has its own button on every screen.
- */
-export function TopBar(props: { o: Outliner; navigation?: boolean }) {
-  // In an iPadOS window the controls lie over the header's left corner: the places step aside.
-  onCleanup(watchWindowControls());
-  return (
-    <header class="topbar" classList={{ 'with-navigation': props.navigation }}>
-      <Show when={!props.navigation}>
-        <Places o={props.o} />
-        <SearchBar o={props.o} />
-      </Show>
-      <div class="topbar-actions">
-        <Show when={!props.navigation}><CaptureButton o={props.o} /></Show>
-        <Show when={!props.navigation}><DocumentMenu o={props.o} /></Show>
-      </div>
-    </header>
-  );
-}
 
 export function Places(props: { o: Outliner; onNavigate?: () => void; homeFirst?: boolean }) {
   // Today's number on the calendar symbol: past midnight it turns over by itself.

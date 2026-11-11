@@ -8,43 +8,18 @@ function query(q: string): Accessor<boolean> {
   return matches;
 }
 
-/**
- * A phone-width screen: a shorter search placeholder. The width must match
- * the `max-width: 640px` media query in index.css.
- */
-export const narrow = query('(max-width: 640px)');
-
-/**
- * A touch screen as the main pointer (phone, tablet): no keyboard to rely on,
- * so editing gets a bar of actions (EditBar.tsx).
- */
+/** Layout follows the window; input capability is independent of its width.
+ * Keep the 768px boundary in sync with index.css. */
+export const narrow = query('(max-width: 767px)');
 export const touch = query('(pointer: coarse)');
-
-/** A trackpad can be the primary pointer on an iPad; touch capability remains. */
 export const touchCapable = () => touch() || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+export const tablet: Accessor<boolean> = () => !narrow() && touchCapable();
+export const phone: Accessor<boolean> = () => narrow() && touchCapable();
 
-/** The shorter side of the device's screen at least this is a tablet, px (iPad mini: 744). */
-const TABLET_MIN = 700;
-
-/**
- * A tablet (iPad): a finger as the main pointer on a wide screen. It gets the
- * computer's layout (arrows by the bullets, the calendar button at the row's
- * end, the full menu), with a finger's target sizes. The window's width counts
- * too, so Slide Over (a phone-wide strip of an iPad) is a phone. The device is
- * judged by `screen`, not the window: the keyboard shrinks the window.
- */
-const bigScreen = typeof screen !== 'undefined' && Math.min(screen.width, screen.height) >= TABLET_MIN;
-const wide = query('(min-width: 641px)');
-export const tablet: Accessor<boolean> = () => bigScreen && touch() && wide();
-
-/** The phone's touch layout: a finger on a screen too small for the computer's. */
-export const phone: Accessor<boolean> = () => touch() && !tablet();
-
-/** Keeps `tablet` on <html> (index.css has no media query for it). */
 export function watchTablet(): void {
   const root = document.documentElement;
-  const media = [matchMedia('(pointer: coarse)'), matchMedia('(min-width: 641px)')];
-  const update = () => root.classList.toggle('tablet', bigScreen && media.every((m) => m.matches));
+  const media = [matchMedia('(pointer: coarse)'), matchMedia('(max-width: 767px)')];
+  const update = () => root.classList.toggle('tablet', tablet());
   for (const m of media) m.addEventListener('change', update);
   update();
 }

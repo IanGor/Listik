@@ -200,6 +200,7 @@ export function Row(props: RowProps) {
     // A web address opens on its click; the row is not edited.
     if ((e.target as HTMLElement).closest('a.url')) return;
     e.preventDefault();
+    if (o.selection()) { o.select({ anchor: o.selection()!.anchor, head: id }); return; }
     const target = e.target as HTMLElement;
     const tag = target.dataset.tag;
     if (tag) return o.filterByTag(tag);
@@ -259,10 +260,10 @@ export function Row(props: RowProps) {
       style={{ 'padding-left': 'var(--shift)', '--depth': String(props.depth) }}
     >
       <Show when={hasChildren()}>
-        <span class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} aria-hidden="true">
+        <button type="button" class="toggle" classList={{ open: open() }} onMouseDown={onToggleMouseDown} onClick={(e) => { if (e.detail === 0) o.fold(id); }} aria-label={open() ? "Свернуть пункт" : "Развернуть пункт"} aria-expanded={open()}>
           {/* A chevron, Apple's disclosure mark: › closed, turning to ⌄ when open. */}
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5 8 6l-3.5 3.5" /></svg>
-        </span>
+        </button>
       </Show>
       <span
         ref={bullet}
@@ -354,6 +355,10 @@ export function Row(props: RowProps) {
           <NoteEditable o={o} id={id} />
         </Show>
       </div>
+      <button type="button" data-action="Row.4" class="row-actions" aria-label="Действия с пунктом" aria-haspopup="menu" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        o.openRowMenu(id, rect.right - 12, rect.bottom);
+      }}><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></button>
     </div>
   );
 }

@@ -2,7 +2,6 @@ import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-j
 import { SHEET, decodePoints, drawStroke, eraseStrokes, newStroke, pathData, simplify, smooth, touches, type Point } from '../model/sketch';
 import type { NodeId, Stroke } from '../model/types';
 import type { Outliner } from './outliner';
-import { narrow } from './screen';
 
 /** Width of a pen line and of a marker band, in sheet units (model/sketch.ts). */
 const PEN = 2.6;
@@ -49,6 +48,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
   onCleanup(() => o.nodes.release(id));
 
   const [tool, setTool] = createSignal<Tool>('pen');
+  const [fingerDraw, setFingerDraw] = createSignal(false);
   /** Lines under the eraser right now: hidden, gone for good when the pen lifts. */
   const [erased, setErased] = createSignal<ReadonlySet<string>>(new Set());
   /** The pane's size in px. */
@@ -93,7 +93,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     onCleanup(() => observer.disconnect());
     // Apple Pencil draws instead of scrolling; a finger still scrolls (Safari tells them apart by `touchType`).
     const stylus = (e: TouchEvent) => {
-      if ([...e.touches].some((t) => (t as Touch & { touchType?: string }).touchType === 'stylus')) e.preventDefault();
+      if (fingerDraw() || [...e.touches].some((t) => (t as Touch & { touchType?: string }).touchType === 'stylus')) e.preventDefault();
     };
     scroller.addEventListener('touchstart', stylus, { passive: false });
     scroller.addEventListener('touchmove', stylus, { passive: false });
@@ -112,7 +112,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
     const k = SHEET / rect.width;
     return [(e.clientX - rect.left) * k, (e.clientY - rect.top) * k];
   };
-  const drawable = () => !o.readOnly && !narrow();
+  const drawable = () => !o.readOnly;
 
   const erase = (p: Point) => {
     const g = gesture!;
@@ -129,7 +129,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
   };
 
   const onPointerDown = (e: PointerEvent) => {
-    if (!drawable() || e.pointerType === 'touch' || (e.pointerType === 'mouse' && e.button !== 0) || gesture) return;
+    if (!drawable() || (e.pointerType === 'touch' && !fingerDraw()) || (e.pointerType === 'mouse' && e.button !== 0) || gesture) return;
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
     const rect = svg.getBoundingClientRect();
@@ -198,7 +198,7 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
   return (
     <section class="sketch" aria-label="Скетч">
       {/* No default on mousedown: the caret stays in the bullet being typed. */}
-      <div ref={scroller} class="sketch-sheet" onMouseDown={(e) => e.preventDefault()}>
+      <div ref={scroller} class="sketch-sheet" classList={{ 'finger-drawing': fingerDraw() }} onMouseDown={(e) => e.preventDefault()}>
         <svg
           ref={svg}
           viewBox={`0 0 ${SHEET} ${height()}`}
@@ -225,11 +225,13 @@ export function Sketch(props: { o: Outliner; id: NodeId }) {
           {button('pen', 'Перо', PEN_ICON)}
           {button('mark', 'Маркер', MARK_ICON)}
           {button('eraser', 'Ластик', ERASER_ICON)}
+          <button type="button" data-action="Sketch.4" class="sketch-tool" aria-label="Рисовать пальцем" title="Рисовать пальцем: включить или вернуться к прокрутке" aria-pressed={fingerDraw()} onMouseDown={(e) => e.preventDefault()} onClick={() => setFingerDraw(!fingerDraw())}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5a2 2 0 0 1 4 0v6l2-1 5 2v5l-3 4h-5l-6-7a2 2 0 0 1 3-1Z" /></svg></button>
           <span class="sketch-sep" />
           <button data-action="Sketch.2" type="button" class="sketch-tool" title="Отменить" aria-label="Отменить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.undo()} innerHTML={UNDO_ICON} />
           <button data-action="Sketch.3" type="button" class="sketch-tool" title="Повторить" aria-label="Повторить" onMouseDown={(e) => e.preventDefault()} onClick={() => o.redo()} innerHTML={REDO_ICON} />
         </div>
       </Show>
+      <button type="button" data-action="Sketch.5" class="sketch-close icon-button" aria-label="Закрыть скетч" onClick={() => o.toggleSketch()}>×</button>
     </section>
   );
 }

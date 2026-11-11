@@ -31,10 +31,15 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
   let menu!: HTMLDivElement;
   /** A press began on the layer under the menu (not the long press that opened it). */
   let pressed = false;
+  let menuPressed = false;
   const [place, setPlace] = createSignal({ left: props.at.x, top: props.at.y + MARGIN });
 
   const n = () => o.contentOf(key);
-  const close = () => o.closeRowMenu();
+  const returnTo = document.activeElement as HTMLElement | null;
+  const close = (restore = false) => {
+    o.closeRowMenu();
+    if (restore) queueMicrotask(() => { if (returnTo?.isConnected) returnTo.focus(); });
+  };
   const act = (fn: () => void) => () => {
     close();
     fn();
@@ -46,21 +51,40 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
     const { x, y } = props.at;
     const left = Math.max(MARGIN, Math.min(x - width / 2, innerWidth - width - MARGIN));
     const below = y + MARGIN;
-    const top = below + height <= innerHeight - MARGIN ? below : Math.max(MARGIN, y - MARGIN - height);
+    const viewportHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--keyboard-visible-height')) || innerHeight;
+    const top = below + height <= viewportHeight - MARGIN ? below : Math.max(MARGIN, Math.min(y - MARGIN - height, viewportHeight - height - MARGIN));
     setPlace({ left, top });
+    const arm = () => { menuPressed = true; };
+    const activate = (e: MouseEvent) => {
+      // Ignore the synthetic click ending the long press that opened us.
+      if (!menuPressed && e.detail !== 0) { e.preventDefault(); e.stopPropagation(); }
+    };
+    menu.addEventListener('pointerdown', arm, true);
+    menu.addEventListener('click', activate, true);
+    if (returnTo?.classList.contains('row-actions')) menu.querySelector<HTMLButtonElement>('button')?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      close();
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true); return; }
+      if (!menu.contains(e.target as Node)) return;
+      if (e.key === 'Tab') { close(); return; }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation();
+      const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : (index + (e.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+      buttons[next]?.focus();
     };
     // The list scrolled or the window resized: the row is elsewhere now.
+    const resized = () => close();
     addEventListener('keydown', onKey, true);
-    addEventListener('resize', close);
-    addEventListener('scroll', close, true);
+    addEventListener('resize', resized);
+    const scrolled = (e: Event) => { if (!menu.contains(e.target as Node)) close(); };
+    addEventListener('scroll', scrolled, true);
     onCleanup(() => {
+      menu.removeEventListener('pointerdown', arm, true);
+      menu.removeEventListener('click', activate, true);
       removeEventListener('keydown', onKey, true);
-      removeEventListener('resize', close);
-      removeEventListener('scroll', close, true);
+      removeEventListener('resize', resized);
+      removeEventListener('scroll', scrolled, true);
     });
   });
 
@@ -75,7 +99,7 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
           e.preventDefault();
           pressed = true;
         }}
-        onClick={() => pressed && close()}
+        onClick={() => pressed && close(true)}
         onContextMenu={(e) => {
           e.preventDefault();
           close();
@@ -86,6 +110,7 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
           Открыть
           <Symbol><circle cx="12" cy="12" r="9" /><path d="M8 12h8M13 8.5l3.5 3.5-3.5 3.5" /></Symbol>
         </button>
+        <button type="button" data-action="RowMenu.10" role="menuitem" onClick={act(() => o.select({ anchor: key, head: key }))}>Выделить пункты</button>
         <Show when={!o.readOnly}>
           <Show
             when={n().todo}
@@ -109,6 +134,9 @@ function Menu(props: { o: Outliner; at: { key: string; x: number; y: number } })
             Заметка
             <Symbol><path d="M5 7h14M5 12h14M5 17h8" /></Symbol>
           </button>
+          <button type="button" data-action="RowMenu.11" role="menuitem" onClick={act(() => o.insert({ id: key, caret: n().text.length }, `${n().text.endsWith(' ') || !n().text ? '' : ' '}@`))}>Дата…</button>
+          <button type="button" data-action="RowMenu.12" role="menuitem" onClick={act(() => o.insert({ id: key, caret: n().text.length }, `${n().text.endsWith(' ') || !n().text ? '' : ' '}/`))}>Все команды…</button>
+          <button type="button" data-action="RowMenu.13" role="menuitem" onClick={act(() => o.slash(key, false, n().text.length, n().text.length, 'секрет'))}>Секретный пункт</button>
           <button data-action="RowMenu.6" type="button" role="menuitem" onClick={act(() => o.openMove([key]))}>
             Переместить в…
             <Symbol><path d="M3 7h6l2 2h10v10H3z" /><path d="M10 14h6M13 11l3 3-3 3" /></Symbol>

@@ -5,7 +5,7 @@ import type { Focus } from '../model/types';
 import { selectionIn } from './caret';
 import { formatSelection } from './keymap';
 import type { Outliner } from './outliner';
-import { keyboard, touchCapable } from './screen';
+import { touchCapable } from './screen';
 
 /** Which set the bar shows: the main one, or one of the sets it leads to. */
 type SetName = 'main' | 'move' | 'extra';
@@ -136,6 +136,7 @@ const SETS: SubSet[] = [
     label: 'Ещё',
     items: [
       { label: 'Зеркало', glyph: '(( ))', run: (o, h) => o.insert(h, '(())', 0, 2), off: (h) => !!h.note },
+      { label: 'Дата', glyph: '@', run: (o, h) => o.insert(h, '@') },
       TIME,
       BOLD,
       ITALIC,
@@ -157,9 +158,8 @@ export const barInWords = (): string =>
 
 /**
  * A bar of editing actions at the bottom of a touch screen while a bullet is
- * edited and the on-screen keyboard is up: the keyboard has no Tab,
- * Ctrl+L or Ctrl+Z, and # and [[ hide on its symbol pages. Hidden with the keyboard, even if the row is still
- * being edited. It sits in the page's flow, so it rests right on the keyboard
+ * edited, with either a software or hardware keyboard: the keyboard has no Tab,
+ * Ctrl+L or Ctrl+Z, and # and [[ hide on its symbol pages. Available for as long as the row is edited. It sits in the page's flow, so it rests right on the keyboard
  * (index.html). Its buttons never take focus: the keyboard stays open.
  *
  * Several sets share its place (ROW_MAIN, SETS). A button with a set behind
@@ -222,7 +222,7 @@ export function EditBar(props: { o: Outliner }) {
   const groups = () => (inTitle() ? TITLE_MAIN : ROW_MAIN);
 
   const button = (a: Action | Item, onClick: () => void, cls?: string) => (
-    <button data-action={`editbar.${a.label}`} type="button" tabIndex={-1} class={cls} title={a.label} aria-label={a.label} onClick={onClick}>
+    <button data-action={`editbar.${a.label}`} type="button" tabIndex={0} class={cls} title={a.label} aria-label={a.label} onClick={onClick}>
       {a.glyph ? <span class="editbar-glyph" aria-hidden="true">{a.glyph}</span> : <Icon paths={a.icon!} />}
     </button>
   );
@@ -245,7 +245,7 @@ export function EditBar(props: { o: Outliner }) {
   };
 
   return (
-    <Show when={touchCapable() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
+    <Show when={touchCapable() && !o.readOnly && (o.focus() || inTitle())}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <div ref={(el) => scrolling(el, 'main')} class="editbar-set editbar-main" inert={shown() !== 'main'}>
           <For each={groups()}>
@@ -277,7 +277,7 @@ export function EditBar(props: { o: Outliner }) {
                   </Show>
                   <button data-action={`editbar.${item.label}`}
                     type="button"
-                    tabIndex={-1}
+                    tabIndex={0}
                     class="editbar-labelled"
                     classList={{ destructive: !!item.destructive }}
                     aria-label={item.label}

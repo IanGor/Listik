@@ -45,7 +45,7 @@ test('a button lights the instant it is pressed, not on release', async ({ page 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   // --surface-2 of the light theme, at once: no transition on the way in.
-  await expect(crumb).toHaveCSS('background-color', 'rgb(223, 223, 229)', { timeout: 100 });
+  await expect(crumb).toHaveCSS('background-color', 'rgb(229, 229, 229)', { timeout: 100 });
   await page.mouse.up();
 });
 
@@ -284,8 +284,8 @@ test.describe('saved searches', () => {
     await expect(menu).not.toHaveClass(/more/);
     // A OnePlus 8 with the keyboard up: 412 × 540.
     await page.setViewportSize({ width: 412, height: 540 });
-    // The input moves from sidebar to phone header; wait for that replacement.
-    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
+    // The same search field stays mounted in compact navigation.
+    await expect(page.locator('.navigation-sidebar')).toBeVisible();
     await expect(search).toBeFocused();
     await expect(menu).toBeVisible();
     const height = await menu.evaluate((el) => el.getBoundingClientRect().height);
@@ -743,12 +743,11 @@ test.describe('zoom', () => {
     await page.locator('.row', { hasText: 'Eh bien' }).locator('.bullet').click();
     const nav = page.locator('.crumbs');
     await expect(crumbs(page)).toHaveCount(4);
-    // Scrolled to the end: the parent shows whole, the start is out of view behind a faded edge.
+    // The current location stays visible; earlier crumbs can scroll behind the fixed actions.
     await expect(nav).toHaveClass(/clipped/);
     const box = (await nav.boundingBox())!;
-    const parent = (await crumbs(page).filter({ hasText: 'Часть первая' }).boundingBox())!;
-    expect(parent.x).toBeGreaterThanOrEqual(box.x);
-    expect(parent.x + parent.width).toBeLessThanOrEqual(box.x + box.width);
+    const current = (await page.locator('.crumb.current').boundingBox())!;
+    expect(current.x + current.width).toBeLessThanOrEqual(box.x + box.width + 1);
     // No crumb above the current one is cut short.
     for (const c of await crumbs(page).filter({ hasNotText: 'Eh bien' }).all()) {
       expect(await c.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -760,7 +759,7 @@ test.describe('zoom', () => {
   });
 
   test('a path only a little too wide does not scroll: the place\'s own crumb gives way', async ({ page }) => {
-    await page.setViewportSize({ width: 412, height: 800 });
+    await page.setViewportSize({ width: 640, height: 800 });
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').click();
     await title(page).click();
     await page.keyboard.press('Control+End');
@@ -1858,10 +1857,10 @@ test.describe('deleting', () => {
     await page.keyboard.press('Control+Shift+Backspace');
     await expect(page.locator('.toast')).toHaveText(/^Удалено/);
     await page.keyboard.press('Escape');
-    await page.locator('.topbar [aria-label="Меню документа"]').click();
+    await page.locator('.crumbbar [aria-label="Меню документа"]').click();
     await page.getByRole('menuitem', { name: /^Отменить/ }).click();
     expect(await outline(page)).toEqual(DEMO);
-    await page.locator('.topbar [aria-label="Меню документа"]').click();
+    await page.locator('.crumbbar [aria-label="Меню документа"]').click();
     await expect(page.getByRole('menuitem', { name: /^Повторить/ })).toBeVisible();
   });
 });
@@ -2540,16 +2539,15 @@ test.describe('theme', () => {
 
 test.describe('top edge (iPadOS Home Screen app)', () => {
   // iPadOS 26 blurs the top of a Home Screen app unless a sticky or fixed opaque box spans it.
-  test('the header is sticky, opaque and full width, in both themes', async ({ page }) => {
-    const topbar = page.locator('.topbar');
-    await expect(topbar).toHaveCSS('position', 'sticky');
-    await expect(topbar).toHaveCSS('top', '0px');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  test('the workspace spans the top edge with an opaque background in both themes', async ({ page }) => {
+    const topbar = page.locator('.workspace');
+    await expect(topbar).toHaveCSS('position', 'relative');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(245, 245, 245)');
     await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
     expect((await topbar.boundingBox())!.width).toBe(page.viewportSize()!.width);
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(28, 28, 30)');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(20, 20, 20)');
   });
 });
 
@@ -2566,7 +2564,7 @@ test.describe('text size', () => {
     await expect(page.locator('.step-value')).toHaveText('130%');
     expect(await fontSize(page)).toBe('22.1px');
     // The chrome keeps its size; only the outline grows.
-    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('15px');
+    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
     // Rows are measured again: none overlaps the next.
     const boxes = await page.locator('.row').evaluateAll((rows) => rows.map((r) => r.getBoundingClientRect()).map((b) => [b.top, b.bottom]));
     for (let i = 1; i < boxes.length; i++) expect(boxes[i][0]).toBeGreaterThanOrEqual(boxes[i - 1][1] - 0.5);
@@ -2621,7 +2619,7 @@ test.describe('text size', () => {
     await menu(page).click();
     await page.getByRole('button', { name: 'Крупнее' }).click();
     expect(await fontSize(page)).toBe('21px');
-    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('15px');
+    expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
   });
 });
 
@@ -2654,7 +2652,7 @@ test.describe('font', () => {
 
 test.describe('phone screen', () => {
   const rightmost = (page: Page) =>
-    page.locator('.topbar > *, .topbar-actions > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
+    page.locator('.crumbbar > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
 
   test('the header fits; the theme switch works from the menu', async ({ page }) => {
     // A OnePlus 8 held upright, then the narrowest phones.
@@ -2662,10 +2660,12 @@ test.describe('phone screen', () => {
       await page.setViewportSize({ width, height: 800 });
       expect(await rightmost(page)).toBeLessThanOrEqual(width);
       // A query with its count and the clear button still leaves room for the menu.
+      await page.keyboard.press('Control+f');
       await page.locator('.search').fill('#салон');
       await expect(page.locator('.crumbbar .count')).toBeVisible();
       expect(await rightmost(page)).toBeLessThanOrEqual(width);
       await page.locator('.search').fill('');
+      await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Меню документа' }).click();
       const box = (await page.locator('.menu').boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(0);
@@ -2755,7 +2755,8 @@ test.describe('touch screen', () => {
     expect((await toast.boundingBox())!.height).toBeLessThan(50);
   });
 
-  test('quick capture opens directly from the header on a phone', async ({ page }) => {
+  test('quick capture opens from phone navigation', async ({ page }) => {
+    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
     await page.getByRole('button', { name: 'Записать в Inbox' }).tap();
     const line = page.getByRole('dialog', { name: 'Запись в Inbox' });
     await expect(line.getByRole('textbox')).toBeFocused();
@@ -2764,41 +2765,41 @@ test.describe('touch screen', () => {
     expect((await outline(page)).slice(-2)).toEqual(['Inbox', '  быстрая запись']);
   });
 
-  test('search stays editable beside header actions on a small phone', async ({ page }) => {
+  test('search stays editable inside navigation on a small phone', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 });
+    await page.keyboard.press('Control+f');
     const search = page.locator('input.search');
     await search.tap();
     await search.fill('Часть');
     expect((await search.boundingBox())!.width).toBeGreaterThanOrEqual(80);
-    await expect(page.locator('.topbar')).toHaveJSProperty('scrollWidth', 320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     await expect(page.locator('.row', { hasText: 'Часть вторая' })).toBeVisible();
   });
 
-  test('the trash is a sheet under the outline, inside the screen; it steps aside for the keyboard', async ({ page }) => {
+  test('the trash occupies the phone workspace and remains usable with a keyboard', async ({ page }) => {
     await page.locator('.menu-button').tap();
     await page.getByRole('menuitem', { name: /Корзина/ }).tap();
     const sheet = page.getByRole('complementary', { name: 'Корзина' });
     await expect(sheet).toBeVisible();
-    // Once it has slid up.
-    await expect.poll(async () => { const b = (await sheet.boundingBox())!; return b.y + b.height; }).toBeLessThanOrEqual(915 + 1);
     expect((await sheet.boundingBox())!.width).toBe(412);
-    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     await keyboard(page, true);
-    await expect(sheet).toHaveCount(0);
-    await keyboard(page, false);
     await expect(sheet).toBeVisible();
+    await page.locator('.trash-close').tap();
+    await expect(sheet).toHaveCount(0);
+    await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
+    await expect(bar(page)).toBeVisible();
   });
 
-  test('a landscape phone with the keyboard up: no path, slimmer header and bar, the line in full above the bar', async ({ page }) => {
+  test('a short landscape window keeps its path and editing controls reachable', async ({ page }) => {
     await page.setViewportSize({ width: 915, height: 412 });
     await page.locator('.row .text', { hasText: 'Так говорила' }).tap();
     await page.setViewportSize({ width: 915, height: 190 });
     await expect(bar(page)).toBeVisible();
-    await expect(page.locator('.crumbbar')).toBeHidden();
+    await expect(page.locator('.crumbbar')).toBeVisible();
     const row = editing(page);
     await expect.poll(async () => { const r = (await row.boundingBox())!; return r.y + r.height; })
       .toBeLessThanOrEqual((await bar(page).boundingBox())!.y);
-    expect((await row.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator('.topbar').boundingBox())!.height);
+    expect((await row.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator('.crumbbar').boundingBox())!.height);
     // The keyboard down: the path is back.
     await page.setViewportSize({ width: 915, height: 412 });
     await expect(page.locator('.crumbbar')).toBeVisible();
@@ -2839,7 +2840,8 @@ test.describe('touch screen', () => {
     await expect(bar(page)).toHaveCount(0);
     await page.keyboard.type('Шер');
     await expect(sheet.locator('.trash-item')).toHaveCount(1);
-    // Back in a row, the keyboard is the outline's again: the sheet steps aside, the bar comes.
+    // Closing the trash returns to the document and its editing controls.
+    await page.locator('.trash-close').tap();
     await keyboard(page, false);
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     await keyboard(page, true);
@@ -2850,6 +2852,7 @@ test.describe('touch screen', () => {
   test('the search box lists no recent places: nothing drops over the outline', async ({ page }) => {
     await page.locator('.row', { hasText: 'Часть первая' }).locator('.bullet').tap();
     await expect(page.locator('.zoom-title')).toHaveText('Часть первая');
+    await page.keyboard.press('Control+f');
     await page.locator('.search').tap();
     await expect(page.locator('.search')).toBeFocused();
     await expect(page.locator('.search-menu')).toHaveCount(0);
@@ -2909,10 +2912,10 @@ test.describe('touch screen', () => {
     await action(page, 'Заметка').tap();
     await expect(editing(page)).toBeFocused();
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.note')).toHaveText('с телефона');
-    // The keyboard has its own key to hide it, and the bar goes with it; the row is still edited.
+    // With the keyboard hidden the row remains edited and its buttons stay available.
     await expect(action(page, 'Готово')).toHaveCount(0);
     await keyboard(page, false);
-    await expect(bar(page)).toHaveCount(0);
+    await expect(bar(page)).toBeVisible();
     await expect(editing(page)).toBeFocused();
     await keyboard(page, true);
     await expect(bar(page)).toBeVisible();
@@ -2960,12 +2963,12 @@ test.describe('touch screen', () => {
     expect(gap).toBeGreaterThanOrEqual(0.5);
   });
 
-  test('no bar while the keyboard is down, nor for the address bar coming and going', async ({ page }) => {
+  test('editing buttons remain available with the keyboard down and address bar changing', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Том второй' }).tap();
     await expect(editing(page)).toBeFocused();
-    await expect(bar(page)).toHaveCount(0);
+    await expect(bar(page)).toBeVisible();
     await page.setViewportSize({ width: 412, height: 859 });
-    await expect(bar(page)).toHaveCount(0);
+    await expect(bar(page)).toBeVisible();
   });
 
   test('suggestions: fewer with the keyboard up, above the bar, taken with a tap', async ({ page }) => {
@@ -3206,14 +3209,14 @@ test.describe('touch screen', () => {
     await finger(page, 'Часть вторая', { hold: 500 });
     await expect(menu).toBeVisible();
     await expect(page.locator('.row.menu-target')).toHaveText('Часть вторая');
-    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Сделать задачей', 'Заметка', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Выделить пункты', 'Сделать задачей', 'Заметка', 'Дата…', 'Все команды…', 'Секретный пункт', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
     expect(await outline(page)).toEqual(DEMO);
     await menu.getByRole('menuitem', { name: 'Сделать задачей' }).tap();
     await expect(menu).toHaveCount(0);
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
     // By its text too; now a task, it offers to check it and to take the checkbox away.
     await finger(page, 'Часть вторая', { hold: 500, on: '.text' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Отметить выполненной', 'Убрать чекбокс', 'Заметка', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Открыть', 'Выделить пункты', 'Отметить выполненной', 'Убрать чекбокс', 'Заметка', 'Дата…', 'Все команды…', 'Секретный пункт', 'Переместить в…', 'Зеркало в…', 'Копировать', 'Удалить']);
     // A tap beside it closes it, and what is under the tap is not touched: the bullet is not zoomed into.
     const other = (await page.locator('.row', { hasText: 'Том первый' }).locator('.bullet').boundingBox())!;
     await page.touchscreen.tap(other.x + other.width / 2, other.y + other.height / 2);
@@ -3363,19 +3366,22 @@ test.describe('touch screen', () => {
     await expect(page.locator('.crumb.current')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   });
 
-  test('the places are symbols on a phone, named for a screen reader; a tap goes there', async ({ page }) => {
-    await expect(page.locator('.today-button .place-label')).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Сегодня' })).toBeVisible();
-    await expect(page.locator('.home-button')).toHaveAccessibleName('Главная');
+  test('the phone navigator names its places and closes after a transition', async ({ page }) => {
     await page.locator('.row .bullet').first().tap();
+    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
+    await expect(page.locator('.today-button .place-label')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Сегодня', exact: true })).toBeVisible();
+    await expect(page.locator('.home-button')).toHaveAccessibleName('Главная');
     await page.locator('.home-button').tap();
     await expect(page.locator('.crumb.current')).toHaveText('Главная');
-    await expect(page.locator('.home-button')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.navigation-sidebar')).toBeHidden();
     await expect(page.locator('.editbar')).toHaveCount(0);
   });
 
   test('small buttons are a finger wide to hit, looking the same', async ({ page }) => {
+    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
     for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBeGreaterThanOrEqual(44);
+    await page.keyboard.press('Escape');
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(36);
     // The bullet reaches into the gutter on its left; its dot stays where the row's guide line meets it.
     const bullet = page.locator('.row .bullet').first();
@@ -3405,6 +3411,7 @@ test.describe('touch screen', () => {
   });
 
   test('the search field keeps its room: the count stands beside the path, in words', async ({ page }) => {
+    await page.keyboard.press('Control+f');
     await page.locator('.search').tap();
     await page.keyboard.type('#шерер');
     await expect(page.locator('.searchbar .count')).toHaveCount(0);
@@ -4515,10 +4522,10 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     }, { height, scale, offsetTop });
   }
 
-  test('iPad software keyboard shows the quick keys above it; hardware keyboard and hiding software keyboard leave no bar', async ({ page }) => {
+  test('iPad software keyboard shows the quick keys above it; hardware keyboard and hiding software keyboard keep the buttons available', async ({ page }) => {
     await page.locator('.row .text', { hasText: 'Часть вторая' }).tap();
     const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
     const layout = await page.evaluate(() => innerHeight);
     await visualViewport(page, 780, 1, 20);
     expect(await page.evaluate(() => innerHeight)).toBe(layout);
@@ -4530,7 +4537,7 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await expect(page.locator('.row', { hasText: 'Часть вторая' }).locator('.check')).toHaveCount(1);
     // Connecting hardware / dismissing the software keyboard restores the visual viewport.
     await visualViewport(page, layout);
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
     await expect(editing(page)).toBeFocused();
     await page.keyboard.type(' с клавиатуры');
     await expect(editing(page)).toContainText('с клавиатуры');
@@ -4540,15 +4547,15 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await page.locator('.row .text').first().tap();
     const bar = page.getByRole('toolbar', { name: 'Правка пункта' });
     await visualViewport(page, 597, 2);
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
     await visualViewport(page, 1194);
     await page.setViewportSize({ width: 1194, height: 834 });
     await visualViewport(page, 834);
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
     await visualViewport(page, 500);
     await expect(bar).toBeVisible();
     await visualViewport(page, 834);
-    await expect(bar).toHaveCount(0);
+    await expect(bar).toBeVisible();
   });
 
   test('iPad with a primary trackpad still gets quick keys with the software keyboard', async ({ page }) => {
@@ -4565,13 +4572,13 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     await visualViewport(page, 780);
     await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
     await visualViewport(page, 1194);
-    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
   });
 
   test('iPad keyboard can open while the page is pinch zoomed', async ({ page }) => {
     await page.locator('.row .text').first().tap();
     await visualViewport(page, 597, 2);
-    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toHaveCount(0);
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
     await visualViewport(page, 350, 2);
     await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeVisible();
   });
@@ -4731,12 +4738,14 @@ test.describe('navigation sidebar', () => {
     });
   });
 
-  test('a phone retains its original top bar without a sidebar', async ({ page }) => {
+  test('a phone opens the full navigator from a hamburger beside its path', async ({ page }) => {
     await page.setViewportSize({ width: 412, height: 915 });
-    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
-    await expect(page.locator('.topbar .search')).toBeVisible();
-    await expect(page.locator('.topbar .today-button')).toBeVisible();
-    await expect(page.locator('.topbar .home-button')).toBeVisible();
+    await expect(page.locator('.navigation-sidebar')).toBeHidden();
+    await expect(page.locator('.crumbbar .navigation-hamburger')).toBeVisible();
+    await page.locator('.navigation-hamburger').click();
+    await expect(page.locator('.navigation-sidebar .search')).toBeVisible();
+    await expect(page.locator('.navigation-sidebar .today-button')).toBeVisible();
+    await expect(page.locator('.navigation-sidebar .home-button')).toBeVisible();
   });
 
   test('a large root tree renders only a viewport and is keyboard navigable', async ({ page }) => {
@@ -4814,7 +4823,7 @@ test.describe('sidebar favorites', () => {
     await expect(page.locator('.saved-search-remove')).toHaveCount(0);
   });
 
-  test('stars survive reload and are available in a phone header without a sidebar', async ({ page }) => {
+  test('stars survive reload and remain available on a phone', async ({ page }) => {
     await page.goto('/?db=e2e-node-favorite&empty');
     await page.locator('.row .text').click();
     await page.keyboard.type('Важная нода');
@@ -4826,7 +4835,7 @@ test.describe('sidebar favorites', () => {
     await page.reload();
     await expect(page.locator('.node-favorite')).toHaveAttribute('aria-pressed', 'true');
     await page.setViewportSize({ width: 412, height: 915 });
-    await expect(page.locator('.navigation-sidebar')).toHaveCount(0);
+    await expect(page.locator('.navigation-sidebar')).toBeHidden();
     await expect(page.locator('.node-favorite')).toBeVisible();
     await page.locator('.node-favorite').click();
     await expect(page.locator('.node-favorite')).toHaveAttribute('aria-pressed', 'false');
@@ -4921,12 +4930,12 @@ test.describe('Apple HIG interface', () => {
   test('materials have opaque accessibility fallbacks and high contrast keeps selection visible', async ({ page }) => {
     const session = await page.context().newCDPSession(page);
     await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-transparency', value: 'reduce' }] });
-    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(245, 245, 247)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
     await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
     await session.detach();
     await page.emulateMedia({ contrast: 'more', reducedMotion: 'reduce' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
-    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(245, 245, 247)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
     await expect(page.locator('.row .text').first()).toHaveCSS('color', 'rgb(0, 0, 0)');
     await page.emulateMedia({ forcedColors: 'active' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('box-shadow', 'none');

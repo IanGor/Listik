@@ -1,9 +1,11 @@
+import { watchWindowControls } from './window-controls';
 import { Sidebar } from './Sidebar';
+import { SelectionBar } from './SelectionBar';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { keyboard, narrow, phone, touch } from './screen';
+import { phone, touch, touchCapable } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -19,7 +21,6 @@ import { QuickCapture } from './QuickCapture';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
 import { SyncDialog } from './SyncDialog';
-import { TopBar } from './TopBar';
 import { Crumbs, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
 import { fontStack } from './fonts';
@@ -39,7 +40,7 @@ const NOTE_LINES = 3;
 /** Width of the bullet and the gap after it, px: `--bullet` plus the `.row` gap. */
 const BULLET_GAP = 26;
 /** The column kept free at the end of every row for the fold arrow on a touch screen, px (`--fold` in index.css). */
-const FOLD_COLUMN = 32;
+const FOLD_COLUMN = 44;
 /** Air kept between the caret's line and the edge it nears, in lines: room for descenders (р, у, д). */
 const CARET_ROOM = 0.6;
 /** Height of the "+" line under a zoomed-in list, px; matches `.add` in index.css. */
@@ -52,6 +53,9 @@ const ADD_HEIGHT = 32;
  */
 export function Outline(props: { o: Outliner }) {
   const o = props.o;
+  onCleanup(watchWindowControls());
+  const [navigationRequests, setNavigationRequests] = createSignal(0);
+  const [navigationOpen, setNavigationOpen] = createSignal(false);
   let scroller!: HTMLDivElement;
   let windowEl!: HTMLDivElement;
   let probe!: HTMLSpanElement;
@@ -147,7 +151,7 @@ export function Outline(props: { o: Outliner }) {
     const indent = indentation(indentProbe);
     v.setEstimate((id, depth) => {
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
-      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (phone() ? FOLD_COLUMN : 0)) / ch));
+      const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + (touchCapable() ? 44 : 32) + (phone() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
@@ -156,7 +160,7 @@ export function Outline(props: { o: Outliner }) {
         for (const line of n.note.split('\n')) shown += lines(line);
         h += Math.min(NOTE_LINES, shown) * lh * NOTE_SCALE;
       }
-      return h;
+      return Math.max(touchCapable() ? 44 : 0, h);
     });
     const [start] = range();
     Array.from(windowEl.children).forEach((el, k) => v.measure(start + k, el.getBoundingClientRect().height));
@@ -205,8 +209,8 @@ export function Outline(props: { o: Outliner }) {
         return;
       }
       const target = e.target as HTMLElement;
-      if (target.isContentEditable || target.tagName === 'INPUT') return;
-      if (onSelectionKeys(e, o)) return;
+      if (target.isContentEditable || target.tagName === 'INPUT' || target.closest('.selectionbar, .row-menu, .menu')) return;
+      if (!target.closest('.navigation-sidebar') && onSelectionKeys(e, o)) return;
       if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         return o.showHelp();
@@ -374,8 +378,7 @@ export function Outline(props: { o: Outliner }) {
   };
 
   return (
-    <div class="outline" classList={{ 'has-navigation': !phone() && !narrow() }}>
-      <TopBar o={o} navigation={!phone() && !narrow()} />
+    <div class="outline has-navigation">
       <Shortcuts o={o} />
       <Show when={o.opened && !o.readOnly}>
         <SyncDialog o={o} />
@@ -416,14 +419,14 @@ export function Outline(props: { o: Outliner }) {
       <QuickCapture o={o} />
       <GoTo o={o} />
       <div class="workspace">
-        <Show when={!phone() && !narrow()}><Sidebar o={o} /></Show>
+        <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} />
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
         <Show when={o.sketchShown()} keyed>
           {(id) => <Sketch o={o} id={id} />}
         </Show>
         <div class="main">
-          <Crumbs o={o} scrolled={scrollTop() > 0} navigation={!phone() && !narrow()} />
+          <Crumbs o={o} scrolled={scrollTop() > 0} navigation navigationOpen={navigationOpen()} onNavigation={() => setNavigationRequests((n) => n + 1)} />
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
@@ -481,7 +484,7 @@ export function Outline(props: { o: Outliner }) {
         </div>
         </div>
         {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard, unless that keyboard types into its filter. */}
-        <Show when={o.trashOpen() && (!(touch() && keyboard()) || trashTyping())}>
+        <Show when={o.trashOpen()}>
           <Trash o={o} onTyping={setTrashTyping} />
         </Show>
       </div>
@@ -489,6 +492,7 @@ export function Outline(props: { o: Outliner }) {
       <Show when={!trashTyping()}>
         <EditBar o={o} />
       </Show>
+      <SelectionBar o={o} />
       <Suggest o={o} />
       <RowMenu o={o} />
     </div>
