@@ -32,8 +32,9 @@ const EDGE = 48;
 /**
  * Dragging bullets by their dot. A press that does not move is a click and
  * zooms in. A drag moves the bullet, or the whole selection if the bullet is
- * part of it; the drop line shows the place and the level, which follows the
- * pointer's x within what is allowed there.
+ * part of it; the drop line shows the place and the level. Mouse/pen use the
+ * pointer's x; touch uses horizontal travel from the pickup's original level,
+ * within what is allowed there.
  *
  * A finger works the same way except how a drag starts: the finger is held
  * still for LONG_PRESS first, and lifted without moving after that, it opens
@@ -65,6 +66,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
     const startX = e.clientX;
     const startY = e.clientY;
     let dragging = false;
+    let initialDepth = 0;
     let ids: RowKey[] = [];
     /** Rows of the dragged subtrees, which cannot take a drop. */
     let inside = new Set<RowKey>();
@@ -85,6 +87,7 @@ export function createDrag(o: Outliner, el: () => Elements) {
 
     const begin = () => {
       dragging = true;
+      initialDepth = o.rows.depths[o.rows.indexOf(id)] ?? 0;
       const selected = o.selectedSet();
       ids = selected.has(id) ? o.selectionRoots() : [id];
       inside = new Set();
@@ -121,12 +124,22 @@ export function createDrag(o: Outliner, el: () => Elements) {
       // Between two rows of a dragged subtree: nowhere to go.
       if (prevId && nextId && inside.has(prevId) && inside.has(nextId)) return null;
 
-      // The level: from the pointer's x, between the next row's depth and one deeper than the previous row.
+      // The level is bounded by the next row's depth and one deeper than the previous row.
       const indent = indentation(indentProbe);
       const base = windowEl.getBoundingClientRect().left;
       const maxDepth = prevId ? rows.depths[prev] + 1 : 0;
       const minDepth = nextId ? rows.depths[prev + 1] : 0;
-      const depth = Math.max(minDepth, Math.min(maxDepth, indent.levelAt(pointer.x - base)));
+      // A finger may pick up anywhere in the text: only its travel changes
+      // the level. Require a full indent in either direction, including the
+      // narrower steps of deep phone branches, and keep the original anchor.
+      let wantedDepth = indent.levelAt(pointer.x - base);
+      if (finger) {
+        const dx = pointer.x - lifted.x;
+        const x = indent.at(initialDepth) + dx;
+        wantedDepth = indent.levelAt(x);
+        if (dx < 0 && x > indent.at(wantedDepth)) wantedDepth++;
+      }
+      const depth = Math.max(minDepth, Math.min(maxDepth, wantedDepth));
 
       let parent: RowKey;
       let after: RowKey | null;

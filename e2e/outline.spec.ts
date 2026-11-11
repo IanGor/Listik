@@ -3174,7 +3174,7 @@ test.describe('touch screen', () => {
   });
 
   /** A finger down on a row's bullet (or its text, `on`), optionally held, moved in steps to (x, y), and lifted. */
-  async function finger(page: Page, from: string, opts: { hold: number; on?: '.bullet' | '.text'; to?: (b: { x: number; y: number }) => { x: number; y: number }; during?: () => Promise<void> }) {
+  async function finger(page: Page, from: string, opts: { hold: number; on?: '.bullet' | '.text'; to?: (b: { x: number; y: number }) => { x: number; y: number }; returnX?: boolean; during?: () => Promise<void> }) {
     const cdp = await page.context().newCDPSession(page);
     const box = (await page.locator('.row', { hasText: from }).locator(opts.on ?? '.bullet').first().boundingBox())!;
     const start = { x: box.x + Math.min(box.width / 2, 30), y: box.y + box.height / 2 };
@@ -3188,6 +3188,7 @@ test.describe('touch screen', () => {
       for (let i = 1; i <= 8; i++) {
         await touch('touchMove', { x: start.x + ((end.x - start.x) * i) / 8, y: start.y + ((end.y - start.y) * i) / 8 });
       }
+      if (opts.returnX) await touch('touchMove', { x: start.x, y: end.y });
     }
     await touch('touchEnd');
     await cdp.detach();
@@ -3210,6 +3211,77 @@ test.describe('touch screen', () => {
     await page.locator('.row', { hasText: 'Часть вторая' }).locator('.bullet').tap();
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
+
+  for (const on of ['.bullet', '.text'] as const) {
+    test(`a vertical touch drag by ${on} preserves root depth and its subtree`, async ({ page }) => {
+      const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+      await finger(page, 'Том первый', {
+        hold: 500, on,
+        to: (s) => ({ x: s.x, y: target.y + target.height * 0.75 }),
+      });
+      expect(await outline(page)).toEqual(['Том второй', ...DEMO.slice(0, -1)]);
+    });
+
+    for (const shift of [-1, -0.25, 0, 0.25, 1]) {
+      test(`a touch drag by ${on} changes depth only after a full horizontal step (${shift})`, async ({ page }) => {
+        const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+        const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+        await finger(page, 'Часть первая', {
+          hold: 500, on,
+          to: (s) => ({ x: s.x + shift * indent, y: target.y + target.height * 0.75 }),
+        });
+        // The previous row allows at most depth 1; a rightward request is clamped.
+        const depth = shift === -1 ? 0 : 1;
+        expect(await outline(page)).toEqual([
+          'Том первый', '  Часть вторая', 'Том второй',
+          '  '.repeat(depth) + 'Часть первая',
+          ...DEMO.slice(2, 4).map((line) => line.slice((1 - depth) * 2)),
+        ]);
+      });
+    }
+  }
+
+  test('a rightward touch drag explicitly nests a root node', async ({ page }) => {
+    const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+    await finger(page, 'Том первый', {
+      hold: 500, on: '.text',
+      to: (s) => ({ x: s.x + indent, y: target.y + target.height * 0.75 }),
+    });
+    expect(await outline(page)).toEqual(['Том второй', ...DEMO.slice(0, -1).map((line) => '  ' + line)]);
+  });
+
+  test('returning a touch drag to its original horizontal position restores its depth', async ({ page }) => {
+    const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
+    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
+    await finger(page, 'Том первый', {
+      hold: 500, on: '.text', returnX: true,
+      to: (s) => ({ x: s.x + indent, y: target.y + target.height * 0.75 }),
+    });
+    expect(await outline(page)).toEqual(['Том второй', ...DEMO.slice(0, -1)]);
+  });
+
+  for (const dx of [-12, 0, 12]) {
+    test(`a deep phone touch drag uses the narrow indent (${dx}px)`, async ({ page }) => {
+      await edit(page, 'Том второй');
+      for (let d = 1; d <= 5; d++) {
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Tab');
+        await page.keyboard.type(`глубина ${d}`);
+      }
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('сосед');
+      await page.keyboard.press('Escape');
+      const target = (await page.locator('.row', { hasText: 'сосед' }).boundingBox())!;
+      await finger(page, 'глубина 5', {
+        hold: 500, on: '.text',
+        to: (s) => ({ x: s.x + dx, y: target.y + target.height * 0.75 }),
+      });
+      expect((await outline(page)).slice(-2)).toEqual([
+        '  '.repeat(5) + 'сосед', '  '.repeat(5 + Math.sign(dx)) + 'глубина 5',
+      ]);
+    });
+  }
 
   test('a row held and let go where it was opens its menu; a tap elsewhere closes it and does nothing', async ({ page }) => {
     const menu = page.locator('.row-menu');
@@ -3238,7 +3310,6 @@ test.describe('touch screen', () => {
     expect(await outline(page)).toEqual(DEMO);
 
     const target = (await page.locator('.row', { hasText: 'Том второй' }).boundingBox())!;
-    const indent = await page.locator('.indent-probe').evaluate((el) => el.getBoundingClientRect().width);
     await finger(page, 'Часть первая', {
       hold: 500,
       on: '.text',
@@ -3246,7 +3317,7 @@ test.describe('touch screen', () => {
         await expect(page.locator('.row.holding')).toHaveText('Часть первая');
         await expect(page.locator('.row.dragged').first()).toHaveText('Часть первая');
       },
-      to: () => ({ x: target.x + 10 + indent, y: target.y + target.height * 0.75 }),
+      to: (s) => ({ x: s.x, y: target.y + target.height * 0.75 }),
     });
     await expect(page.locator('.row.holding')).toHaveCount(0);
     expect(await outline(page)).toEqual(['Том первый', '  Часть вторая', 'Том второй', '  Часть первая', ...DEMO.slice(2, 4)]);
