@@ -15,9 +15,8 @@ export function FavoriteList(props: { o: Outliner; labelVersion: () => number; n
     return [...nodes.map((id): Entry => ({ kind: 'node', id })), ...queries.map((query): Entry => ({ kind: 'search', query }))];
   });
   const rowHeight = 42;
-  const gap = () => o.favoriteNodes().length && o.savedSearches().length ? 8 : 0;
-  const position = (index: number) => index * rowHeight + (index >= o.favoriteNodes().length ? gap() : 0);
-  const totalHeight = () => entries().length * rowHeight + gap();
+  const position = (index: number) => index * rowHeight;
+  const totalHeight = () => entries().length * rowHeight;
   const [top, setTop] = createSignal(0), [height, setHeight] = createSignal(220);
   const first = () => Math.max(0, Math.floor(top() / rowHeight) - 3);
   const shown = createMemo(() => entries().slice(first(), first() + Math.ceil(height() / rowHeight) + 6));

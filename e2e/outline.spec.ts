@@ -2556,13 +2556,13 @@ test.describe('text size', () => {
   const menu = (page: Page) => page.getByRole('button', { name: 'Меню документа' });
 
   test('the menu steps the outline text, keeps the menu open, and the size survives a reload', async ({ page }) => {
-    expect(await fontSize(page)).toBe('17px');
+    expect(await fontSize(page)).toBe('14.45px');
     await menu(page).click();
     const larger = page.getByRole('button', { name: 'Крупнее' });
     for (let i = 0; i < 6; i++) await larger.click();
     await expect(page.locator('.menu')).toBeVisible();
     await expect(page.locator('.step-value')).toHaveText('130%');
-    expect(await fontSize(page)).toBe('22.1px');
+    expect(await fontSize(page)).toBe('18.785px');
     // The chrome keeps its size; only the outline grows.
     expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
     // Rows are measured again: none overlaps the next.
@@ -2571,7 +2571,7 @@ test.describe('text size', () => {
 
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
-    expect(await fontSize(page)).toBe('22.1px');
+    expect(await fontSize(page)).toBe('18.785px');
     await menu(page).click();
     const smaller = page.getByRole('button', { name: 'Мельче' });
     for (let percent = 125; percent >= 50; percent -= 5) {
@@ -2579,17 +2579,17 @@ test.describe('text size', () => {
       await expect(page.locator('.step-value')).toHaveText(`${percent}%`);
     }
     await expect(smaller).toBeDisabled();
-    expect(await fontSize(page)).toBe('8.5px');
+    expect(await fontSize(page)).toBe('7.225px');
     await page.reload();
     await expect(page.locator('.row')).toHaveCount(DEMO.length);
-    expect(await fontSize(page)).toBe('8.5px');
+    expect(await fontSize(page)).toBe('7.225px');
     await menu(page).click();
     for (let percent = 55; percent <= 150; percent += 5) {
       await larger.click();
       await expect(page.locator('.step-value')).toHaveText(`${percent}%`);
     }
     await expect(larger).toBeDisabled();
-    expect(await fontSize(page)).toBe('25.5px');
+    expect(await fontSize(page)).toBe('21.675px');
   });
 
   test('the chosen scale belongs to this device, independently of another browser', async ({ page, browser }) => {
@@ -2615,10 +2615,10 @@ test.describe('text size', () => {
   test("the system's text size (Dynamic Type on an iPad) scales the outline under the menu's", async ({ page }) => {
     // What followSystemSize sets on an iPad whose Settings ask for 20px body text.
     await page.evaluate(() => document.documentElement.style.setProperty('--system-scale', String(20 / 17)));
-    expect(await fontSize(page)).toBe('20px');
+    expect(await fontSize(page)).toBe('17px');
     await menu(page).click();
     await page.getByRole('button', { name: 'Крупнее' }).click();
-    expect(await fontSize(page)).toBe('21px');
+    expect(await fontSize(page)).toBe('17.85px');
     expect(await page.locator('.search').evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
   });
 });
@@ -5075,6 +5075,11 @@ test.describe('consistent sidebar states', () => {
     await sidebar.locator('.searchbar .star').click();
     await expect(favorites.getByRole('listitem')).toHaveCount(2);
     await expect(favorites.getByRole('listitem').nth(1)).toHaveAttribute('aria-posinset', '2');
+    const rows = await favorites.getByRole('listitem').evaluateAll(items => items.map(item => {
+      const rect = item.getBoundingClientRect();
+      return { top: rect.top, height: rect.height };
+    }));
+    expect(rows[1].top - rows[0].top).toBe(rows[0].height);
     for (const text of ['Избранное', 'Ноды', 'Поиски', 'Дерево документа']) await expect(sidebar.getByText(text, { exact: true })).toHaveCount(0);
     await expect(sidebar.getByRole('tree', { name: 'Дерево документа' })).toBeVisible();
     await expect(sidebar.getByRole('separator')).toHaveCount(2);

@@ -393,7 +393,7 @@ test('desktop and touch share compact navigation, backlinks, menu and search met
       await page.locator('.row').last().locator('.link').click();
       const backlinks = page.getByRole('navigation', { name: 'Ссылки сюда' });
       await expect(backlinks.getByRole('button').first()).toBeVisible();
-      await expect(page.locator('.row .text').first()).toHaveCSS('font-size', '17px');
+      await expect(page.locator('.row .text').first()).toHaveCSS('font-size', '14.45px');
       expect((await backlinks.getByRole('button').first().boundingBox())!.height).toBe(28);
       await page.getByRole('button', { name: 'Добавить ноду в избранное' }).click();
       for (const width of [390, 834, 1440]) {

@@ -15,6 +15,7 @@ test('iPad text scale: every tap updates the percentage, text size and saved set
   const larger = group.getByRole('button', { name: 'Крупнее' });
   const fontSize = () => page.locator('.row .text').first().evaluate(el => parseFloat(getComputedStyle(el).fontSize));
   const base = await fontSize();
+  expect(base).toBeCloseTo(17 * 0.85, 2);
   await expect(value).toHaveText('100%');
   // Keep the readout correct if its text nodes are normalized or replaced.
   let current = 100;

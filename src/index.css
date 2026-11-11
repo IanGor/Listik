@@ -78,7 +78,8 @@
   /* Dynamic Type: on an iPad or iPhone, the text size picked in the system's
      Settings, relative to its default (textsize.ts `followSystemSize`). */
   --system-scale: 1;
-  --text-scale: calc(var(--font-scale) * var(--system-scale));
+  /* The menu's 100% is the former 85%; keep user/system scales relative. */
+  --text-scale: calc(0.85 * var(--font-scale) * var(--system-scale));
   --font-size: calc(17px * var(--text-scale));
   --line-height: 1.53;
   /* Indent per nesting level in px, after Workflowy; the text column in

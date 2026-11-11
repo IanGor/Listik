@@ -2,7 +2,7 @@ import { createSignal } from 'solid-js';
 
 /**
  * Text size, a setting of this browser like the theme (theme.ts): a scale of
- * the default size (17 px, 16 px on phones) for the outline's text, notes and
+ * the default size (14.45 px) for the outline's text, notes and
  * the zoom title, on top of the system's text size on an iPad or iPhone
  * (`followSystemSize`); the header and menus keep theirs. CSS reads `--font-scale`
  * on <html> (index.css); index.html applies a saved one before the first
