@@ -433,3 +433,44 @@ test('desktop and touch share compact navigation, backlinks, menu and search met
     } finally { await context.close(); }
   }
 });
+
+
+test('sheet frame keeps all four margins and corners at every width', async ({ page }) => {
+  for (const width of [320, 390, 767, 768, 834, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?demo');
+    const main = page.locator('.main');
+    const box = (await main.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(8);
+    expect(width - box.x - box.width).toBeCloseTo(8, 0);
+    expect(box.y).toBe(16);
+    expect(900 - box.y - box.height).toBeCloseTo(8, 0);
+    await expect(main).toHaveCSS('border-radius', '18px');
+    await expect(page.locator('.document-header')).toHaveCSS('border-top-left-radius', '18px');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.screenshot({ path: `/tmp/listik-frame-${width}.png` });
+    if (width >= 768) continue;
+    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+    const nav = (await page.locator('.navigation-surface').boundingBox())!;
+    expect(nav.x).toBe(8); expect(nav.y).toBe(16);
+    expect(nav.x + nav.width).toBeLessThanOrEqual(width - 8);
+    expect(nav.y + nav.height).toBeCloseTo(892, 0);
+    await expect(page.locator('.navigation-surface')).toHaveCSS('border-radius', '18px');
+    await page.locator('.navigation-toggle').click();
+    await page.locator('.row').first().locator('.bullet').click();
+    await page.locator('.sketch-toggle').click();
+    const sketch = (await page.locator('.sketch').boundingBox())!;
+    expect(sketch.x).toBe(8);
+    expect(sketch.x + sketch.width).toBe(width - 8);
+    expect(sketch.y + sketch.height).toBeCloseTo(892, 0);
+    await page.locator('.sketch-close').click();
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /Корзина/ }).click();
+    const trashPanel = page.getByRole('complementary', { name: 'Корзина' });
+    await expect.poll(async () => { const r = (await trashPanel.boundingBox())!; return r.y + r.height; }).toBeCloseTo(892, 0);
+    const trash = (await trashPanel.boundingBox())!;
+    expect(trash.x).toBe(8);
+    expect(trash.x + trash.width).toBe(width - 8);
+    await page.locator('.trash-close').click();
+  }
+});

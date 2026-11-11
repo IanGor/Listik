@@ -1046,8 +1046,7 @@ mark,
   border-radius: 0;
 }
 @media (max-width: 767px) {
-  .document-header { border-radius: 0; }
-  .headingbar { padding: 8px max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); }
+  .headingbar { padding: 8px 8px 0; }
   .zoom-heading { padding-top: 4px; }
   .document-home-title { min-height: 34px; }
   .zoomhead { left: 20px; right: 12px; }
@@ -3531,20 +3530,19 @@ body.is-dragging * {
 .has-navigation:has(.touch-navigation) .workspace { padding-top: max(8px, env(safe-area-inset-top)); }
 /* One-column navigation keeps the same mounted tree and search field. */
 @media (max-width: 767px) {
-  .has-navigation .workspace { padding: 0; gap: 0; flex-direction: column; padding-top: env(safe-area-inset-top); }
+  .has-navigation .workspace { gap: 0; flex-direction: column; }
   .has-navigation:has(.touch-navigation) .workspace { padding-top: env(safe-area-inset-top); }
-  .has-navigation .main { border-radius: 0; }
-  .has-navigation .crumbbar { gap: 0; min-height: 52px; padding: 4px max(8px, env(safe-area-inset-right)) 4px max(8px, env(safe-area-inset-left)); z-index: 28; }
+  .has-navigation .crumbbar { gap: 0; min-height: 52px; padding: 4px 8px; z-index: 28; }
   .has-navigation .crumbbar > .menu-anchor { margin-left: 0; }
   .navigation-hamburger { flex: none; width: 44px; height: 44px; }
   .crumbbar .crumbs { margin: 0; padding: 4px 0; }
   .crumbbar .day-steps { flex-direction: row; flex-wrap: nowrap; gap: 0; margin: 0; }
   .crumbbar .day-step { height: 44px; width: 44px; }
   .crumbbar .count { position: absolute; top: 100%; right: 8px; background: var(--canvas); border-radius: 6px; }
-  .navigation-sidebar, .navigation-sidebar.expanded:not(.overlay) { position: absolute; inset: 0 auto 0 0; width: 0; flex: none; pointer-events: none; z-index: 35; }
-  .navigation-sidebar.overlay.expanded { width: min(360px, calc(100vw - 16px)); }
+  .navigation-sidebar, .navigation-sidebar.expanded:not(.overlay) { position: absolute; inset: max(var(--workspace-top), env(safe-area-inset-top)) auto max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); width: 0; flex: none; pointer-events: none; z-index: 35; }
+  .navigation-sidebar.overlay.expanded { width: min(360px, calc(100vw - max(8px, env(safe-area-inset-left)) - max(8px, env(safe-area-inset-right)))); }
   .navigation-sidebar:not(.expanded) { visibility: hidden; }
-  .navigation-sidebar.overlay.expanded .navigation-surface { pointer-events: auto; position: absolute; inset: 0 auto 0 0; width: min(360px, calc(100vw - 16px)); height: 100%; box-shadow: var(--shadow-pop); border-radius: 0 var(--panel-radius) var(--panel-radius) 0; }
+  .navigation-sidebar.overlay.expanded .navigation-surface { pointer-events: auto; position: absolute; inset: 0 auto 0 0; width: min(360px, calc(100vw - max(8px, env(safe-area-inset-left)) - max(8px, env(safe-area-inset-right)))); height: 100%; box-shadow: var(--shadow-pop); border-radius: var(--panel-radius); }
   .navigation-sidebar.expanded .place-label { display: inline; }
   .navigation-sidebar .navigation-head { padding-right: 4px; }
   .navigation-sidebar .navigation-actions .place { width: auto; justify-content: flex-start; padding: 0 10px; }
@@ -3555,7 +3553,7 @@ body.is-dragging * {
   .desk:has(.sketch) { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
   .desk .sketch { position: absolute; inset: var(--document-header-height, 100px) 0 0; width: auto; height: auto; z-index: 29; background: var(--canvas); border: 0; }
   .workspace:has(> .trash) > .desk { min-height: var(--document-header-height, 100px); flex: none; height: var(--document-header-height, 100px); }
-  .workspace > .trash { flex: 1; min-height: 0; height: auto; width: auto; box-shadow: none; border-radius: 0; }
+  .workspace > .trash { flex: 1; min-height: 0; height: auto; width: auto; box-shadow: none; border-radius: 0 0 var(--panel-radius) var(--panel-radius); }
   .workspace:has(> .trash) .desk .sketch { display: none; }
   .window { left: 20px; right: 12px; }
   .zoom-header { padding-inline: 20px 12px; }
@@ -3676,7 +3674,7 @@ body.is-dragging * {
 :root { --header-action: 40px; --workspace-top: 16px; }
 .has-navigation .workspace,
 .has-navigation:has(.touch-navigation) .workspace {
-  padding-top: max(var(--workspace-top), env(safe-area-inset-top));
+  padding: max(var(--workspace-top), env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
 }
 .backlink { min-height: 28px; padding-inline: 10px; }
 .navigation-sidebar { --navigation-action-height: 42px; }
@@ -3712,7 +3710,7 @@ body.is-dragging * {
 @media (max-width: 767px) {
   .headingbar { min-height: 52px; }
   .navigation-hamburger { width: var(--header-action); height: var(--header-action); }
-  .has-navigation .document-header .crumbbar { padding-left: calc(max(8px, env(safe-area-inset-left)) + var(--header-action) + 4px); }
+  .has-navigation .document-header .crumbbar { padding-left: calc(8px + var(--header-action) + 4px); }
   .crumbbar .crumbs { padding-block: 4px; margin: 0; }
 }
 @media (max-height: 300px) {
@@ -3720,4 +3718,19 @@ body.is-dragging * {
   .outline.has-navigation:has(.touch-navigation) .workspace { padding-top: max(2px, env(safe-area-inset-top)); padding-bottom: 2px; }
   .headingbar { min-height: 42px; }
   .has-navigation .document-header .crumbbar { min-height: 40px; padding-block: 0; }
+}
+
+/* Child surfaces follow the sheet corners without clipping floating menus. */
+.main > .scroller { border-radius: 0 0 var(--panel-radius) var(--panel-radius); }
+@media (max-width: 767px) {
+  .desk .sketch { border-radius: 0 0 var(--panel-radius) var(--panel-radius); }
+  .workspace:has(> .trash) .main { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+}
+@media (max-width: 767px) and (max-height: 300px) {
+  .navigation-sidebar, .navigation-sidebar.expanded:not(.overlay) { top: max(2px, env(safe-area-inset-top)); bottom: 2px; }
+}
+
+/* The keyboard accessory already owns its bottom safe area. */
+@media (min-height: 301px) {
+  .has-navigation:has(.editbar) .workspace { padding-bottom: 8px; }
 }

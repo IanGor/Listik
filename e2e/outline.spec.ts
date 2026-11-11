@@ -2781,7 +2781,7 @@ test.describe('touch screen', () => {
     await page.getByRole('menuitem', { name: /Корзина/ }).tap();
     const sheet = page.getByRole('complementary', { name: 'Корзина' });
     await expect(sheet).toBeVisible();
-    expect((await sheet.boundingBox())!.width).toBe(412);
+    expect((await sheet.boundingBox())!.width).toBe(396);
     await keyboard(page, true);
     await expect(sheet).toBeVisible();
     await page.locator('.trash-close').tap();
