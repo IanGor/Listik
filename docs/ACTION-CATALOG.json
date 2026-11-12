@@ -95,6 +95,7 @@
   "RowMenu.11": "src/view/RowMenu.tsx",
   "RowMenu.12": "src/view/RowMenu.tsx",
   "RowMenu.13": "src/view/RowMenu.tsx",
+  "document.split": "src/view/Menu.tsx",
   "document.search": "src/view/Menu.tsx",
   "analytics.export": "src/view/Menu.tsx",
   "backup.download": "src/view/Menu.tsx",

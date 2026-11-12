@@ -9,14 +9,16 @@ test.describe('adaptive workspace', () => {
     await expect(page.locator('.row')).toHaveCount(6);
   });
 
-  test('phone navigation contains the same tree, favorites and search', async ({ page }) => {
+  test('phone navigation contains calendar, favorites and search without a tree', async ({ page }) => {
     const hamburger = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
     const sidebar = page.locator('.navigation-sidebar');
     await expect(sidebar).toBeHidden();
     await page.screenshot({ path: '/tmp/listik-responsive-phone.png' });
     await hamburger.click();
     await page.screenshot({ path: '/tmp/listik-responsive-navigation.png' });
-    await sidebar.getByRole('treeitem', { name: 'Том первый', exact: true }).click();
+    await expect(sidebar.getByRole('tree')).toHaveCount(0);
+    await page.locator('.navigation-toggle').click();
+    await page.locator('.row').first().locator('.bullet').click();
     await expect(sidebar).toBeHidden();
     await expect(page.locator('.crumb.current')).toHaveText('Том первый');
     await page.getByRole('button', { name: 'Добавить ноду в избранное' }).click();
@@ -95,8 +97,7 @@ test.describe('adaptive workspace', () => {
   });
 
   test('sketch and trash are usable workspaces with a clear return', async ({ page }) => {
-    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
-    await page.getByRole('treeitem', { name: 'Том первый', exact: true }).click();
+    await page.locator('.row').first().locator('.bullet').click();
     await page.getByRole('button', { name: 'Скетч', exact: true }).click();
     const sketch = page.locator('.sketch');
     await expect(sketch).toBeVisible();
@@ -133,7 +134,7 @@ test.describe('adaptive workspace', () => {
     await page.screenshot({ path: '/tmp/listik-responsive-small-large-text.png' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
     await page.locator('.navigation-hamburger').click();
-    await expect(page.getByRole('tree')).toBeVisible();
+    await expect(page.getByRole('tree')).toHaveCount(0);
   });
 
   test('navigation and commands remain reachable in a short landscape window', async ({ page }) => {
@@ -442,8 +443,8 @@ test('desktop and touch share compact navigation, backlinks, menu and search met
           await page.locator('.navigation-toggle').click();
         }
         const sidebar = page.locator('.navigation-sidebar');
-        await expect(sidebar.getByRole('tree')).toBeVisible();
-        expect((await sidebar.getByRole('treeitem').first().boundingBox())!.height).toBe(34);
+        await expect(sidebar.getByRole('tree')).toHaveCount(0);
+        await expect(sidebar.locator('.sidebar-calendar')).toBeVisible();
         expect((await sidebar.locator('.favorite-entry').first().boundingBox())!.height).toBe(42);
         expect((await sidebar.locator('.searchbar').boundingBox())!.height).toBe(44);
         await page.screenshot({ path: `/tmp/listik-density-${hasTouch ? 'touch' : 'desktop'}-${width}-navigation.png` });

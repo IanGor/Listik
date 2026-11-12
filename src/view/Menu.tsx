@@ -1,3 +1,5 @@
+import { useContext } from 'solid-js';
+import { SplitContext } from './split-context';
 import { For, Match, Show, Switch, createRenderEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { appendTrees } from '../model/commands';
 import { countTrees, looksLikeOpml, parseIndented, parseOpml, toMarkdown, toOpml } from '../model/outline-text';
@@ -49,6 +51,7 @@ const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour
  */
 export function DocumentMenu(props: { o: Outliner }) {
   const o = props.o;
+  const split = useContext(SplitContext);
   const [open, setOpen] = createSignal(false);
   const [fontsOpen, setFontsOpen] = createSignal(false);
   const [filesOpen, setFilesOpen] = createSignal(false);
@@ -172,6 +175,13 @@ export function DocumentMenu(props: { o: Outliner }) {
             </Show>
             <TRASH />
           </button>
+          <Show when={split && (split.wide() || split.enabled())}>
+            <button type="button" data-action="document.split" role="menuitem" disabled={!split?.wide() && !split?.enabled()}
+              onClick={() => { close(); split?.toggle(); }}>
+              {split?.enabled() ? 'Закрыть split view' : 'Открыть split view'}
+              <Symbol><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16" /></Symbol>
+            </button>
+          </Show>
           <div class="menu-sep" role="separator" />
           {/* Undo for a mouse, and for a phone out of editing (its bar has undo only while a bullet is edited). */}
           <Show when={!o.readOnly && (o.history.canUndo || o.history.canRedo)}>

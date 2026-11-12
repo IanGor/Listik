@@ -4,7 +4,7 @@ import { Backup } from './persist/backup';
 import { Persistence } from './persist/idb';
 import { acquireWriteLock } from './persist/lock';
 import { codecFor, openVault, requestRestore, restoreFromServer, startSync, takeRestore, type Opened } from './sync/setup';
-import { Outline } from './view/Outline';
+import { SplitWorkspace } from './view/SplitWorkspace';
 import { Outliner } from './view/outliner';
 import { Restore } from './view/Restore';
 import { Unlock } from './view/Unlock';
@@ -127,7 +127,7 @@ export default function App() {
       </Match>
       <Match when={damaged()}>{(opened) => <Restore opened={opened()} />}</Match>
       <Match when={locked()}>{(opened) => <Unlock opened={opened()} onUnlocked={() => setUnlocked(opened())} />}</Match>
-      <Match when={outliner()}>{(o) => <Outline o={o()} />}</Match>
+      <Match when={outliner()}>{(o) => <SplitWorkspace o={o()} />}</Match>
     </Switch>
   );
 }

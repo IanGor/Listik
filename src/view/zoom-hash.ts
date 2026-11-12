@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup } from 'solid-js';
+import { createEffect, onCleanup } from 'solid-js';
 import type { Outliner } from './outliner';
 
 /**
@@ -6,18 +6,20 @@ import type { Outliner } from './outliner';
  * out and in, and a reload stays where it was. A hash that names no bullet
  * (e.g. from another document) is dropped. Call during component setup.
  */
-export function syncZoomWithHash(o: Outliner): void {
+export function syncZoomWithHash(o: Outliner, active: () => boolean = () => true, initialize = true): void {
   const fromHash = () => {
     const m = /^#\/(.+)$/.exec(location.hash);
     return m ? decodeURIComponent(m[1]) : null;
   };
-  const onHashChange = () => o.zoomTo(fromHash());
-  o.zoomTo(fromHash());
+  const onHashChange = () => { if (active()) o.zoomTo(fromHash()); };
+  if (initialize) o.zoomTo(fromHash());
   window.addEventListener('hashchange', onHashChange);
   onCleanup(() => window.removeEventListener('hashchange', onHashChange));
 
   let first = true;
-  createEffect(on(o.zoom, (zoom) => {
+  createEffect(() => {
+    const zoom = o.zoom();
+    if (!active()) return;
     const hash = zoom ? `#/${encodeURIComponent(zoom)}` : '';
     const initial = first;
     first = false;
@@ -26,5 +28,5 @@ export function syncZoomWithHash(o: Outliner): void {
     // Fixing up the URL on load must not add a history entry; zooming does.
     if (initial) history.replaceState(null, '', url);
     else history.pushState(null, '', url);
-  }));
+  });
 }

@@ -17,7 +17,7 @@ export default defineConfig({
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
   projects: [
-    { name: 'app', testMatch: /responsive\.spec\.ts|omarchy\.spec\.ts|outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev } },
+    { name: 'app', testMatch: /split\.spec\.ts|responsive\.spec\.ts|omarchy\.spec\.ts|outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev } },
     { name: 'pwa', testMatch: /pwa\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: built } },
   ],
   webServer: [

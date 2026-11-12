@@ -133,8 +133,8 @@ export class Outliner {
   /** `[[title]]` → its bullet, for the task under a row with a link; misses kept for one tasks version. */
   private linkCache = new Map<string, { id: NodeId | null; version: number }>();
   readonly ctx: Ctx;
-  readonly history = new History();
-  readonly nodes = new NodeSignals();
+  readonly history: History;
+  readonly nodes: NodeSignals;
   /** Changes whenever the visible rows change. */
   readonly rowsVersion: Accessor<number>;
   /** The row being edited; null when nothing is. A new object on every request, even for the same row. */
@@ -274,13 +274,23 @@ export class Outliner {
   private lastCheck = new Map<NodeId, Sinking>();
   private pendingSearch: number | null = null;
 
-  constructor(doc: Doc, options: { readOnly?: boolean } = {}) {
+  /** A pane owns its view state, while its document resources belong to the writer. */
+  paneManaged = false;
+  paneScroll = 0;
+  private owner: Outliner | null = null;
+  private stopDocument: (() => void) | null = null;
+  private paneTransactions = 0;
+
+  constructor(doc: Doc, options: { readOnly?: boolean; owner?: Outliner } = {}) {
     this.doc = doc;
+    this.owner = options.owner ?? null;
+    this.history = this.owner?.history ?? new History();
+    this.nodes = this.owner?.nodes ?? new NodeSignals();
     this.readOnly = options.readOnly ?? false;
     this.rows = new VisibleRows(doc);
-    this.tags = new TagIndex(doc);
-    this.text = new TextIndex(doc);
-    this.tasks = new PendingTasks(doc);
+    this.tags = this.owner?.tags ?? new TagIndex(doc);
+    this.text = this.owner?.text ?? new TextIndex(doc);
+    this.tasks = this.owner?.tasks ?? new PendingTasks(doc);
     [this.tasksVersion, this.setTasksVersion] = createSignal(this.tasks.version);
     this.ctx = { doc, rows: this.rows };
     [this.rowsVersion, this.setRowsVersion] = createSignal(this.rows.version);
@@ -305,7 +315,7 @@ export class Outliner {
     [this.rowMenu, this.setRowMenu] = createSignal<{ key: RowKey; x: number; y: number } | null>(null);
     [this.selection, this.setSelectionSignal] = createSignal<Selection | null>(null);
     [this.dragged, this.setDragged] = createSignal<ReadonlySet<RowKey>>(new Set());
-    this.favorites = new Favorites(doc);
+    this.favorites = this.owner?.favorites ?? new Favorites(doc);
     [this.favoriteVersion, this.setFavoriteVersion] = createSignal(this.favorites.version);
     [this.savedSearches, this.setSavedSearches] = createSignal(readSaved());
     [this.recentPlaces, this.setRecentPlaces] = createSignal<NodeId[]>([]);
@@ -314,8 +324,8 @@ export class Outliner {
     [this.trashOpen, this.setTrashOpen] = createSignal(readSetting(TRASH_OPEN) === '1' && !narrow());
     // Completed bullets are no longer hidden (that setting is gone): forget it.
     writeSetting('listik-hide-done', null);
-    doc.subscribe(this.nodes);
-    doc.subscribe({
+    if (!this.owner) doc.subscribe(this.nodes);
+    this.stopDocument = doc.subscribe({
       op: (o) => void this.collected?.push(o),
       rollback: () => this.setFavoriteVersion(this.favorites.version),
       commit: (ops) => {
@@ -329,7 +339,7 @@ export class Outliner {
         const cur = this.focus();
         if (cur && this.rows.indexOf(cur.id) < 0) this.setFocus(null);
         // Remote date edits do not pass through run/type. Wait until this commit is finished.
-        if (!this.readOnly && !this.collected && (!this.syncing() || this.synced)) {
+        if (!this.owner && !this.paneTransactions && !this.readOnly && !this.collected && (!this.syncing() || this.synced)) {
           const dated = ops.flatMap((op) => (op.t === 'setText' || op.t === 'setNote') && (op.from.includes('@') || op.to.includes('@')) ? [op.id] : []);
           if (dated.length) queueMicrotask(() => {
             this.scaffold(() => { this.backlogged = this.routeToday(dated).map((id) => this.doc.origin(id)); });
@@ -339,7 +349,34 @@ export class Outliner {
       },
     });
     // Ready before the first search in practice, without blocking input meanwhile.
-    this.text.warmUpInIdle();
+    if (!this.owner) this.text.warmUpInIdle();
+    if (this.owner) {
+      const owner = this.owner;
+      for (const key of ['backup', 'persistence', 'opened', 'syncHandle', 'docName', 'bare', 'synced', 'afterSync', 'captureDraft', 'syncStatus', 'savedSearches', 'setSavedSearches', 'recentPlaces', 'setRecentPlaces', 'recentTargets', 'setRecentTargets', 'recentName'] as const) {
+        Object.defineProperty(this, key, { configurable: true, get: () => owner[key], set: value => { (owner as unknown as Record<string, unknown>)[key] = value; } });
+      }
+    }
+  }
+
+  /** Fork a view without reopening persistence, indices or synchronization. */
+  forkView(): Outliner {
+    const view = new Outliner(this.doc, { readOnly: this.readOnly, owner: this.owner ?? this });
+    view.paneManaged = true;
+    return view;
+  }
+
+  disposeView(): void {
+    this.stopDocument?.();
+    this.rows.dispose();
+    clearTimeout(this.pendingSearch ?? undefined);
+    clearTimeout(this.toastTimer ?? undefined);
+  }
+
+  private transact(fn: () => void): Op[] {
+    if (!this.owner) return this.doc.transact(fn);
+    this.owner.paneTransactions++;
+    try { return this.doc.transact(fn); }
+    finally { this.owner.paneTransactions--; }
   }
 
   /** Moves the caret; editing a row ends a selection. */
@@ -809,7 +846,7 @@ export class Outliner {
   /** A toast's "Отменить": the ops undone, unless the document has changed under them; one undo step itself. */
   private takeBack(ops: Op[], message: string): void {
     try {
-      const back = this.doc.transact(() => [...ops].reverse().forEach((op) => this.doc.apply(invert(op))));
+      const back = this.transact(() => [...ops].reverse().forEach((op) => this.doc.apply(invert(op))));
       this.history.record({ ops: back, before: null, after: null });
     } catch {
       // Changed since: what is there now stays.
@@ -868,7 +905,7 @@ export class Outliner {
   private scaffold(cmd: (ctx: Ctx) => void): void {
     if (this.readOnly) return;
     batch(() => {
-      this.doc.transact(() => cmd(this.ctx));
+      this.transact(() => cmd(this.ctx));
     });
   }
 
@@ -1062,10 +1099,11 @@ export class Outliner {
    * to the new day. Not under the caret: a bullet being edited keeps its
    * day, and the step is tried again a minute later. Returns the way to stop.
    */
-  watchMidnight(): () => void {
+  watchMidnight(active: () => boolean = () => true): () => void {
     let timer: ReturnType<typeof setTimeout>;
     const arm = (ms: number) => {
       timer = setTimeout(() => {
+        if (!active()) return arm(MIDNIGHT_RETRY);
         // Route dated tasks even if an editor keeps yesterday's calendar page open.
         if (this.date() !== new Date().toDateString()) {
           this.setDate(new Date().toDateString());
@@ -1101,7 +1139,7 @@ export class Outliner {
     this.rowsVersion();
     const parent = this.zoom() ?? this.doc.root;
     const kids = this.doc.get(parent).children.filter((c) => (this.doc.host(c)?.children.length ?? 0) > 0);
-    return { kids, open: kids.filter((c) => !this.doc.get(c).collapsed) };
+    return { kids, open: kids.filter((c) => !this.rows.folded(c)) };
   }
 
   /** What the place's own crumb last folded: pressed again, it opens just those. */
@@ -1173,7 +1211,7 @@ export class Outliner {
     if (this.readOnly || this.bare || this.structure()) return;
     if (!start) return this.scaffold((ctx) => void createStructure(ctx, new Date().getFullYear()));
     const [lone] = this.doc.get(this.doc.root).children;
-    this.doc.transact(() => {
+    this.transact(() => {
       createStructure(this.ctx, new Date().getFullYear());
       if (lone && this.doc.get(lone).text === '' && !this.doc.get(lone).children.length) deleteNode(this.ctx, lone);
     });
@@ -1474,7 +1512,7 @@ export class Outliner {
       const cur = this.focus();
       const at = cur ? this.rows.indexOf(cur.id) : -1;
       const leaving = cur !== null && ids.some((id) => this.doc.within(nodeOf(cur.id), id));
-      entry.moved = this.doc.transact(() => sinkDone(this.ctx, ids));
+      entry.moved = this.transact(() => sinkDone(this.ctx, ids));
       if (!entry.moved.length) return;
       if (!this.history.extend(entry.ops, entry.moved)) this.history.record({ ops: entry.moved, before: null, after: null });
       if (this.selection()) this.select(null);
@@ -1551,7 +1589,7 @@ export class Outliner {
     const t = text.trim();
     if (!t || this.readOnly) return;
     let made: NodeId | null = null;
-    const ops = this.doc.transact(() => {
+    const ops = this.transact(() => {
       let inbox = findInbox(this.doc);
       if (inbox === null) {
         appendTrees(this.ctx, this.doc.root, [{ text: 'Inbox', children: [] }]);
@@ -1596,6 +1634,7 @@ export class Outliner {
 
   /** Follows the current sync engine's status (call after `syncHandle` changes). */
   watchSync(): void {
+    if (this.owner) return this.owner.watchSync();
     this.unwatchSync?.();
     this.unwatchSync = null;
     const engine = this.syncHandle?.engine;
@@ -1657,7 +1696,7 @@ export class Outliner {
         this.syncRows();
         this.moveFocus(keep ?? null);
       });
-    } else if (contextOf(key)) {
+    } else if (contextOf(key) || this.rows.independentFolds) {
       // Under a mirror: folded there only, a view state, not an undo step.
       batch(() => {
         setCollapsed(this.ctx, key, folded ?? !this.rows.folded(key));
@@ -1687,7 +1726,7 @@ export class Outliner {
       const before = keep ?? (current && 'caret' in current ? current : null);
       let result = undefined as Focus | RowKey | void;
       try {
-        ops = this.doc.transact(() => {
+        ops = this.transact(() => {
           result = cmd(this.ctx);
           this.keepErased();
           this.fillBacklog(seen);
@@ -1695,6 +1734,8 @@ export class Outliner {
       } finally {
         this.collected = null;
       }
+      // View-local folds intentionally produce no document ops/commit callback.
+      this.syncRows();
       let target = typeof result === 'string' ? (before ? { ...before, id: result } : { id: result, caret: 0 }) : (result ?? keep);
       const near = before?.id ?? this.selection()?.head;
       const key = target && this.rows.locate(target.id, near);
@@ -1948,7 +1989,7 @@ export class Outliner {
     } else if (text.length > n.text.length) this.erased.delete(n.id);
     batch(() => {
       const from = n.text;
-      const ops = this.doc.transact(() => {
+      const ops = this.transact(() => {
         setText(this.ctx, id, text);
         this.fillBacklog([{ t: 'setText', id: n.id, from, to: text }]);
       });
@@ -1963,7 +2004,7 @@ export class Outliner {
     batch(() => {
       const n = this.doc.content(nodeOf(id));
       const from = n.note;
-      const ops = this.doc.transact(() => {
+      const ops = this.transact(() => {
         setNote(this.ctx, id, note);
         this.fillBacklog([{ t: 'setNote', id: n.id, from, to: note }]);
       });
@@ -2018,7 +2059,7 @@ export class Outliner {
   sketch(cmd: (ctx: Ctx) => void): void {
     if (this.readOnly) return;
     batch(() => {
-      const ops = this.doc.transact(() => cmd(this.ctx));
+      const ops = this.transact(() => cmd(this.ctx));
       this.history.record({ ops, before: null, after: null });
     });
   }
@@ -2072,6 +2113,8 @@ export class Outliner {
       if (e) this.moveFocus(focusAfter(e, forward));
     });
   }
+
+  refreshView(): void { this.syncRows(); }
 
   private syncRows(): void {
     this.setRowsVersion(this.rows.version);

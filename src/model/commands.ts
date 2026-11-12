@@ -325,7 +325,7 @@ export function sinkDone({ doc, rows }: Ctx, ids: NodeId[]): void {
 export function setCollapsed({ doc, rows }: Ctx, key: RowKey, value: boolean): void {
   const n = doc.get(nodeOf(key));
   if ((doc.host(n.id)?.children.length ?? 0) === 0) return;
-  if (contextOf(key)) return rows.setFold(key, value);
+  if (contextOf(key) || rows.independentFolds) return rows.setFold(key, value);
   if (n.collapsed === value) return;
   rows.freeze(n.id);
   doc.apply({ t: 'setCollapsed', id: n.id, from: n.collapsed, to: value });
@@ -333,6 +333,10 @@ export function setCollapsed({ doc, rows }: Ctx, key: RowKey, value: boolean): v
 
 /** Collapses every child of `parent` that has children of its own (the logo: home, all folded). */
 export function collapseChildren({ doc, rows }: Ctx, parent: NodeId): void {
+  if (rows.independentFolds) {
+    for (const id of doc.get(parent).children) setCollapsed({ doc, rows }, id, true);
+    return;
+  }
   const targets = doc.get(parent).children.filter((id) => {
     const n = doc.get(id);
     return (doc.host(id)?.children.length ?? 0) > 0 && !n.collapsed;
@@ -357,7 +361,7 @@ export function collapseAll(ctx: Ctx, top: NodeId): void {
     for (const c of doc.get(stack.pop()!).children) {
       const n = doc.get(c);
       if (!(n.mirrorOf ? rows.host(c) : n)?.children.length) continue;
-      if (!n.collapsed) placed.push(c);
+      if (!rows.folded(c)) placed.push(c);
       (n.mirrorOf ? under : stack).push(c);
     }
   }

@@ -1,3 +1,5 @@
+import { useContext } from 'solid-js';
+import { SplitContext } from './split-context';
 import { watchWindowControls } from './window-controls';
 import { Sidebar } from './Sidebar';
 import { SelectionBar } from './SelectionBar';
@@ -52,9 +54,12 @@ const ADD_HEIGHT = 32;
  * flow normally inside a "window" shifted to the first rendered row's offset,
  * so estimate errors never make rows overlap.
  */
-export function Outline(props: { o: Outliner }) {
+export function Outline(props: { o: Outliner; secondary?: boolean }) {
   const o = props.o;
-  onCleanup(watchWindowControls());
+  const split = useContext(SplitContext);
+  const active = () => split?.active(o) ?? true;
+  const navigationId = props.secondary ? 'document-navigation-secondary' : 'document-navigation';
+  if (!props.secondary) onCleanup(watchWindowControls());
   const [navigationRequests, setNavigationRequests] = createSignal(0);
   const [navigationOpen, setNavigationOpen] = createSignal(false);
   let scroller!: HTMLDivElement;
@@ -201,6 +206,7 @@ export function Outline(props: { o: Outliner }) {
     // Global keys and Esc also work when no row is being edited; the editing
     // row and the search box handle their own keys.
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!active() || e.defaultPrevented) return;
       // Quick capture to the Inbox: from anywhere, while editing too (by the physical key: any layout).
       if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -286,10 +292,12 @@ export function Outline(props: { o: Outliner }) {
   // without a place in the address (the installed app always is): today's
   // day, if there is the structure.
   const again = reloaded();
-  syncZoomWithHash(o);
-  const spot = again ? takeSpot() : null;
+  syncZoomWithHash(o, active, !o.paneManaged);
+  const spot = again && !o.paneManaged ? takeSpot() : null;
   const same = spot !== null && spot.zoom === o.zoom();
-  if (again) {
+  if (o.paneManaged) {
+    onMount(() => requestAnimationFrame(() => { scroller.scrollTop = o.paneScroll; setScrollTop(scroller.scrollTop); }));
+  } else if (again) {
     if (same && spot.query) o.setQuery(spot.query, true);
     o.stayedToday();
   } else if (!location.hash) o.goToday(true);
@@ -306,14 +314,15 @@ export function Outline(props: { o: Outliner }) {
     const y = scroller.scrollTop - top();
     const i = v.indexAt(Math.max(0, y));
     const row = o.rows.ids[i] ?? null;
+    if (o.paneManaged) return;
     keepSpot({ zoom: o.zoom(), query: o.query(), row, offset: row ? y - v.offsetOf(i) : 0 });
   };
   addEventListener('pagehide', onLeave);
   onCleanup(() => removeEventListener('pagehide', onLeave));
-  const onVisible = () => document.visibilityState === 'visible' && o.resumed();
+  const onVisible = () => active() && document.visibilityState === 'visible' && o.resumed();
   document.addEventListener('visibilitychange', onVisible);
   onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
-  onCleanup(o.watchMidnight());
+  onCleanup(o.watchMidnight(active));
 
   createEffect(on(o.homeRequests, () => {
     scroller.scrollTop = 0;
@@ -387,8 +396,8 @@ export function Outline(props: { o: Outliner }) {
 
   return (
     <div class="outline has-navigation">
-      <Shortcuts o={o} />
-      <Show when={o.opened && !o.readOnly}>
+      <Show when={active()}><Shortcuts o={o} /></Show>
+      <Show when={active() && o.opened && !o.readOnly}>
         <SyncDialog o={o} />
       </Show>
       <Show when={o.readOnly}>
@@ -400,7 +409,7 @@ export function Outline(props: { o: Outliner }) {
           Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
         </div>
       </Show>
-      <Show when={o.toast()}>
+      <Show when={active() && o.toast()}>
         {(text) => (
           <div class="toast" role="status">
             {text()}
@@ -424,8 +433,7 @@ export function Outline(props: { o: Outliner }) {
           </div>
         )}
       </Show>
-      <QuickCapture o={o} />
-      <GoTo o={o} />
+      <Show when={active()}><QuickCapture o={o} /><GoTo o={o} /></Show>
       <header class="workspace-heading headingbar">
         <div class="zoom-heading">
           <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
@@ -434,11 +442,11 @@ export function Outline(props: { o: Outliner }) {
         <button class="navigation-toggle navigation-hamburger icon-button" type="button" data-action="navigation.open"
           aria-label={navigationOpen() ? 'Свернуть панель навигации' : 'Открыть панель навигации'}
           title={navigationOpen() ? 'Свернуть панель' : 'Открыть панель'}
-          aria-expanded={navigationOpen()} aria-controls="document-navigation"
+          aria-expanded={navigationOpen()} aria-controls={navigationId}
           onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
       </header>
       <div class="workspace">
-        <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} />
+        <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} active={active} navigationId={navigationId} />
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
         <Show when={o.sketchShown()} keyed>
@@ -448,7 +456,7 @@ export function Outline(props: { o: Outliner }) {
           <header ref={observeHeader} class="document-header">
             <Crumbs o={o} scrolled={scrollTop() > 0} navigation />
           </header>
-          <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
+          <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => { o.paneScroll = scroller.scrollTop; setScrollTop(scroller.scrollTop); }} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
               <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
@@ -510,12 +518,10 @@ export function Outline(props: { o: Outliner }) {
         </Show>
       </div>
       {/* Its buttons act on the row being edited; not while the keys go to the trash's filter. */}
-      <Show when={!trashTyping()}>
+      <Show when={active() && !trashTyping()}>
         <EditBar o={o} />
       </Show>
-      <SelectionBar o={o} />
-      <Suggest o={o} />
-      <RowMenu o={o} />
+      <Show when={active()}><SelectionBar o={o} /><Suggest o={o} /><RowMenu o={o} /></Show>
     </div>
   );
 }

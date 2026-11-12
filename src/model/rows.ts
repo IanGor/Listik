@@ -1,5 +1,5 @@
 import { spliceAll } from '../util/splice';
-import type { Doc, DocListener } from './doc';
+import { walkSnapshot, type Doc, type DocListener } from './doc';
 import { searchable } from './tags';
 import type { NodeId, Op, OutlineNode } from './types';
 
@@ -134,6 +134,27 @@ export class VisibleRows implements DocListener {
    * like folding itself (never synced); `onFolds` hears of changes.
    */
   private folds = new Map<string, boolean>();
+  /** Split panes keep ordinary folds out of the shared document. */
+  private paneFolds: Map<NodeId, boolean> | null = null;
+  get independentFolds(): boolean { return this.paneFolds !== null; }
+  isolateFolds(entries?: [string, boolean][]): void {
+    this.paneFolds = new Map(entries ?? [...this.doc.nodes.values()].filter(n => n.collapsed).map(n => [n.id, true]));
+    this.rebuild();
+  }
+  paneFoldEntries(): [string, boolean][] { return [...(this.paneFolds ?? [])]; }
+  /** Return to the ordinary single-view folding behavior. */
+  releasePaneFolds(publish = false): void {
+    const folds = this.paneFolds;
+    this.paneFolds = null;
+    if (publish && folds) this.doc.transact(() => {
+      for (const n of this.doc.nodes.values()) {
+        const folded = folds.get(n.id) ?? false;
+        if (n.collapsed !== folded && n.children.length) this.doc.apply({ t: 'setCollapsed', id: n.id, from: n.collapsed, to: folded });
+      }
+    });
+    this.rebuild();
+  }
+
   onFolds: (() => void) | null = null;
   private listeners = new Set<RowsListener>();
   private unsubscribe: () => void;
@@ -302,12 +323,19 @@ export class VisibleRows implements DocListener {
   folded(key: RowKey): boolean {
     const n = this.doc.get(nodeOf(key));
     if (this.folds.size && key.includes(SEP)) return this.folds.get(this.foldKey(key)) ?? n.collapsed;
-    return n.collapsed;
+    return this.paneFolds ? this.paneFolds.get(n.id) ?? false : n.collapsed;
   }
 
   /** Folds or unfolds a row under a mirror, there only: the other copies show the bullet as they did. */
   setFold(key: RowKey, folded: boolean): void {
-    if (!contextOf(key) || this.folded(key) === folded) return;
+    if (this.folded(key) === folded) return;
+    if (this.paneFolds && !contextOf(key)) {
+      this.paneFolds.set(nodeOf(key), folded);
+      this.rebuild();
+      this.onFolds?.();
+      return;
+    }
+    if (!contextOf(key)) return;
     this.folds.set(this.foldKey(key), folded);
     // The fold is the mirror's: every row of that mirror on the list shows it.
     const mirror = nodeOf(contextOf(key));
@@ -431,6 +459,9 @@ export class VisibleRows implements DocListener {
     }
     switch (op.t) {
       case 'insert':
+        if (this.paneFolds) walkSnapshot(op.node, n => {
+          if (n.collapsed && !this.paneFolds!.has(n.id)) this.paneFolds!.set(n.id, true);
+        });
         this.show(op.node.id);
         this.refreshMirrorsOf(op.node.id);
         break;

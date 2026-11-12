@@ -31,6 +31,9 @@ export class History {
   /** The typing step further keystrokes may extend. */
   private typing: { entry: HistoryEntry; time: number } | null = null;
 
+  /** Switching editor views starts a fresh typing group. */
+  breakTyping(): void { this.typing = null; }
+
   get canUndo(): boolean {
     return this.undoStack.length > 0;
   }
