@@ -3796,14 +3796,13 @@ body.is-dragging * {
   z-index: 36;
   width: auto;
   margin: max(var(--workspace-top), env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-  padding-top: var(--heading-top);
+  /* Reserve the iPad window-control region once for the whole action row. */
+  padding-top: max(var(--heading-top), calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top))));
   background: var(--canvas);
   border-radius: var(--panel-radius);
 }
 .workspace-heading > .icon-button { flex: none; width: 40px; height: 40px; margin: 0; border-radius: var(--control-radius); }
-.workspace-heading .zoom-heading {
-  padding-top: max(0px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top)) - var(--heading-top)));
-}
+.workspace-heading .zoom-heading { padding-top: 0; }
 .has-navigation .workspace,
 .has-navigation:has(.touch-navigation) .workspace { padding-top: 8px; }
 .workspace > .desk { order: 1; }

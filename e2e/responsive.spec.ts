@@ -246,7 +246,7 @@ test.describe('compact pinned heading', () => {
     await expect(page.locator('.zoom-date')).not.toHaveText(date);
   });
 
-  test('iPad window controls protect the title while the right toggle stays in place', async ({ page }) => {
+  test('iPad window controls protect one aligned heading and action row', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 881 });
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
@@ -257,7 +257,15 @@ test.describe('compact pinned heading', () => {
     });
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveCSS('--controls-top', '52px');
-    expect((await page.locator('.document-home-title').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    const aligned = async (title: string) => {
+      const titleY = (await page.locator(title).boundingBox())!.y;
+      expect(titleY).toBeGreaterThanOrEqual(52);
+      for (const selector of ['.node-favorite', '[data-action="TopBar.3"]', '.navigation-toggle']) {
+        const button = page.locator(selector);
+        if (await button.count()) expect((await button.boundingBox())!.y).toBeCloseTo(titleY, 0);
+      }
+    };
+    await aligned('.document-home-title');
     const toggle = page.locator('.navigation-toggle');
     const initial = (await toggle.boundingBox())!;
     await toggle.click();
@@ -267,6 +275,16 @@ test.describe('compact pinned heading', () => {
     expect(nav.y).toBeGreaterThanOrEqual(initial.y + initial.height);
     await page.screenshot({ path: '/tmp/listik-right-menu-ipad-windowed.png' });
     await toggle.click();
+    await page.locator('.row').last().locator('.bullet').click();
+    await aligned('.zoom-title');
+    await page.screenshot({ path: '/tmp/listik-ipad-header-node-aligned.png' });
+    await page.locator('.menu-button').click();
+    await page.getByRole('menuitem', { name: /Создать структуру/ }).click();
+    await aligned('.zoom-date');
+    expect((await page.locator('.zoom-title.dated').boundingBox())!.y).toBeGreaterThan((await page.locator('.zoom-date').boundingBox())!.y);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.screenshot({ path: '/tmp/listik-ipad-header-date-aligned.png' });
+
     await page.setViewportSize({ width: 600, height: 800 });
     await toggle.click();
     expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBeGreaterThan(8);
@@ -274,6 +292,8 @@ test.describe('compact pinned heading', () => {
     await expect(toggle).toBeFocused();
     await page.setViewportSize({ width: 1376, height: 1008 });
     await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
+    expect((await toggle.boundingBox())!.y).toBe(20);
+    expect((await page.locator('.zoom-date').boundingBox())!.y).toBe(20);
     await page.keyboard.press('Control+f');
     await expect(page.locator('input.search')).toBeFocused();
     await page.setViewportSize({ width: 1376, height: 650 });

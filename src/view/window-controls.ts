@@ -3,7 +3,7 @@
  * corner of a Home Screen app that runs in a window, on top of the header.
  * WebKit tells the page nothing about them, so the control exclusion zone is a
  * guess from the geometry: an iPad app that does not fill the screen is in a
- * window. The leading title avoids this zone; right-hand controls stay put.
+ * window. The shared heading and its actions avoid this zone together.
  * Full screen and every other platform leave the insets at 0.
  */
 
