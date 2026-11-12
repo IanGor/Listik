@@ -1,14 +1,16 @@
 /**
  * iPadOS 26 draws the window controls (the three dots) over the top-left
  * corner of a Home Screen app that runs in a window, on top of the header.
- * WebKit tells the page nothing about them, so the header's left inset is a
+ * WebKit tells the page nothing about them, so the control exclusion zone is a
  * guess from the geometry: an iPad app that does not fill the screen is in a
- * window. Full screen and every other platform leave the inset at 0, and the
- * places where they were.
+ * window. Navigation steps below this zone; the document stays in place.
+ * Full screen and every other platform leave the insets at 0.
  */
 
 /** Room the controls take from the window's left edge, px (the pill ends ~61 px in). */
 export const CONTROLS_INSET = 76;
+/** Vertical exclusion zone measured from the web viewport top. */
+export const CONTROLS_TOP = 52;
 
 /**
  * A window narrower or shorter than the screen by more than this is a window, px.
@@ -29,11 +31,21 @@ export function controlsInset(win: { w: number; h: number }, screen: { w: number
   return windowed ? CONTROLS_INSET : 0;
 }
 
-/** Keeps `--controls-left` on <html> in step with the window; returns the stop function. */
+/** Keeps the control exclusion zone on <html> in step with the window. */
 export function watchWindowControls(): () => void {
   if (typeof window === 'undefined' || !ipad() || !standalone()) return () => {};
   const root = document.documentElement;
+  let previousWidth = innerWidth;
+  let previousHeight = innerHeight;
   const update = () => {
+    // A software keyboard can shrink innerHeight as well as visualViewport.
+    // Keep the window classification while editing at the same window width.
+    const active = document.activeElement;
+    const editing = active instanceof HTMLElement &&
+      (active.isContentEditable || active.matches('input, textarea'));
+    if (editing && innerWidth === previousWidth && innerHeight < previousHeight) return;
+    previousWidth = innerWidth;
+    previousHeight = innerHeight;
     // Either orientation of `screen`: it does not turn with the device on every iPadOS.
     const long = Math.max(screen.width, screen.height);
     const short = Math.min(screen.width, screen.height);
@@ -43,6 +55,7 @@ export function watchWindowControls(): () => void {
       landscape ? { w: long, h: short } : { w: short, h: long },
     );
     root.style.setProperty('--controls-left', `${inset}px`);
+    root.style.setProperty('--controls-top', `${inset ? CONTROLS_TOP : 0}px`);
   };
   update();
   addEventListener('resize', update);
@@ -53,5 +66,6 @@ export function watchWindowControls(): () => void {
     removeEventListener('orientationchange', update);
     visualViewport?.removeEventListener('resize', update);
     root.style.removeProperty('--controls-left');
+    root.style.removeProperty('--controls-top');
   };
 }

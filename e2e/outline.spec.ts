@@ -19,6 +19,13 @@ async function edit(page: Page, text: string) {
   await page.keyboard.press('Control+End');
 }
 
+/** The command palette keeps Today available independently of menu layout. */
+async function goToday(page: Page) {
+  await page.keyboard.press('Control+k');
+  await page.locator('.goto input').fill('> Сегодня');
+  await page.keyboard.press('Enter');
+}
+
 const DEMO = [
   'Том первый',
   '  Часть первая',
@@ -1201,37 +1208,24 @@ test.describe('structure and calendar', () => {
     expect(await outline(page)).toEqual(DEMO);
   });
 
-  test('"Главная" in the header returns home and clears search; "Сегодня" opens today', async ({ page }) => {
-    const todayButton = page.locator('.today-button');
-    const home = page.locator('.home-button');
-    await expect(todayButton.locator('.place-label')).toHaveText('Сегодня');
-    await expect(todayButton).toHaveAccessibleName('Сегодня');
-    await expect(todayButton.locator('text')).toHaveText(String(new Date().getDate()));
-    await expect(home.locator('.place-label')).toHaveText('Главная');
-    await expect(home).toHaveAccessibleName('Главная');
-    await expect(home).toHaveAttribute('aria-current', 'page');
+  test('home crumb returns home, clears home search and the palette opens today', async ({ page }) => {
+    const home = page.locator('.crumbs .crumb').first();
     await page.locator('.row .bullet').first().click();
-    await expect(home).not.toHaveAttribute('aria-current', 'page');
     await page.locator('.search').fill('Том');
+    await home.click();
+    await expect(page.locator('.crumb.current')).toHaveText('Главная');
     await home.click();
     await expect(page.locator('.search')).toHaveValue('');
     await expect(page.locator('.row[data-depth="0"] .text')).toHaveText(['Том первый', 'Том второй']);
-    await expect(home).toHaveAttribute('aria-current', 'page');
     await expect(caret(page)).toHaveCount(0);
-    await page.locator('.search').fill('Том');
-    await home.click();
-    await expect(page.locator('.search')).toHaveValue('');
     await create(page);
     await home.click();
-    await expect(home).toHaveAttribute('aria-current', 'page');
-    await todayButton.click();
+    await goToday(page);
     await expect(title(page)).toHaveText(today);
-    await expect(todayButton).toHaveAttribute('aria-current', 'page');
-    await expect(home).not.toHaveAttribute('aria-current', 'page');
   });
 
   test('"Сегодня" opens today with its fold states preserved; nothing comes in twice', async ({ page }) => {
-    await page.locator('.today-button').click();
+    await goToday(page);
     await expect(page.locator('.toast')).toContainText('Структуры ещё нет');
     await create(page);
     await expect(title(page)).toHaveText(today);
@@ -1241,7 +1235,7 @@ test.describe('structure and calendar', () => {
     await page.keyboard.type('утро');
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(title(page)).toHaveCount(0);
-    await page.locator('.today-button').click();
+    await goToday(page);
     await expect(title(page)).toHaveText(today);
     await expect(caret(page)).toHaveCount(0);
     expect(await outline(page)).toEqual(['#daynote', '  утро', 'Today', ...SLOTS]);
@@ -1551,7 +1545,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await expect(page.locator('.day-step')).toHaveCount(0);
     if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true') await page.locator('.navigation-toggle').click();
-    await page.getByRole('button', { name: 'Сегодня' }).first().click();
+    await goToday(page);
     await expect(title(page)).toHaveText(today);
     await page.getByRole('button', { name: 'Следующий день' }).click();
     await expect(title(page)).toHaveText(dayText(shifted(1)));
@@ -1613,7 +1607,7 @@ test.describe('structure and calendar', () => {
     await page.reload();
     await expect(title(page)).toHaveText(year);
     // The logo goes on into today, in that year: no second one is made.
-    await page.locator('.today-button').click();
+    await goToday(page);
     await expect(title(page)).toHaveText(today);
     await page.locator('.crumbs .crumb', { hasText: 'Главная' }).click();
     await page.locator('.row', { hasText: 'Calendar' }).locator('.bullet').click();
@@ -1665,7 +1659,7 @@ test.describe('structure and calendar', () => {
     // Still there, with its template.
     await expect(title(page)).toHaveText(other);
     expect(await outline(page)).toEqual(DAY);
-    await page.locator('.today-button').click();
+    await goToday(page);
     await expect(title(page)).toHaveText(today);
     // Undo removes the typed text, preserving the child the user created.
     expect(await outline(page)).toEqual(['#daynote', '  ', 'Today', ...SLOTS]);
@@ -3425,10 +3419,10 @@ test.describe('touch screen', () => {
   test('the phone navigator names its places and closes after a transition', async ({ page }) => {
     await page.locator('.row .bullet').first().tap();
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
-    await expect(page.locator('.today-button .place-label')).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Сегодня', exact: true })).toBeVisible();
-    await expect(page.locator('.home-button')).toHaveAccessibleName('Главная');
-    await page.locator('.home-button').tap();
+    await expect(page.locator('.sidebar-calendar')).toBeVisible();
+    await expect(page.locator('.home-button, .today-button')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.locator('.crumbs .crumb').first().tap();
     await expect(page.locator('.crumb.current')).toHaveText('Главная');
     await expect(page.locator('.navigation-sidebar')).toBeHidden();
     await expect(page.locator('.editbar')).toHaveCount(0);
@@ -3436,7 +3430,7 @@ test.describe('touch screen', () => {
 
   test('compact navigation keeps its targets reachable and gutter actions working', async ({ page }) => {
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
-    for (const place of ['.today-button', '.home-button']) expect((await page.locator(place).boundingBox())!.width).toBe(42);
+    for (const place of ['.navigation-toggle', '.navigation-capture button']) expect((await page.locator(place).boundingBox())!.width).toBe(42);
     await page.keyboard.press('Escape');
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeLessThan(32);
@@ -4737,7 +4731,7 @@ test.describe('navigation sidebar', () => {
     await page.screenshot({ path: '/tmp/listik-sidebar-desktop.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(sidebar.locator('.home-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(sidebar.locator('.home-button')).toHaveCount(0);
     await page.screenshot({ path: '/tmp/listik-sidebar-dark.png' });
     await page.locator('.zoom-title').click();
     await page.keyboard.press('Control+End');
@@ -4774,7 +4768,7 @@ test.describe('navigation sidebar', () => {
     await page.locator('.navigation-search .search').fill('Том');
     await expect(page.locator('.row')).toHaveCount(2);
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await expect(page.locator('.navigation-sidebar')).toHaveClass(/expanded/);
     await page.locator('.navigation-search .search').fill('ничего');
     await expect(page.getByRole('treeitem', { name: 'Том первый', exact: true })).toBeVisible();
     await expect(page.getByRole('treeitem', { name: 'Том второй', exact: true })).toBeVisible();
@@ -4829,8 +4823,8 @@ test.describe('navigation sidebar', () => {
     await expect(page.locator('.headingbar .navigation-hamburger')).toBeVisible();
     await page.locator('.navigation-hamburger').click();
     await expect(page.locator('.navigation-sidebar .search')).toBeVisible();
-    await expect(page.locator('.navigation-sidebar .today-button')).toBeVisible();
-    await expect(page.locator('.navigation-sidebar .home-button')).toBeVisible();
+    await expect(page.locator('.navigation-sidebar .today-button')).toHaveCount(0);
+    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCount(0);
   });
 
   test('a large root tree renders only a viewport and is keyboard navigable', async ({ page }) => {
@@ -4879,7 +4873,7 @@ test.describe('sidebar favorites', () => {
     await page.keyboard.type(' — важно');
     await page.keyboard.press('Escape');
     await expect(favorites.getByRole('button', { name: 'Открыть ноду «Том первый — важно»', exact: true })).toBeVisible();
-    await page.locator('.navigation-sidebar .home-button').click();
+    await page.locator('.crumbs .crumb').first().click();
     await favorites.getByRole('button', { name: 'Открыть ноду «Том первый — важно»', exact: true }).click();
     await expect(page.locator('.zoom-title')).toHaveText('Том первый — важно');
     await page.locator('.search').fill('#салон');
@@ -4887,7 +4881,7 @@ test.describe('sidebar favorites', () => {
     await page.screenshot({ path: '/tmp/listik-favorites.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(page.locator('.navigation-sidebar .home-button')).toHaveCount(0);
     await page.screenshot({ path: '/tmp/listik-favorites-dark.png' });
     await star.click();
     await expect(favorites.getByRole('button', { name: /^Открыть ноду/ })).toHaveCount(0);
@@ -5016,56 +5010,37 @@ test.describe('Apple HIG interface', () => {
     const session = await page.context().newCDPSession(page);
     await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-transparency', value: 'reduce' }] });
     await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
-    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
     await session.detach();
     await page.emulateMedia({ contrast: 'more', reducedMotion: 'reduce' });
-    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'blur(0px)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
     await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
     await expect(page.locator('.row .text').first()).toHaveCSS('color', 'rgb(0, 0, 0)');
     await page.emulateMedia({ forcedColors: 'active' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('box-shadow', 'none');
-    await expect(page.locator('.navigation-sidebar .home-button')).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('.crumb.current')).toHaveText('Главная');
   });
 });
 
 test.describe('consistent sidebar states', () => {
-  test('uses a row when expanded and a column when compact while preserving Tab order', async ({ page }) => {
+  test('keeps Inbox beside the toggle and only the toggle when collapsed', async ({ page }) => {
     const sidebar = page.locator('.navigation-sidebar');
-    const names = ['Главная', 'Сегодня', 'Записать в Inbox'];
-    const positions = async () => Promise.all(names.map(async name => {
-      const box = (await sidebar.getByRole('button', { name, exact: true }).boundingBox())!;
-      return { y: box.y, h: box.height };
-    }));
-    const expanded = await positions();
-    expect(expanded.map(r => r.y)).toEqual(expanded.map(() => expanded[0].y));
-    const searchIcon = (await sidebar.locator('.searchbar > svg').boundingBox())!;
-    await sidebar.getByRole('button', { name: names[0], exact: true }).focus();
+    const toggle = sidebar.locator('.navigation-toggle');
+    const capture = sidebar.getByRole('button', { name: 'Записать в Inbox', exact: true });
+    expect((await capture.boundingBox())!.y).toBe((await toggle.boundingBox())!.y);
+    await expect(sidebar.locator('.home-button, .today-button')).toHaveCount(0);
+    await toggle.focus();
     await page.keyboard.press('Tab');
-    await expect(sidebar.getByRole('button', { name: names[1], exact: true })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(sidebar.getByRole('button', { name: names[2], exact: true })).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(sidebar.locator('input.search')).toBeFocused();
+    await expect(capture).toBeFocused();
     await sidebar.locator('input.search').fill('#салон');
-    await sidebar.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
-    const compact = await positions();
-    for (let i = 0; i < compact.length; i++) {
-      expect(compact[i].h).toBe(expanded[i].h);
-      if (i) expect(compact[i].y).toBeGreaterThanOrEqual(compact[i - 1].y + compact[i - 1].h);
-    }
-    const search = sidebar.getByRole('button', { name: 'Поиск', exact: true });
-    const compactIcon = (await search.locator('svg').boundingBox())!;
-    expect(Math.abs(compactIcon.x + compactIcon.width / 2 - searchIcon.x - searchIcon.width / 2)).toBeLessThanOrEqual(1);
-    await sidebar.getByRole('button', { name: names[0], exact: true }).focus();
-    for (const name of [...names.slice(1), 'Поиск']) {
-      await page.keyboard.press('Tab');
-      await expect(sidebar.getByRole('button', { name, exact: true })).toBeFocused();
-    }
-    await page.keyboard.press('Enter');
+    await toggle.click();
+    await expect(sidebar.locator('button:visible')).toHaveCount(1);
+    await toggle.focus();
+    await page.keyboard.press('Tab');
+    await expect(sidebar.locator(':focus')).toHaveCount(0);
+    await page.keyboard.press('Control+f');
     await expect(sidebar.locator('input.search')).toBeFocused();
     await expect(sidebar.locator('input.search')).toHaveValue('#салон');
-    const popup = (await sidebar.locator('.navigation-search').boundingBox())!;
-    expect(Math.abs(popup.y - (await search.boundingBox())!.y)).toBeLessThanOrEqual(2);
   });
 
   test('separates favorites and tree without visible section titles or empty groups', async ({ page }) => {
@@ -5123,7 +5098,7 @@ test.describe('sidebar month calendar', () => {
     await calendar.getByRole('button', { name: 'Следующий месяц', exact: true }).click();
     await expect(calendar.locator('.sidebar-calendar-month')).toHaveText('Dec 2026');
     await page.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
-    await expect(page.locator('.navigation-sidebar .today-button')).toBeVisible();
+    await expect(page.locator('.navigation-sidebar .today-button')).toHaveCount(0);
     if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.navigation-toggle').click();
     await expect(calendar.locator('.sidebar-calendar-month')).toHaveText('Dec 2026');
     await calendar.getByRole('button', { name: 'Следующий месяц', exact: true }).click();

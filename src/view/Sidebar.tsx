@@ -6,7 +6,7 @@ import { titleOf } from '../model/links';
 import { navigationRows, navigationSelection, revealNavigation } from './navigation-tree';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
-import { CaptureButton, NavigationIcon, Places } from './TopBar';
+import { CaptureButton, NavigationIcon } from './TopBar';
 import { narrow, touchCapable } from './screen';
 
 function read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
@@ -69,7 +69,6 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
     o.setFocus(null); o.zoomTo(row.id);
     if (overlay()) collapse();
   };
-  const search = () => { if (narrow()) setOpen(true); setSearchOpen(true); o.requestSearch(); };
   createEffect(() => props.onOpenChange(open()));
   createEffect(on(props.requests, () => setMode(!open()), { defer: true }));
   createEffect(on(narrow, (compact) => {
@@ -173,17 +172,15 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
           <button ref={toggleButton} class="navigation-toggle icon-button" type="button" aria-label={open() ? 'Свернуть панель навигации' : 'Открыть панель навигации'} aria-expanded={open()} onClick={() => setMode(!open())} title={open() ? 'Свернуть панель' : 'Открыть панель'}>
             <NavigationIcon />
           </button>
-          <div class="navigation-actions">
-            <Places o={o} homeFirst hideToday={open()} onNavigate={() => { if (overlay()) collapse(); }} />
-            <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
-            <button class="navigation-search-button place" type="button" aria-label="Поиск" title="Поиск в текущей ветке" onClick={search}>
-              <svg class="place-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" stroke-linecap="round" /></svg><span class="place-label">Поиск</span>
-            </button>
-          </div>
+          <Show when={open()}>
+            <div class="navigation-actions">
+              <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
+            </div>
+          </Show>
         </div>
         <SidebarCalendar o={o} open={open()} onNavigate={() => { if (overlay()) collapse(); }} />
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
-          <SearchBar o={o} onRequest={() => { if (narrow()) setOpen(true); if (!open()) setSearchOpen(true); }} />
+          <SearchBar o={o} onRequest={() => setMode(true)} />
         </div>
         <Show when={open()}>
           <FavoriteList o={o} labelVersion={labels} navigate={(id) => {

@@ -3417,9 +3417,8 @@ body.is-dragging * {
   border: 1px solid var(--hairline);
   border-radius: var(--panel-radius);
   background: var(--material-solid);
-  background: var(--material);
-  backdrop-filter: blur(var(--material-blur));
-  -webkit-backdrop-filter: blur(var(--material-blur));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .navigation-sidebar.overlay.expanded .navigation-surface {
   position: absolute;
@@ -3782,4 +3781,17 @@ body.is-dragging * {
 }
 @media (forced-colors: active) {
   .sidebar-calendar .is-today { outline: 2px solid Highlight; }
+}
+
+/* Keep the navigation controls below iPadOS window chrome without moving
+   the document or reserving a wide empty column. The workspace already owns
+   the safe-area inset, so subtract it rather than adding it a second time. */
+.navigation-sidebar .navigation-surface {
+  padding-top: max(8px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top))));
+}
+.navigation-sidebar:not(.expanded) .navigation-search { display: none; }
+@media (max-width: 767px) {
+  .headingbar .navigation-hamburger {
+    margin-top: max(0px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top)) - 8px));
+  }
 }

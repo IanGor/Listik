@@ -234,7 +234,7 @@ test.describe('compact pinned heading', () => {
     await page.getByRole('button', { name: 'Меню документа', exact: true }).click();
     await page.getByRole('menuitem', { name: /Создать структуру/ }).click();
     await page.locator('.navigation-hamburger').click();
-    await page.getByRole('button', { name: 'Сегодня', exact: true }).click();
+    await page.locator('.sidebar-calendar .is-today').click();
     const previous = page.getByRole('button', { name: 'Предыдущий день', exact: true });
     const next = page.getByRole('button', { name: 'Следующий день', exact: true });
     const a = (await previous.boundingBox())!, b = (await next.boundingBox())!;
@@ -246,7 +246,7 @@ test.describe('compact pinned heading', () => {
     await expect(page.locator('.zoom-date')).not.toHaveText(date);
   });
 
-  test('iPad window controls never create a vertical blank band, even with sketch open', async ({ page }) => {
+  test('iPad window controls protect navigation without moving the document, even with sketch open', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 881 });
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
@@ -259,6 +259,26 @@ test.describe('compact pinned heading', () => {
     await expect(page.locator('html')).toHaveCSS('--controls-left', '76px');
     expect((await page.locator('.navigation-sidebar').boundingBox())!.y).toBeLessThanOrEqual(16);
     expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBe(8);
+    await expect(page.locator('html')).toHaveCSS('--controls-top', '52px');
+    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    await page.locator('.navigation-toggle').click();
+    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    await page.screenshot({ path: '/tmp/listik-menu-ipad-windowed.png' });
+    await page.locator('.navigation-toggle').click();
+    await page.setViewportSize({ width: 600, height: 800 });
+    expect((await page.locator('.navigation-hamburger').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    await page.locator('.navigation-hamburger').click();
+    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    await page.keyboard.press('Escape');
+    await page.setViewportSize({ width: 1376, height: 1008 });
+    await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
+    await page.keyboard.press('Control+f');
+    await expect(page.locator('input.search')).toBeFocused();
+    await page.setViewportSize({ width: 1376, height: 650 });
+    await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
+    await page.setViewportSize({ width: 1280, height: 881 });
+    await page.locator('input.search').blur();
+
     expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(16);
     await page.locator('.row').last().locator('.bullet').click();
     await page.locator('.sketch-toggle').click();
@@ -522,7 +542,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     if (width < 768) await page.locator('.navigation-hamburger').click();
     else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.navigation-toggle').click();
     const sidebar = page.locator('.navigation-sidebar');
-    const buttons = [sidebar.locator('.navigation-toggle'), sidebar.locator('.home-button'), sidebar.locator('.navigation-capture button')];
+    const buttons = [sidebar.locator('.navigation-toggle'), sidebar.locator('.navigation-capture button')];
     const rects = await Promise.all(buttons.map((b) => b.boundingBox()));
     for (let i = 1; i < rects.length; i++) {
       expect(rects[i]!.y).toBe(rects[0]!.y);
@@ -543,7 +563,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
       expect((await dialog.boundingBox())!.width).toBe(560);
     }
     await page.screenshot({ path: `/tmp/listik-inbox-centred-${width}.png` });
-    const home = (await sidebar.locator('.home-button').boundingBox())!;
+    const home = (await sidebar.locator('.navigation-toggle').boundingBox())!;
     await page.mouse.click(home.x + home.width / 2, home.y + home.height / 2);
     await expect(dialog).toBeHidden();
     await expect(sidebar).toHaveClass(/expanded/);
@@ -587,4 +607,22 @@ test('touch Inbox follows the visual keyboard and outside taps preserve the draf
     await page.locator('.navigation-capture button').tap();
     await expect(input).toHaveValue('');
   } finally { await context.close(); }
+});
+
+test('collapsed navigation has one opening button at every width', async ({ page }) => {
+  for (const width of [320, 390, 767, 768, 834, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?demo');
+    const sidebar = page.locator('.navigation-sidebar');
+    if (await sidebar.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true')
+      await sidebar.locator('.navigation-toggle').click();
+    await expect(sidebar.locator('button:visible')).toHaveCount(width < 768 ? 0 : 1);
+    await expect(page.locator('.navigation-hamburger:visible')).toHaveCount(width < 768 ? 1 : 0);
+    await expect(sidebar.locator('.home-button, .today-button')).toHaveCount(0);
+    await expect(sidebar.locator('input.search')).toBeHidden();
+    await page.keyboard.press('Control+f');
+    await expect(sidebar.locator('input.search')).toBeFocused();
+    await expect(sidebar.locator('.navigation-capture button')).toBeVisible();
+    await expect(sidebar.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
+  }
 });
