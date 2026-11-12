@@ -1032,7 +1032,7 @@ mark,
   background: var(--canvas);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border-radius: 0;
+  border-radius: var(--panel-radius) var(--panel-radius) 0 0;
 }
 @media (max-width: 767px) {
   .headingbar { padding: 8px 8px 0; }
@@ -3783,15 +3783,58 @@ body.is-dragging * {
   .sidebar-calendar .is-today { outline: 2px solid Highlight; }
 }
 
-/* Keep the navigation controls below iPadOS window chrome without moving
-   the document or reserving a wide empty column. The workspace already owns
-   the safe-area inset, so subtract it rather than adding it a second time. */
-.navigation-sidebar .navigation-surface {
-  padding-top: max(8px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top))));
+.outline.has-navigation { background: var(--window); }
+
+/* One persistent heading spans the document and right navigation. It stays
+   outside their scrolling areas so neither opening the panel nor the keyboard
+   remounts the title editor or changes the toggle's position. */
+.workspace-heading {
+  --heading-top: 12px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 36;
+  width: auto;
+  margin: max(var(--workspace-top), env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
+  padding-top: var(--heading-top);
+  background: var(--canvas);
+  border-radius: var(--panel-radius);
 }
-.navigation-sidebar:not(.expanded) .navigation-search { display: none; }
+.workspace-heading .navigation-toggle { flex: none; width: 40px; height: 40px; margin: 0; }
+.workspace-heading .zoom-heading {
+  padding-top: max(0px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top)) - var(--heading-top)));
+}
+.has-navigation .workspace,
+.has-navigation:has(.touch-navigation) .workspace { padding-top: 8px; }
+.workspace > .desk { order: 1; }
+.workspace > .trash { order: 2; }
+.workspace > .navigation-sidebar { order: 3; }
+.navigation-sidebar:not(.expanded) { display: none; }
+.navigation-sidebar.expanded:not(.overlay) { flex: 0 0 300px; width: 300px; }
+.navigation-sidebar.overlay.expanded {
+  position: absolute;
+  inset: 8px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) auto;
+  width: min(300px, calc(100% - 16px));
+  pointer-events: auto;
+  visibility: visible;
+}
+.navigation-sidebar.overlay.expanded .navigation-surface {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.navigation-sidebar .navigation-surface { padding-top: 8px; }
+.has-navigation .document-header .crumbbar { padding-left: 14px; }
 @media (max-width: 767px) {
-  .headingbar .navigation-hamburger {
-    margin-top: max(0px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top)) - 8px));
-  }
+  .workspace-heading { --heading-top: 8px; }
+  .navigation-sidebar.overlay.expanded { width: min(360px, calc(100% - 16px)); }
+  .has-navigation .document-header .crumbbar { padding-left: 8px; }
+}
+@media (max-height: 300px) {
+  .outline.has-navigation { --workspace-top: 2px; }
+  .workspace-heading { --heading-top: 2px; min-height: 42px; }
+  .outline.has-navigation .workspace,
+  .outline.has-navigation:has(.touch-navigation) .workspace { padding-top: 0; }
+  .navigation-sidebar.overlay.expanded { top: 0; bottom: 2px; }
 }

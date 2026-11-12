@@ -6,7 +6,7 @@ import { titleOf } from '../model/links';
 import { navigationRows, navigationSelection, revealNavigation } from './navigation-tree';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
-import { CaptureButton, NavigationIcon } from './TopBar';
+import { CaptureButton } from './TopBar';
 import { narrow, touchCapable } from './screen';
 
 function read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
@@ -27,7 +27,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
   const [height, setHeight] = createSignal(0);
   const [focused, setFocused] = createSignal<string | null>(null);
   const [preferred, setPreferred] = createSignal<string>();
-  let aside!: HTMLElement, scroller!: HTMLDivElement, tree!: HTMLDivElement, toggleButton!: HTMLButtonElement;
+  let aside!: HTMLElement, scroller!: HTMLDivElement, tree!: HTMLDivElement;
   const rowHeight = 34;
   const rows = createMemo(() => { version(); return navigationRows(o.doc, expanded()); });
   const selection = createMemo(() => navigationSelection(rows(), o.doc, o.zoom(), preferred()));
@@ -40,7 +40,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
     setOpen(value); setSearchOpen(false);
     if (!overlay()) write('listik-navigation-open', String(value));
   };
-  const collapse = () => { setMode(false); queueMicrotask(() => (narrow() ? document.querySelector<HTMLButtonElement>('.navigation-hamburger') : toggleButton)?.focus()); };
+  const collapse = () => { setMode(false); queueMicrotask(() => document.querySelector<HTMLButtonElement>('[data-action="navigation.open"]')?.focus()); };
   const observeScroller = (el: HTMLDivElement) => {
     scroller = el;
     const resize = new ResizeObserver(() => { if (el.clientHeight) setHeight(el.clientHeight); });
@@ -70,7 +70,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
     if (overlay()) collapse();
   };
   createEffect(() => props.onOpenChange(open()));
-  createEffect(on(props.requests, () => setMode(!open()), { defer: true }));
+  createEffect(on(props.requests, () => open() ? collapse() : setMode(true), { defer: true }));
   createEffect(on(narrow, (compact) => {
     const searching = !!aside?.contains(document.activeElement) && document.activeElement?.matches('input.search');
     setOpen(!!searching || (!compact && !overlay() && read('listik-navigation-open') === 'true'));
@@ -156,7 +156,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
         e.preventDefault(); e.stopPropagation();
         if ((e.target as HTMLElement).matches('input.search')) o.setQuery('', true);
         setSearchOpen(false);
-        if (overlay()) collapse(); else toggleButton.focus();
+        if (overlay()) collapse(); else document.querySelector<HTMLButtonElement>('[data-action="navigation.open"]')?.focus();
       }
     };
     document.addEventListener('pointerdown', outside);
@@ -166,12 +166,9 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
   });
 
   return (
-    <aside id="document-navigation" ref={aside} inert={narrow() && !open()} class="navigation-sidebar" classList={{ expanded: open(), overlay: overlay(), 'search-visible': searchOpen(), 'touch-navigation': touchCapable() }} aria-label="Навигация по документу">
+    <aside id="document-navigation" ref={aside} inert={!open()} class="navigation-sidebar" classList={{ expanded: open(), overlay: overlay(), 'search-visible': searchOpen(), 'touch-navigation': touchCapable() }} aria-label="Навигация по документу">
       <div class="navigation-surface">
         <div class="navigation-head">
-          <button ref={toggleButton} class="navigation-toggle icon-button" type="button" aria-label={open() ? 'Свернуть панель навигации' : 'Открыть панель навигации'} aria-expanded={open()} onClick={() => setMode(!open())} title={open() ? 'Свернуть панель' : 'Открыть панель'}>
-            <NavigationIcon />
-          </button>
           <Show when={open()}>
             <div class="navigation-actions">
               <div class="navigation-capture"><CaptureButton o={o} labelled /></div>

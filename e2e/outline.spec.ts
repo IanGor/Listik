@@ -40,7 +40,7 @@ test.beforeEach(async ({ page }, info) => {
   await expect(page.locator('.row')).toHaveCount(DEMO.length);
   // Existing editor scenarios use the expanded navigation's search field.
   // Sidebar-specific scenarios exercise the actual compact default.
-  if (!info.titlePath.includes('navigation sidebar')) {
+  if (!info.titlePath.includes('navigation sidebar') && (page.viewportSize()?.width ?? 0) >= 768) {
     const toggle = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
     if (await toggle.count()) await toggle.click();
   }
@@ -2705,7 +2705,7 @@ test.describe('touch screen', () => {
     await page.keyboard.type('Часть вторая');
     // The places take the line's width (they once shared a class with the header's "Сегодня" and were 44px wide).
     await expect(page.locator('.goto-place').first()).toHaveText(/^Часть вторая/);
-    expect((await page.locator('.goto-place').first().boundingBox())!.width).toBeGreaterThan(300);
+    await expect.poll(async () => (await page.locator('.goto-place').first().boundingBox())?.width ?? 0).toBeGreaterThan(300);
     await page.keyboard.press('Enter');
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
   });
@@ -2728,7 +2728,7 @@ test.describe('touch screen', () => {
   });
 
   test('quick capture opens from phone navigation', async ({ page }) => {
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).tap();
     await page.getByRole('button', { name: 'Записать в Inbox' }).tap();
     const line = page.getByRole('dialog', { name: 'Запись в Inbox' });
     await expect(line.getByRole('textbox')).toBeFocused();
@@ -3418,7 +3418,7 @@ test.describe('touch screen', () => {
 
   test('the phone navigator names its places and closes after a transition', async ({ page }) => {
     await page.locator('.row .bullet').first().tap();
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).tap();
     await expect(page.locator('.sidebar-calendar')).toBeVisible();
     await expect(page.locator('.home-button, .today-button')).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -3429,8 +3429,9 @@ test.describe('touch screen', () => {
   });
 
   test('compact navigation keeps its targets reachable and gutter actions working', async ({ page }) => {
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).tap();
-    for (const place of ['.navigation-toggle', '.navigation-capture button']) expect((await page.locator(place).boundingBox())!.width).toBe(42);
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).tap();
+    expect((await page.locator('.navigation-toggle').boundingBox())!.width).toBe(40);
+    expect((await page.locator('.navigation-capture button').boundingBox())!.width).toBe(42);
     await page.keyboard.press('Escape');
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeLessThan(32);
@@ -4697,6 +4698,8 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
     const toggle = row.locator('.toggle');
     await expect(toggle).toHaveCSS('opacity', '1');
     expect((await toggle.boundingBox())!.x).toBeLessThan((await row.locator('.bullet').boundingBox())!.x);
+    // Close the right overlay before using document commands beneath it.
+    if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true') await page.locator('.navigation-toggle').tap();
     // The computer's menu: places by name, with the shortcut shown.
     await page.getByRole('button', { name: 'Меню документа' }).tap();
     await expect(page.getByRole('menuitem', { name: /Перейти к пункту/ })).toBeVisible();
@@ -4715,7 +4718,7 @@ test.describe('tablet (an iPad: a finger on a wide screen)', () => {
 test.describe('navigation sidebar', () => {
   test('keeps independent tree folds while navigating and collapsing the panel', async ({ page }) => {
     const sidebar = page.getByRole('complementary', { name: 'Навигация по документу' });
-    await expect(sidebar).toBeVisible();
+    await expect(sidebar).toBeHidden();
     await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     const tree = sidebar.getByRole('tree');
     await tree.getByRole('button', { name: 'Развернуть Том первый', exact: true }).click();
@@ -4723,9 +4726,9 @@ test.describe('navigation sidebar', () => {
     await tree.getByRole('treeitem', { name: 'Часть вторая', exact: true }).click();
     await expect(page.locator('.zoom-title')).toHaveText('Часть вторая');
     await expect(tree.getByRole('treeitem', { name: 'Часть первая', exact: true })).toBeVisible();
-    await sidebar.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
+    await page.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
     await expect(tree).toHaveCount(0);
-    await sidebar.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     await expect(sidebar.getByRole('treeitem', { name: 'Часть первая', exact: true })).toBeVisible();
     await expect(sidebar.getByRole('treeitem', { name: 'Часть вторая', exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.screenshot({ path: '/tmp/listik-sidebar-desktop.png' });
@@ -4805,8 +4808,8 @@ test.describe('navigation sidebar', () => {
       await expect(page.locator('html')).toHaveClass(/tablet/);
       const toggle = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
       const box = (await toggle.boundingBox())!;
-      expect(box.width).toBe(42);
-      expect(box.height).toBe(42);
+      expect(box.width).toBe(40);
+      expect(box.height).toBe(40);
       await toggle.tap();
       const expand = page.getByRole('button', { name: 'Развернуть Том первый', exact: true });
       await expand.tap();
@@ -4963,8 +4966,9 @@ test.describe('Apple HIG interface', () => {
 
   test('compact surface fits its controls and header actions share the path bar', async ({ page }) => {
     await page.getByRole('button', { name: 'Свернуть панель навигации', exact: true }).click();
-    const surface = (await page.locator('.navigation-surface').boundingBox())!;
-    expect(surface.height).toBeLessThan(340);
+    await expect(page.locator('.navigation-surface')).toBeHidden();
+    await expect(page.locator('.workspace-heading .navigation-toggle')).toBeVisible();
+    expect((await page.locator('.main').boundingBox())!.x).toBe(8);
     await expect(page.locator('.crumbbar .menu-button')).toBeVisible();
     await expect(page.locator('.topbar .menu-button')).toHaveCount(0);
     await page.setViewportSize({ width: 820, height: 1000 });
@@ -5023,18 +5027,19 @@ test.describe('Apple HIG interface', () => {
 });
 
 test.describe('consistent sidebar states', () => {
-  test('keeps Inbox beside the toggle and only the toggle when collapsed', async ({ page }) => {
+  test('keeps the shared toggle above Inbox and hides the collapsed panel', async ({ page }) => {
     const sidebar = page.locator('.navigation-sidebar');
-    const toggle = sidebar.locator('.navigation-toggle');
+    const toggle = page.locator('.navigation-toggle');
     const capture = sidebar.getByRole('button', { name: 'Записать в Inbox', exact: true });
-    expect((await capture.boundingBox())!.y).toBe((await toggle.boundingBox())!.y);
+    expect((await capture.boundingBox())!.y).toBeGreaterThanOrEqual((await toggle.boundingBox())!.y + (await toggle.boundingBox())!.height);
     await expect(sidebar.locator('.home-button, .today-button')).toHaveCount(0);
     await toggle.focus();
     await page.keyboard.press('Tab');
     await expect(capture).toBeFocused();
     await sidebar.locator('input.search').fill('#салон');
     await toggle.click();
-    await expect(sidebar.locator('button:visible')).toHaveCount(1);
+    await expect(sidebar.locator('button:visible')).toHaveCount(0);
+    await expect(toggle).toBeFocused();
     await toggle.focus();
     await page.keyboard.press('Tab');
     await expect(sidebar.locator(':focus')).toHaveCount(0);

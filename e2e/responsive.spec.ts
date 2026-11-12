@@ -10,7 +10,7 @@ test.describe('adaptive workspace', () => {
   });
 
   test('phone navigation contains the same tree, favorites and search', async ({ page }) => {
-    const hamburger = page.getByRole('button', { name: 'Открыть навигацию', exact: true });
+    const hamburger = page.getByRole('button', { name: 'Открыть панель навигации', exact: true });
     const sidebar = page.locator('.navigation-sidebar');
     await expect(sidebar).toBeHidden();
     await page.screenshot({ path: '/tmp/listik-responsive-phone.png' });
@@ -45,7 +45,7 @@ test.describe('adaptive workspace', () => {
       await expect(editor).toContainText('edited');
       await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeHidden();
     }
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     await page.locator('input.search').fill('#салон');
     for (const width of [820, 1194, 390]) {
       await page.setViewportSize({ width, height: 844 });
@@ -81,7 +81,7 @@ test.describe('adaptive workspace', () => {
       await page.setViewportSize({ width, height: 900 });
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       expect(overflow, `page overflow at ${width}`).toBeLessThanOrEqual(1);
-      await expect(page.locator('.navigation-hamburger')).toHaveCount(width < 768 ? 1 : 0);
+      await expect(page.locator('.navigation-hamburger')).toHaveCount(1);
       await expect(page.locator('.navigation-sidebar')).toHaveClass(width < 1024 ? /overlay/ : /^(?!.*overlay)/);
       const buttons = page.locator('.crumbbar > button, .crumbbar .menu-button');
       for (const button of await buttons.all()) {
@@ -95,7 +95,7 @@ test.describe('adaptive workspace', () => {
   });
 
   test('sketch and trash are usable workspaces with a clear return', async ({ page }) => {
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     await page.getByRole('treeitem', { name: 'Том первый', exact: true }).click();
     await page.getByRole('button', { name: 'Скетч', exact: true }).click();
     const sketch = page.locator('.sketch');
@@ -205,8 +205,8 @@ test.describe('compact pinned heading', () => {
       await page.setViewportSize({ width, height: 900 });
       const scroller = page.locator('.scroller');
       await scroller.evaluate((el) => { el.scrollTop = 0; });
-      await expect(page.locator('.document-header .zoom-title')).toHaveCount(1);
-      await expect(page.locator('.document-header .zoom-note')).toHaveCount(0);
+      await expect(page.locator('.workspace-heading .zoom-title')).toHaveCount(1);
+      await expect(page.locator('.workspace-heading .zoom-note')).toHaveCount(0);
       const position = (await title.boundingBox())!;
       const descriptionPosition = (await note.boundingBox())!;
       await scroller.evaluate((el) => { el.scrollTop = 600; });
@@ -246,7 +246,7 @@ test.describe('compact pinned heading', () => {
     await expect(page.locator('.zoom-date')).not.toHaveText(date);
   });
 
-  test('iPad window controls protect navigation without moving the document, even with sketch open', async ({ page }) => {
+  test('iPad window controls protect the title while the right toggle stays in place', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 881 });
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
@@ -256,41 +256,35 @@ test.describe('compact pinned heading', () => {
       Object.defineProperty(screen, 'height', { value: 1032 });
     });
     await page.goto('/?demo');
-    await expect(page.locator('html')).toHaveCSS('--controls-left', '76px');
-    expect((await page.locator('.navigation-sidebar').boundingBox())!.y).toBeLessThanOrEqual(16);
-    expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBe(8);
     await expect(page.locator('html')).toHaveCSS('--controls-top', '52px');
-    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
-    await page.locator('.navigation-toggle').click();
-    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
-    await page.screenshot({ path: '/tmp/listik-menu-ipad-windowed.png' });
-    await page.locator('.navigation-toggle').click();
+    expect((await page.locator('.document-home-title').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    const toggle = page.locator('.navigation-toggle');
+    const initial = (await toggle.boundingBox())!;
+    await toggle.click();
+    expect(await toggle.boundingBox()).toEqual(initial);
+    const nav = (await page.locator('.navigation-sidebar').boundingBox())!;
+    expect(nav.x + nav.width).toBe(1272);
+    expect(nav.y).toBeGreaterThanOrEqual(initial.y + initial.height);
+    await page.screenshot({ path: '/tmp/listik-right-menu-ipad-windowed.png' });
+    await toggle.click();
     await page.setViewportSize({ width: 600, height: 800 });
-    expect((await page.locator('.navigation-hamburger').boundingBox())!.y).toBeGreaterThanOrEqual(52);
-    await page.locator('.navigation-hamburger').click();
-    expect((await page.locator('.navigation-toggle').boundingBox())!.y).toBeGreaterThanOrEqual(52);
+    await toggle.click();
+    expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBeGreaterThan(8);
     await page.keyboard.press('Escape');
+    await expect(toggle).toBeFocused();
     await page.setViewportSize({ width: 1376, height: 1008 });
     await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
     await page.keyboard.press('Control+f');
     await expect(page.locator('input.search')).toBeFocused();
     await page.setViewportSize({ width: 1376, height: 650 });
     await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
-    await page.setViewportSize({ width: 1280, height: 881 });
-    await page.locator('input.search').blur();
-
-    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(16);
-    await page.locator('.row').last().locator('.bullet').click();
-    await page.locator('.sketch-toggle').click();
-    expect((await page.locator('.sketch').boundingBox())!.y).toBeLessThanOrEqual(16);
-    expect((await page.locator('.main').boundingBox())!.y).toBeLessThanOrEqual(16);
   });
 
   test('headings share the path leading edge on every layout and stay opaque', async ({ page }) => {
     for (const width of [320, 390, 834, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/?demo');
-      const header = page.locator('.document-header');
+      const header = page.locator('.workspace-heading');
       const check = async () => {
         const title = page.locator('.zoom-title, .document-home-title');
         const path = page.locator('.crumbs');
@@ -298,16 +292,15 @@ test.describe('compact pinned heading', () => {
           const css = getComputedStyle(el);
           return el.getBoundingClientRect().x + parseFloat(css.paddingLeft);
         });
-        expect((await title.boundingBox())!.x).toBeCloseTo(leading, 0);
+        if (!await page.locator('.sketch').count()) expect((await title.boundingBox())!.x).toBeCloseTo(leading, 0);
         await expect(header).toHaveCSS('position', 'sticky');
         await expect(header).toHaveCSS('top', '0px');
         await expect(header).toHaveCSS('background-color', 'rgb(255, 255, 255)');
         await expect(page.locator('.document-header .crumbbar')).toHaveCSS('backdrop-filter', 'none');
-        const button = page.getByRole('button', { name: 'Открыть навигацию', exact: true });
-        if (width < 768) {
-          expect((await button.boundingBox())!.x + (await button.boundingBox())!.width)
-            .toBeLessThanOrEqual((await title.boundingBox())!.x);
-        }
+        const button = page.locator('.navigation-toggle');
+        const star = page.locator('.node-favorite');
+        if (await star.count()) expect((await star.boundingBox())!.x + (await star.boundingBox())!.width)
+          .toBeLessThanOrEqual((await button.boundingBox())!.x);
       };
       await check();
       await page.locator('.row').last().locator('.bullet').click();
@@ -315,6 +308,7 @@ test.describe('compact pinned heading', () => {
       if (width >= 768) {
         await page.locator('.navigation-toggle').click();
         await check();
+        if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true') await page.locator('.navigation-toggle').click();
         await page.locator('.sketch-toggle').click();
         await check();
       }
@@ -419,7 +413,7 @@ test('desktop and touch share compact navigation, backlinks, menu and search met
       for (const width of [390, 834, 1440]) {
         await page.setViewportSize({ width, height: 1000 });
         if (width < 768) {
-          await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+          await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
         } else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') {
           await page.locator('.navigation-toggle').click();
         }
@@ -501,16 +495,19 @@ test('sheet frame keeps all four margins and corners at every width', async ({ p
     const box = (await main.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(8);
     expect(width - box.x - box.width).toBeCloseTo(8, 0);
-    expect(box.y).toBe(8);
+    const heading = (await page.locator('.workspace-heading').boundingBox())!;
+    expect(heading.y).toBe(8);
+    expect(box.y).toBe(heading.y + heading.height + 8);
     expect(900 - box.y - box.height).toBeCloseTo(8, 0);
     await expect(main).toHaveCSS('border-radius', '18px');
     await expect(page.locator('.document-header')).toHaveCSS('border-top-left-radius', '18px');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
     await page.screenshot({ path: `/tmp/listik-frame-${width}.png` });
     if (width >= 768) continue;
-    await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
+    await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).click();
     const nav = (await page.locator('.navigation-surface').boundingBox())!;
-    expect(nav.x).toBe(8); expect(nav.y).toBe(8);
+    expect(nav.x + nav.width).toBe(width - 8);
+    expect(nav.y).toBeGreaterThan((await page.locator('.workspace-heading').boundingBox())!.y);
     expect(nav.x + nav.width).toBeLessThanOrEqual(width - 8);
     expect(nav.y + nav.height).toBeCloseTo(892, 0);
     await expect(page.locator('.navigation-surface')).toHaveCSS('border-radius', '18px');
@@ -542,12 +539,11 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     if (width < 768) await page.locator('.navigation-hamburger').click();
     else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.navigation-toggle').click();
     const sidebar = page.locator('.navigation-sidebar');
-    const buttons = [sidebar.locator('.navigation-toggle'), sidebar.locator('.navigation-capture button')];
-    const rects = await Promise.all(buttons.map((b) => b.boundingBox()));
-    for (let i = 1; i < rects.length; i++) {
-      expect(rects[i]!.y).toBe(rects[0]!.y);
-      expect(rects[i]!.x).toBeGreaterThanOrEqual(rects[i - 1]!.x + rects[i - 1]!.width);
-    }
+    await expect(sidebar.locator('.navigation-toggle')).toHaveCount(0);
+    const heading = (await page.locator('.workspace-heading').boundingBox())!;
+    const panel = (await sidebar.boundingBox())!;
+    expect(panel.y).toBeGreaterThanOrEqual(heading.y + heading.height);
+    expect(panel.x + panel.width).toBe(width - 8);
     for (const label of await sidebar.locator('.place-label').all()) await expect(label).toBeHidden();
     await expect(sidebar.locator('input.search')).toBeVisible();
     await expect(sidebar.locator('.today-button')).toHaveCount(0);
@@ -563,7 +559,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
       expect((await dialog.boundingBox())!.width).toBe(560);
     }
     await page.screenshot({ path: `/tmp/listik-inbox-centred-${width}.png` });
-    const home = (await sidebar.locator('.navigation-toggle').boundingBox())!;
+    const home = (await page.locator('.navigation-toggle').boundingBox())!;
     await page.mouse.click(home.x + home.width / 2, home.y + home.height / 2);
     await expect(dialog).toBeHidden();
     await expect(sidebar).toHaveClass(/expanded/);
@@ -614,15 +610,56 @@ test('collapsed navigation has one opening button at every width', async ({ page
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/?demo');
     const sidebar = page.locator('.navigation-sidebar');
-    if (await sidebar.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true')
-      await sidebar.locator('.navigation-toggle').click();
-    await expect(sidebar.locator('button:visible')).toHaveCount(width < 768 ? 0 : 1);
-    await expect(page.locator('.navigation-hamburger:visible')).toHaveCount(width < 768 ? 1 : 0);
+    if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'true')
+      await page.locator('.navigation-toggle').click();
+    await expect(sidebar.locator('button:visible')).toHaveCount(0);
+    const main = (await page.locator('.main').boundingBox())!;
+    expect(main.x).toBe(8);
+    expect(main.width).toBe(width - 16);
+    await expect(page.locator('.navigation-hamburger:visible')).toHaveCount(1);
     await expect(sidebar.locator('.home-button, .today-button')).toHaveCount(0);
     await expect(sidebar.locator('input.search')).toBeHidden();
     await page.keyboard.press('Control+f');
     await expect(sidebar.locator('input.search')).toBeFocused();
     await expect(sidebar.locator('.navigation-capture button')).toBeVisible();
     await expect(sidebar.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
+  }
+});
+
+test('right navigation keeps one stable toggle after the star and preserves its month', async ({ page }) => {
+  for (const width of [320, 390, 767, 768, 834, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?demo');
+    await page.locator('.row').last().locator('.bullet').click();
+    const toggle = page.locator('[data-action="navigation.open"]');
+    if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
+    const initial = (await toggle.boundingBox())!;
+    const star = (await page.locator('.node-favorite').boundingBox())!;
+    expect(star.x + star.width).toBeLessThanOrEqual(initial.x);
+    expect(initial.x + initial.width).toBeGreaterThanOrEqual(width - 24);
+    await expect(page.locator('.navigation-toggle')).toHaveCount(1);
+    await toggle.click();
+    expect(await toggle.boundingBox()).toEqual(initial);
+    const sidebar = page.locator('.navigation-sidebar');
+    const panel = (await sidebar.boundingBox())!;
+    expect(panel.x + panel.width).toBe(width - 8);
+    expect(panel.y).toBeGreaterThanOrEqual(initial.y + initial.height);
+    const main = (await page.locator('.main').boundingBox())!;
+    if ((await sidebar.getAttribute('class'))!.includes('overlay')) expect(main.x + main.width).toBe(width - 8);
+    else expect(main.x + main.width).toBeLessThan(panel.x);
+    await sidebar.getByRole('button', { name: 'Следующий месяц', exact: true }).click();
+    const month = await sidebar.locator('.sidebar-calendar-month').innerText();
+    await toggle.click();
+    await expect(sidebar).toBeHidden();
+    await toggle.click();
+    await expect(sidebar.locator('.sidebar-calendar-month')).toHaveText(month);
+    if (width < 1024) {
+      await page.keyboard.press('Escape');
+      await expect(toggle).toBeFocused();
+      await toggle.click();
+      await page.locator('.workspace-heading .zoom-title').click();
+      await expect(sidebar).toBeHidden();
+    }
+    await page.screenshot({ path: `/tmp/listik-right-navigation-${width}.png` });
   }
 });

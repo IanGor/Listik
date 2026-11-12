@@ -5,7 +5,7 @@ import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMou
 import { appendChild } from '../model/commands';
 import { nodeOf, type RowKey } from '../model/rows';
 import { Backlinks } from './Backlinks';
-import { narrow, phone, touch, touchCapable } from './screen';
+import { phone, touch, touchCapable } from './screen';
 import { createDrag } from './drag';
 import { indentation } from './indent';
 import { EditBar } from './EditBar';
@@ -426,6 +426,16 @@ export function Outline(props: { o: Outliner }) {
       </Show>
       <QuickCapture o={o} />
       <GoTo o={o} />
+      <header class="workspace-heading headingbar">
+        <div class="zoom-heading">
+          <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
+        </div>
+        <button class="navigation-toggle navigation-hamburger icon-button" type="button" data-action="navigation.open"
+          aria-label={navigationOpen() ? 'Свернуть панель навигации' : 'Открыть панель навигации'}
+          title={navigationOpen() ? 'Свернуть панель' : 'Открыть панель'}
+          aria-expanded={navigationOpen()} aria-controls="document-navigation"
+          onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
+      </header>
       <div class="workspace">
         <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} />
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
@@ -435,14 +445,6 @@ export function Outline(props: { o: Outliner }) {
         </Show>
         <div class="main">
           <header ref={observeHeader} class="document-header">
-            <div class="headingbar">
-              <Show when={narrow()}>
-                <button class="navigation-hamburger icon-button" type="button" data-action="navigation.open" aria-label="Открыть навигацию" aria-expanded={navigationOpen()} aria-controls="document-navigation" onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
-              </Show>
-              <div class="zoom-heading">
-                <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
-              </div>
-            </div>
             <Crumbs o={o} scrolled={scrollTop() > 0} navigation />
           </header>
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => setScrollTop(scroller.scrollTop)} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
