@@ -246,7 +246,7 @@ test.describe('compact pinned heading', () => {
     await expect(page.locator('.zoom-date')).not.toHaveText(date);
   });
 
-  test('iPad window controls protect one aligned heading and action row', async ({ page }) => {
+  test('iPad heading ignores the guessed window reserve and keeps one aligned row', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 881 });
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
@@ -257,9 +257,9 @@ test.describe('compact pinned heading', () => {
     });
     await page.goto('/?demo');
     await expect(page.locator('html')).toHaveCSS('--controls-top', '52px');
-    const aligned = async (title: string) => {
+    const aligned = async (title: string, expectedY = 20) => {
       const titleY = (await page.locator(title).boundingBox())!.y;
-      expect(titleY).toBeGreaterThanOrEqual(52);
+      expect(titleY).toBe(expectedY);
       for (const selector of ['.node-favorite', '[data-action="TopBar.3"]', '.navigation-toggle']) {
         const button = page.locator(selector);
         if (await button.count()) expect((await button.boundingBox())!.y).toBeCloseTo(titleY, 0);
@@ -283,13 +283,17 @@ test.describe('compact pinned heading', () => {
     await aligned('.zoom-date');
     expect((await page.locator('.zoom-title.dated').boundingBox())!.y).toBeGreaterThan((await page.locator('.zoom-date').boundingBox())!.y);
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.screenshot({ path: '/tmp/listik-ipad-header-date-aligned.png' });
+    await page.screenshot({ path: '/tmp/listik-ipad-header-date-aligned.png', animations: 'disabled' });
 
     await page.setViewportSize({ width: 600, height: 800 });
+    await aligned('.zoom-date', 16);
     await toggle.click();
     expect((await page.locator('.navigation-sidebar').boundingBox())!.x).toBeGreaterThan(8);
     await page.keyboard.press('Escape');
     await expect(toggle).toBeFocused();
+    await page.setViewportSize({ width: 600, height: 250 });
+    await expect(page.locator('html')).toHaveCSS('--controls-top', '52px');
+    await aligned('.zoom-date', 4);
     await page.setViewportSize({ width: 1376, height: 1008 });
     await expect(page.locator('html')).toHaveCSS('--controls-top', '0px');
     expect((await toggle.boundingBox())!.y).toBe(20);

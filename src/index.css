@@ -3796,8 +3796,7 @@ body.is-dragging * {
   z-index: 36;
   width: auto;
   margin: max(var(--workspace-top), env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
-  /* Reserve the iPad window-control region once for the whole action row. */
-  padding-top: max(var(--heading-top), calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top))));
+  padding-top: var(--heading-top);
   background: var(--canvas);
   border-radius: var(--panel-radius);
 }
