@@ -9,7 +9,8 @@ import type { Outliner } from './outliner';
 import { MOD, phone, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
-import { theme, toggleTheme, omarchyManaged } from './theme';
+import { THEMES, preference, openThemePanel, themePanelOpen } from './theme';
+import { ThemePanel } from './ThemePanel';
 import { exportUsage } from './analytics';
 
 /**
@@ -32,7 +33,6 @@ export const WriteIcon = () => <Symbol><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0
 const SAVE = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" /></Symbol>;
 const OPEN = () => <Symbol><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M12 17v-6M9 14l3-3 3 3" /></Symbol>;
 const KEYS = () => <Symbol><rect x="2.5" y="6" width="19" height="12" rx="2" /><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8" /></Symbol>;
-const MOON = () => <Symbol><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></Symbol>;
 const CHECK = () => <Symbol><path d="M5 12.5l4.5 4.5L19 7.5" /></Symbol>;
 const TRASH = () => <Symbol><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></Symbol>;
 const CALENDAR = () => <Symbol><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></Symbol>;
@@ -131,6 +131,7 @@ export function DocumentMenu(props: { o: Outliner }) {
 
   return (
     <div class="menu-anchor" ref={root}>
+      <Show when={themePanelOpen()}><ThemePanel /></Show>
       <button ref={trigger} data-action="Menu.1"
         type="button"
         class="icon-button menu-button"
@@ -188,25 +189,9 @@ export function DocumentMenu(props: { o: Outliner }) {
             </Show>
             <div class="menu-sep" role="separator" />
           </Show>
-          {/* One name whatever the theme, its state a check (Apple's menus): not "Night" turning into "Day". */}
-          <Show when={!omarchyManaged()}>
-          <button data-action="Menu.7"
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={theme() === 'dark'}
-            onClick={(e) => {
-              // Measure before closing: the circle opens from this item.
-              const from = e.currentTarget.getBoundingClientRect();
-              close();
-              toggleTheme(from);
-            }}
-          >
-            Тёмная тема
-            <Show when={theme() === 'dark'} fallback={<MOON />}>
-              <CHECK />
-            </Show>
+          <button data-action="Menu.7" type="button" role="menuitem" aria-haspopup="dialog" onClick={() => { close(); openThemePanel(); }}>
+            Тема <span class="hint">{THEMES.find(t => t.id === preference().themeId)?.name}</span><CHEVRON />
           </button>
-          </Show>
           {/* Steps keep the menu open: the outline behind shows each size at once. */}
           <div class="menu-stepper" role="group" aria-label="Размер текста">
             <span class="menu-stepper-label">Размер текста</span>

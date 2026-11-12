@@ -49,9 +49,20 @@ async function main() {
     await expect(page.locator('.row').first()).toBeVisible();
     assert.deepEqual(await page.evaluate(() => ({ node: typeof window.require, mode: window.listikDesktop.getTheme().palette.mode })), { node: 'undefined', mode: 'dark' });
     assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox), true);
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /^Тема / }).click();
+    await page.getByRole('radio', { name: 'Omarchy', exact: true }).check();
+    await page.getByRole('button', { name: 'Готово' }).click();
     await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(31, 31, 40)');
+    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('1f1f28');
     await writeFile(join(theme, 'theme/colors.toml'), palette('light', '#faf9f5', '#1f1e1c'));
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('faf9f5');
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /^Тема / }).click();
+    await page.getByRole('radio', { name: 'Dracula', exact: true }).check();
+    await page.getByRole('button', { name: 'Готово' }).click();
+    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('282a36');
     // Same-origin subframes must not gain the preload bridge.
     await page.evaluate(() => { const f = document.createElement('iframe'); f.src = '/?db=child&empty'; document.body.append(f); });
     await expect.poll(() => page.frames().length).toBe(2);

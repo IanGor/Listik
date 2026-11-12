@@ -2475,49 +2475,26 @@ test.describe('theme', () => {
   const LIGHT = 'rgb(255, 255, 255)';
   const DARK = 'rgb(28, 28, 30)';
 
-  test('follows the system; a pick holds until the system switches, a reload too; then the system leads again', async ({ page }) => {
+  test('follows auto and preserves explicit mode after system switches and reload', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/?demo');
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await expect.poll(() => background(page)).toBe(DARK);
-    // Theme stays in the menu; the header has Today, Home, capture and menu.
-    await expect(page.locator('.navigation-sidebar .navigation-actions button')).toHaveCount(4);
-    await expect(page.locator('.crumbbar .menu-button')).toHaveCount(1);
-    const menu = page.getByRole('button', { name: 'Меню документа' });
-    await menu.click();
-    const dark = page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' });
-    await expect(dark).toHaveAttribute('aria-checked', 'true');
-    await dark.click();
-    // The switch runs inside a view transition: it lands on the next frame.
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect.poll(() => background(page)).toBe(LIGHT);
-    await menu.click();
-    // The same item, unchecked: its name does not change with the theme.
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' })).toHaveAttribute('aria-checked', 'false');
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: /^Тема / }).click();
+    await page.getByRole('radio', { name: 'Светлая', exact: true }).check();
     await page.keyboard.press('Escape');
-
-    // The system is as it was: the pick holds, after a reload too.
-    await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect.poll(() => background(page)).toBe(LIGHT);
-
-    // The system switches: the app goes with it, and the pick is gone.
     await page.emulateMedia({ colorScheme: 'light' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    // The theme was light already: wait for the switch itself (the pick let go). Two switches
-    // within a frame never fire a change, as the query ends where it began.
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('listik-theme'))).toBeNull();
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect.poll(() => background(page)).toBe(DARK);
     await page.reload();
-    await expect.poll(() => background(page)).toBe(DARK);
+    await expect.poll(() => background(page)).toBe(LIGHT);
   });
 
   test('a pick made under another system theme is dropped at the start', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto('/?demo');
     await page.evaluate(() => {
+      localStorage.removeItem('listik-appearance');
       localStorage.setItem('listik-theme', 'dark');
       localStorage.setItem('listik-theme-system', 'dark');
     });
@@ -2674,11 +2651,11 @@ test.describe('phone screen', () => {
     }
 
     await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' }).click();
+    await page.getByRole('menuitem', { name: /^Тема / }).click();
+    await page.getByRole('radio', { name: 'Тёмная', exact: true }).check();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.keyboard.press('Escape');
     await expect(page.locator('.menu')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Меню документа' }).click();
-    await expect(page.getByRole('menuitemcheckbox', { name: 'Тёмная тема' })).toHaveAttribute('aria-checked', 'true');
   });
 
   test('the end of a long list scrolls up to mid-screen', async ({ page }) => {

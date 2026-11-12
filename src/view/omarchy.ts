@@ -3,6 +3,7 @@ export type ThemeState = { version: 1; managed: boolean; palette: Palette | null
 export type DesktopBridge = {
   version: 1;
   getTheme(): unknown;
+  setBackground?(color: string): void;
   onTheme(callback: (state: unknown) => void): () => void;
 };
 declare global { interface Window { listikDesktop?: DesktopBridge } }

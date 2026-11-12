@@ -17,7 +17,7 @@ async function start({ site = APP_URL, profile, themeRoot } = {}) {
   const roots = [join(homedir(), '.local/state/omarchy/current'), join(homedir(), '.config/omarchy/current')];
   const root = themeRoot ?? roots.find(existsSync) ?? roots[0];
   let state = await readTheme(root);
-  const background = () => state.palette?.colors.background ?? (nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff');
+  const background = () => nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff';
   window = new BrowserWindow({
     width: 1100, height: 800, minWidth: 360, minHeight: 400, show: false,
     title: 'Listik', backgroundColor: background(), icon: join(__dirname, 'icon.png'),
@@ -36,10 +36,14 @@ async function start({ site = APP_URL, profile, themeRoot } = {}) {
   ipcMain.on('listik:theme', (event) => {
     event.returnValue = isTrustedSender(event, contents, site) ? state : null;
   });
+  const setBackground = (event, color) => {
+    if (isTrustedSender(event, contents, site) && /^#[\da-f]{6}$/i.test(color)) window.setBackgroundColor(color);
+  };
+  ipcMain.on('listik:background', setBackground);
   const stop = watchTheme(root, (next) => {
     state = next;
     if (window.isDestroyed()) return;
-    window.setBackgroundColor(background());
+    // The renderer applies the selected app palette, including explicit Omarchy.
     if (isAppURL(contents.getURL(), site)) contents.send('listik:theme-changed', state);
   }, state);
   const external = (url) => { if (isExternalURL(url)) void shell.openExternal(url).catch(console.error); };
@@ -68,7 +72,7 @@ async function start({ site = APP_URL, profile, themeRoot } = {}) {
       window.show();
     }
   };
-  window.on('closed', () => { stop(); ipcMain.removeAllListeners('listik:theme'); window = null; });
+  window.on('closed', () => { stop(); ipcMain.removeAllListeners('listik:theme'); ipcMain.removeListener('listik:background', setBackground); window = null; });
   app.on('window-all-closed', () => app.quit());
   await load();
   return { window, root, load };

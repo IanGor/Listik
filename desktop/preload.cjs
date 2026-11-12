@@ -12,6 +12,7 @@ if (process.isMainFrame) {
     contextBridge.exposeInMainWorld('listikDesktop', {
       version: 1,
       getTheme: () => state,
+      setBackground: (color) => { if (/^#[\da-f]{6}$/i.test(color)) ipcRenderer.send('listik:background', color); },
       onTheme: (callback) => {
         if (typeof callback !== 'function') throw new TypeError('Expected a callback');
         listeners.add(callback);

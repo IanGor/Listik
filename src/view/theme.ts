@@ -1,132 +1,79 @@
 import { createSignal } from 'solid-js';
-import { paletteToTokens, readDesktopTheme, type ThemeState } from './omarchy';
-
-export type Theme = 'light' | 'dark';
-
-/**
- * Light or dark Claude theme, in step with the system's: when the system
- * switches, so does the app. A system that tells no theme (no preference,
- * or no `prefers-color-scheme` at all) gets the dark one. A pick in the menu
- * holds until the system switches next: it is remembered per browser with
- * the system's theme at that moment, and dropped once the system's differs
- * (now, or by the next start). CSS reads `data-theme` on <html>
- * (index.css), always set; index.html sets it before the first paint by
- * the same rule.
- */
-const KEY = 'listik-theme';
-/** The system's theme when the pick was made. */
-const SYSTEM_KEY = 'listik-theme-system';
-const lightMedia = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function write(key: string, value: string | null): void {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-  } catch {
-    // Storage unavailable (private mode): the pick lasts for this page.
-  }
-}
-
-/** The system's theme: light only when it says so. */
-const system = (): Theme => (lightMedia?.matches ? 'light' : 'dark');
-
-/** The pick, while the system is as it was when it was made. */
-function picked(): Theme | null {
-  const t = read(KEY);
-  return (t === 'light' || t === 'dark') && read(SYSTEM_KEY) === system() ? t : null;
-}
-
+import { readDesktopTheme, type ThemeState } from './omarchy';
+import { DEFAULT_PREFERENCE, PREFERENCE_KEY, readPreference, resolveTheme, type Theme, type ThemeMode } from './palettes';
+export type { Theme } from './palettes';
+export { THEMES } from './palettes';
+const media = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
+const system = (): Theme => media?.matches ? 'light' : 'dark';
+const [systemTheme, setSystemTheme] = createSignal<Theme>(system());
+const read = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
+const initial = readPreference(read(PREFERENCE_KEY), system(), read('listik-theme'), read('listik-theme-system'));
+const [preference, setPreference] = createSignal(initial);
+export { preference };
 let desktop: ThemeState | null = null;
-try {
-  if (window.listikDesktop?.version === 1) desktop = readDesktopTheme(window.listikDesktop.getTheme());
-} catch { /* An unsupported shell behaves like the web app. */ }
-const [omarchyManaged, setOmarchyManaged] = createSignal(desktop?.managed ?? false);
-export { omarchyManaged };
-
-const DARK_BAR = '#1c1c1e';
-const LIGHT_BAR = '#ffffff';
-
-function apply(t: Theme): void {
-  document.documentElement.dataset.theme = t;
-  // The browser's and the installed app's bar, whatever the system says.
-  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = desktop?.managed && desktop.palette ? desktop.palette.colors.background : t === 'dark' ? DARK_BAR : LIGHT_BAR;
-}
-
-const [theme, setThemeSignal] = createSignal<Theme>(desktop?.managed ? desktop.palette?.mode ?? system() : picked() ?? system());
-let tokenNames: string[] = [];
-function applyDesktop(): void {
-  if (desktop?.managed && desktop.palette) {
-    const tokens = paletteToTokens(desktop.palette);
-    tokenNames = Object.keys(tokens);
-    for (const [key, value] of Object.entries(tokens)) document.documentElement.style.setProperty(key, value);
-  } else {
-    for (const key of tokenNames) document.documentElement.style.removeProperty(key);
-    tokenNames = [];
-  }
-  apply(theme());
-}
-applyDesktop();
-if (window.listikDesktop?.version === 1) {
-  window.listikDesktop.onTheme((value) => {
-    const next = readDesktopTheme(value);
-    if (!next) return;
-    desktop = next;
-    setOmarchyManaged(next.managed);
-    setThemeSignal(next.managed ? next.palette?.mode ?? system() : picked() ?? system());
-    applyDesktop();
-  });
-}
-
-/** The theme in effect. */
+try { if (window.listikDesktop?.version === 1) desktop = readDesktopTheme(window.listikDesktop.getTheme()); } catch { /* Web fallback. */ }
+const [omarchyAvailable, setOmarchyAvailable] = createSignal(Boolean(desktop?.managed && desktop.palette));
+export { omarchyAvailable, systemTheme, externalPalette };
+const [externalPalette, setExternalPalette] = createSignal(desktop?.palette ?? null);
+const [theme, setThemeSignal] = createSignal<Theme>(system());
 export { theme };
-
-/** A pick in the menu: it holds until the system switches. Picking the system's own theme just follows it again. */
-export function setTheme(t: Theme): void {
-  if (omarchyManaged()) return;
-  const s = system();
-  write(KEY, t === s ? null : t);
-  write(SYSTEM_KEY, t === s ? null : s);
-  apply(t);
-  setThemeSignal(t);
+let tokenNames: string[] = [];
+function apply() {
+  const resolved = resolveTheme(preference(), system(), desktop);
+  for (const key of tokenNames) document.documentElement.style.removeProperty(key);
+  tokenNames = Object.keys(resolved.tokens);
+  for (const [key, value] of Object.entries(resolved.tokens)) document.documentElement.style.setProperty(key, value);
+  document.documentElement.dataset.theme = resolved.mode;
+  document.documentElement.dataset.palette = resolved.definition.id;
+  setThemeSignal(resolved.mode);
+  const background = resolved.palette?.colors.background ?? (resolved.mode === 'dark' ? '#1c1c1e' : '#ffffff');
+  document.documentElement.style.backgroundColor = background;
+  for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = background;
+  try { window.listikDesktop?.setBackground?.(background); } catch { /* Older shells keep their own background. */ }
 }
-
-/**
- * Switches to the other theme. The new one opens as a circle from `from` (the
- * button pressed); instant with reduced motion.
- */
-export function toggleTheme(from: DOMRect): void {
-  if (omarchyManaged()) return;
-  const next = theme() === 'dark' ? 'light' : 'dark';
-  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return setTheme(next);
-  const x = from.left + from.width / 2;
-  const y = from.top + from.height / 2;
-  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
-  const transition = document.startViewTransition(() => setTheme(next));
-  void transition.ready.then(() => {
-    document.documentElement.animate(
-      { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-      { duration: 560, easing: 'cubic-bezier(0.16, 1, 0.3, 1)', pseudoElement: '::view-transition-new(root)' },
-    );
+function save() {
+  try {
+    localStorage.setItem(PREFERENCE_KEY, JSON.stringify(preference()));
+    localStorage.removeItem('listik-theme'); localStorage.removeItem('listik-theme-system');
+  } catch { /* The selection still lasts for this session. */ }
+}
+apply(); save();
+if (window.listikDesktop?.version === 1) window.listikDesktop.onTheme(value => {
+  const next = readDesktopTheme(value);
+  if (!next) return;
+  if (next.managed && !next.palette && desktop?.managed && desktop.palette) return;
+  desktop = next;
+  setOmarchyAvailable(Boolean(next.managed && next.palette));
+  setExternalPalette(next.managed ? next.palette : null);
+  apply();
+});
+media?.addEventListener('change', () => { setSystemTheme(system()); apply(); });
+// Settings follow other windows in the same browser profile.
+window.addEventListener('storage', e => {
+  if (e.key !== PREFERENCE_KEY && e.key !== null) return;
+  setPreference(readPreference(read(PREFERENCE_KEY), system())); apply();
+});
+function changeSelection(update: () => void) {
+  // Persist synchronously; animation must not delay a quick follow-up selection.
+  update(); save();
+  apply();
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.body.animate([{ opacity: .85 }, { opacity: 1 }], { duration: 160 });
+  }
+}
+export function setThemeId(themeId: string) {
+  changeSelection(() => setPreference(readPreference(JSON.stringify({ ...preference(), themeId }), system())));
+}
+export function setThemeMode(mode: ThemeMode) { changeSelection(() => setPreference({ ...preference(), mode })); }
+export function resetTheme() { setPreference({ ...DEFAULT_PREFERENCE }); save(); apply(); }
+const [themePanelOpen, setThemePanelOpen] = createSignal(false);
+export { themePanelOpen };
+let returnFocus: HTMLElement | null = null;
+export function openThemePanel() { returnFocus = document.activeElement as HTMLElement | null; setThemePanelOpen(true); }
+export function closeThemePanel() {
+  setThemePanelOpen(false);
+  queueMicrotask(() => {
+    if (returnFocus?.isConnected && returnFocus !== document.body) returnFocus.focus();
+    else document.querySelector<HTMLButtonElement>('.menu-button')?.focus();
   });
 }
-
-// The system switched: the app follows, and a pick made before is let go.
-lightMedia?.addEventListener('change', () => {
-  if (omarchyManaged()) {
-    if (!desktop?.palette) { setThemeSignal(system()); apply(system()); }
-    return;
-  }
-  write(KEY, null);
-  write(SYSTEM_KEY, null);
-  const t = system();
-  apply(t);
-  setThemeSignal(t);
-});

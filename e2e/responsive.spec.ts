@@ -481,7 +481,7 @@ test('sheet frame keeps all four margins and corners at every width', async ({ p
     const box = (await main.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(8);
     expect(width - box.x - box.width).toBeCloseTo(8, 0);
-    expect(box.y).toBe(16);
+    expect(box.y).toBe(8);
     expect(900 - box.y - box.height).toBeCloseTo(8, 0);
     await expect(main).toHaveCSS('border-radius', '18px');
     await expect(page.locator('.document-header')).toHaveCSS('border-top-left-radius', '18px');
@@ -490,7 +490,7 @@ test('sheet frame keeps all four margins and corners at every width', async ({ p
     if (width >= 768) continue;
     await page.getByRole('button', { name: 'Открыть навигацию', exact: true }).click();
     const nav = (await page.locator('.navigation-surface').boundingBox())!;
-    expect(nav.x).toBe(8); expect(nav.y).toBe(16);
+    expect(nav.x).toBe(8); expect(nav.y).toBe(8);
     expect(nav.x + nav.width).toBeLessThanOrEqual(width - 8);
     expect(nav.y + nav.height).toBeCloseTo(892, 0);
     await expect(page.locator('.navigation-surface')).toHaveCSS('border-radius', '18px');
