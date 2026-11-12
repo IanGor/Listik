@@ -3759,3 +3759,27 @@ body.is-dragging * {
 @media (max-width: 767px) { .theme-panel { padding-bottom: max(20px, env(safe-area-inset-bottom)); } }
 @media (prefers-reduced-motion: reduce) { .theme-modes::before { transition: none; } }
 @media (min-width: 768px) { .theme-panel { margin: 0; inset: 64px 24px auto auto; max-height: calc(100dvh - 88px); } }
+
+/* Compact month navigation replaces Today only in the expanded sidebar. */
+.sidebar-calendar { flex: none; margin: 6px 0; padding: 0 2px; color: var(--text); }
+.sidebar-calendar[hidden] { display: none; }
+.sidebar-calendar-head { display: flex; align-items: center; gap: 4px; }
+.sidebar-calendar button { border: 0; border-radius: var(--control-radius); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.sidebar-calendar-head > button { min-width: 32px; height: 32px; font-size: 22px; }
+.sidebar-calendar-head .sidebar-calendar-month { flex: 1; font-size: 13px; font-weight: 600; }
+.sidebar-calendar table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sidebar-calendar th, .sidebar-calendar td { padding: 0; text-align: center; font-weight: 400; }
+.sidebar-calendar thead th { height: 26px; color: var(--muted); font-size: 10px; }
+.sidebar-calendar td button, .sidebar-calendar tbody th button { display: block; width: 100%; height: 30px; padding: 0; }
+.sidebar-calendar .sidebar-calendar-week { color: var(--muted); font-size: 10px; border-right: 1px solid var(--hairline); border-radius: 0; }
+.sidebar-calendar .other-month { color: var(--muted); opacity: .55; }
+.sidebar-calendar .is-today { color: var(--primary); background: var(--chip); font-weight: 700; opacity: 1; box-shadow: inset 0 0 0 1px var(--primary); }
+:where(:root.mouse) .sidebar-calendar button:hover { background: var(--surface-2); }
+.sidebar-calendar button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+@media (pointer: coarse) {
+  .sidebar-calendar td button, .sidebar-calendar tbody th button { height: 34px; }
+  .sidebar-calendar-head > button { height: 36px; }
+}
+@media (forced-colors: active) {
+  .sidebar-calendar .is-today { outline: 2px solid Highlight; }
+}

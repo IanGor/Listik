@@ -1,3 +1,4 @@
+import { SidebarCalendar } from './SidebarCalendar';
 import { FavoriteList } from './FavoriteList';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type Accessor } from 'solid-js';
 import { calendarName } from '../model/calendar';
@@ -173,13 +174,14 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
             <NavigationIcon />
           </button>
           <div class="navigation-actions">
-            <Places o={o} homeFirst onNavigate={() => { if (overlay()) collapse(); }} />
+            <Places o={o} homeFirst hideToday={open()} onNavigate={() => { if (overlay()) collapse(); }} />
             <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
             <button class="navigation-search-button place" type="button" aria-label="Поиск" title="Поиск в текущей ветке" onClick={search}>
               <svg class="place-icon" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" stroke-linecap="round" /></svg><span class="place-label">Поиск</span>
             </button>
           </div>
         </div>
+        <SidebarCalendar o={o} open={open()} onNavigate={() => { if (overlay()) collapse(); }} />
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
           <SearchBar o={o} onRequest={() => { if (narrow()) setOpen(true); if (!open()) setSearchOpen(true); }} />
         </div>

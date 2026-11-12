@@ -7,7 +7,7 @@ export function NavigationIcon() {
   return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4" /><path d="M9 4v16M5.8 8h.4M5.8 12h.4" stroke-linecap="round" /></svg>;
 }
 
-export function Places(props: { o: Outliner; onNavigate?: () => void; homeFirst?: boolean }) {
+export function Places(props: { o: Outliner; onNavigate?: () => void; homeFirst?: boolean; hideToday?: boolean }) {
   // Today's number on the calendar symbol: past midnight it turns over by itself.
   const [day, setDay] = createSignal(new Date().getDate());
   const tick = setInterval(() => setDay(new Date().getDate()), 60_000);
@@ -43,7 +43,7 @@ export function Places(props: { o: Outliner; onNavigate?: () => void; homeFirst?
           <span class="place-label">Главная</span>
         </button>);
   return <nav class="places" aria-label="Места">
-    <Show when={props.homeFirst} fallback={<><Today /><Home /></>}><Home /><Today /></Show>
+    <Show when={props.homeFirst} fallback={<><Today /><Home /></>}><Home /><Show when={!props.hideToday}><Today /></Show></Show>
   </nav>;
 }
 

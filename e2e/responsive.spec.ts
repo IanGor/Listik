@@ -522,7 +522,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     if (width < 768) await page.locator('.navigation-hamburger').click();
     else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.navigation-toggle').click();
     const sidebar = page.locator('.navigation-sidebar');
-    const buttons = [sidebar.locator('.navigation-toggle'), sidebar.locator('.home-button'), sidebar.locator('.today-button'), sidebar.locator('.navigation-capture button')];
+    const buttons = [sidebar.locator('.navigation-toggle'), sidebar.locator('.home-button'), sidebar.locator('.navigation-capture button')];
     const rects = await Promise.all(buttons.map((b) => b.boundingBox()));
     for (let i = 1; i < rects.length; i++) {
       expect(rects[i]!.y).toBe(rects[0]!.y);
@@ -530,8 +530,8 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     }
     for (const label of await sidebar.locator('.place-label').all()) await expect(label).toBeHidden();
     await expect(sidebar.locator('input.search')).toBeVisible();
-    const neutral = await sidebar.locator('.navigation-capture button').evaluate(el => getComputedStyle(el).color);
-    await expect(sidebar.locator('.today-button .place-icon')).toHaveCSS('color', neutral);
+    await expect(sidebar.locator('.today-button')).toHaveCount(0);
+    await expect(sidebar.locator('.sidebar-calendar')).toBeVisible();
     await page.screenshot({ path: `/tmp/listik-menu-row-${width}.png` });
     await sidebar.locator('.navigation-capture button').click();
     const dialog = page.getByRole('dialog', { name: 'Запись в Inbox' });

@@ -1010,7 +1010,7 @@ export class Outliner {
   }
 
   /** The view into the day of a date, as «Сегодня» leads into today. */
-  private goToDate(date: DayDate): void {
+  goToDate(date: DayDate): void {
     if (sameDate(date, this.todayDate())) return this.goToday();
     const day = this.dayFor(date);
     if (day === null) return;
@@ -1018,6 +1018,21 @@ export class Outliner {
       this.setQuery('', true);
       this.setFocus(null);
       this.zoomTo(day);
+    });
+  }
+
+  /** Month-owned ISO week, including weeks shared by two months. */
+  goToCalendarWeek(y: number, m: number, w: number): void {
+    if (!this.structure()) return this.notify('Структуры ещё нет: меню «⋯» → «Создать структуру»');
+    const p: Period = { kind: 'week', y, m, w };
+    const id = this.periodBullet(p);
+    if (id === null) return this.notify(this.syncing() && !this.synced
+      ? 'Неделя ещё не пришла с сервера: попробуйте через минуту'
+      : `В календаре нет недели ${periodName(p)}`);
+    batch(() => {
+      this.setQuery('', true);
+      this.setFocus(null);
+      this.zoomTo(id);
     });
   }
 
