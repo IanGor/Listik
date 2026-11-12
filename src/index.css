@@ -3800,7 +3800,7 @@ body.is-dragging * {
   background: var(--canvas);
   border-radius: var(--panel-radius);
 }
-.workspace-heading .navigation-toggle { flex: none; width: 40px; height: 40px; margin: 0; }
+.workspace-heading > .icon-button { flex: none; width: 40px; height: 40px; margin: 0; border-radius: var(--control-radius); }
 .workspace-heading .zoom-heading {
   padding-top: max(0px, calc(var(--controls-top, 0px) - max(var(--workspace-top), env(safe-area-inset-top)) - var(--heading-top)));
 }

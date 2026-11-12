@@ -21,7 +21,7 @@ import { QuickCapture } from './QuickCapture';
 import { Suggest } from './Suggest';
 import { Trash } from './Trash';
 import { SyncDialog } from './SyncDialog';
-import { NavigationIcon } from './TopBar';
+import { CaptureButton, NavigationIcon } from './TopBar';
 import { Crumbs, ZoomNote, ZoomTitle } from './ZoomHeader';
 import { syncZoomWithHash } from './zoom-hash';
 import { fontStack } from './fonts';
@@ -430,6 +430,7 @@ export function Outline(props: { o: Outliner }) {
         <div class="zoom-heading">
           <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
         </div>
+        <CaptureButton o={o} />
         <button class="navigation-toggle navigation-hamburger icon-button" type="button" data-action="navigation.open"
           aria-label={navigationOpen() ? 'Свернуть панель навигации' : 'Открыть панель навигации'}
           title={navigationOpen() ? 'Свернуть панель' : 'Открыть панель'}

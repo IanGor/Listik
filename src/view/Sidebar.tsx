@@ -6,7 +6,6 @@ import { titleOf } from '../model/links';
 import { navigationRows, navigationSelection, revealNavigation } from './navigation-tree';
 import type { Outliner } from './outliner';
 import { SearchBar } from './SearchBar';
-import { CaptureButton } from './TopBar';
 import { narrow, touchCapable } from './screen';
 
 function read(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
@@ -145,7 +144,7 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
     mutation.observe(aside, { attributes: true, attributeFilter: ['class'] });
     const outside = (e: PointerEvent) => {
       if (o.captureOpen()) return;
-      if (aside.contains(e.target as Node) || (e.target as Element).closest('.navigation-hamburger')) return;
+      if (aside.contains(e.target as Node) || (e.target as Element).closest('[data-action="navigation.open"], [data-action="TopBar.3"]')) return;
       if (searchOpen()) setSearchOpen(false);
       if (overlay() && open()) setMode(false);
     };
@@ -168,13 +167,6 @@ export function Sidebar(props: { o: Outliner; requests: Accessor<number>; onOpen
   return (
     <aside id="document-navigation" ref={aside} inert={!open()} class="navigation-sidebar" classList={{ expanded: open(), overlay: overlay(), 'search-visible': searchOpen(), 'touch-navigation': touchCapable() }} aria-label="Навигация по документу">
       <div class="navigation-surface">
-        <div class="navigation-head">
-          <Show when={open()}>
-            <div class="navigation-actions">
-              <div class="navigation-capture"><CaptureButton o={o} labelled /></div>
-            </div>
-          </Show>
-        </div>
         <SidebarCalendar o={o} open={open()} onNavigate={() => { if (overlay()) collapse(); }} />
         <div class="navigation-search" classList={{ visible: open() || searchOpen() }}>
           <SearchBar o={o} onRequest={() => setMode(true)} />

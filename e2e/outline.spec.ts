@@ -3431,7 +3431,7 @@ test.describe('touch screen', () => {
   test('compact navigation keeps its targets reachable and gutter actions working', async ({ page }) => {
     await page.getByRole('button', { name: 'Открыть панель навигации', exact: true }).tap();
     expect((await page.locator('.navigation-toggle').boundingBox())!.width).toBe(40);
-    expect((await page.locator('.navigation-capture button').boundingBox())!.width).toBe(42);
+    expect((await page.locator('[data-action="TopBar.3"]').boundingBox())!.width).toBe(40);
     await page.keyboard.press('Escape');
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
     expect((await page.locator('.crumb').first().boundingBox())!.height).toBeLessThan(32);
@@ -4391,12 +4391,14 @@ test.describe('persistence', () => {
     const second = await context.newPage();
     await second.goto('/?db=e2e-tabs&empty');
     await expect(second.locator('.banner')).toContainText('только просмотр');
+    await expect(second.locator('.workspace-heading [data-action="TopBar.3"]')).toHaveCount(0);
     await expect(second.locator('.row .text')).toHaveText('из первой вкладки');
     await second.locator('.row .text').click();
     await expect(second.locator('.text[contenteditable]')).toHaveCount(0);
 
     await page.close();
     await expect(second.locator('.banner')).toHaveCount(0, { timeout: 10_000 });
+    await expect(second.locator('.workspace-heading [data-action="TopBar.3"]')).toBeVisible();
     await second.locator('.row .text').click();
     await second.keyboard.press('Control+End');
     await second.keyboard.type(' и второй');
@@ -5027,15 +5029,16 @@ test.describe('Apple HIG interface', () => {
 });
 
 test.describe('consistent sidebar states', () => {
-  test('keeps the shared toggle above Inbox and hides the collapsed panel', async ({ page }) => {
+  test('keeps header Inbox before the shared toggle and hides the collapsed panel', async ({ page }) => {
     const sidebar = page.locator('.navigation-sidebar');
     const toggle = page.locator('.navigation-toggle');
-    const capture = sidebar.getByRole('button', { name: 'Записать в Inbox', exact: true });
-    expect((await capture.boundingBox())!.y).toBeGreaterThanOrEqual((await toggle.boundingBox())!.y + (await toggle.boundingBox())!.height);
+    const capture = page.locator('.workspace-heading').getByRole('button', { name: 'Записать в Inbox', exact: true });
+    expect((await capture.boundingBox())!.y).toBe((await toggle.boundingBox())!.y);
+    expect((await capture.boundingBox())!.x + (await capture.boundingBox())!.width).toBeLessThanOrEqual((await toggle.boundingBox())!.x);
     await expect(sidebar.locator('.home-button, .today-button')).toHaveCount(0);
-    await toggle.focus();
+    await capture.focus();
     await page.keyboard.press('Tab');
-    await expect(capture).toBeFocused();
+    await expect(toggle).toBeFocused();
     await sidebar.locator('input.search').fill('#салон');
     await toggle.click();
     await expect(sidebar.locator('button:visible')).toHaveCount(0);

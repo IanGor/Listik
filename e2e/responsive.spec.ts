@@ -531,7 +531,7 @@ test('sheet frame keeps all four margins and corners at every width', async ({ p
 });
 
 
-test('expanded navigation is one icon row and desktop Inbox stays centred', async ({ page }) => {
+test('header Inbox preserves expanded navigation and desktop capture stays centred', async ({ page }) => {
   for (const width of [390, 834, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/?demo');
@@ -539,7 +539,8 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     if (width < 768) await page.locator('.navigation-hamburger').click();
     else if (await page.locator('.navigation-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.navigation-toggle').click();
     const sidebar = page.locator('.navigation-sidebar');
-    await expect(sidebar.locator('.navigation-toggle')).toHaveCount(0);
+    await expect(sidebar.locator('[data-action="TopBar.3"], .navigation-head')).toHaveCount(0);
+    await expect(sidebar.locator('.sidebar-calendar')).toBeVisible();
     const heading = (await page.locator('.workspace-heading').boundingBox())!;
     const panel = (await sidebar.boundingBox())!;
     expect(panel.y).toBeGreaterThanOrEqual(heading.y + heading.height);
@@ -549,7 +550,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     await expect(sidebar.locator('.today-button')).toHaveCount(0);
     await expect(sidebar.locator('.sidebar-calendar')).toBeVisible();
     await page.screenshot({ path: `/tmp/listik-menu-row-${width}.png` });
-    await sidebar.locator('.navigation-capture button').click();
+    await page.locator('[data-action="TopBar.3"]').click();
     const dialog = page.getByRole('dialog', { name: 'Запись в Inbox' });
     const input = dialog.getByRole('textbox');
     await input.fill('Черновик с кнопки');
@@ -563,7 +564,7 @@ test('expanded navigation is one icon row and desktop Inbox stays centred', asyn
     await page.mouse.click(home.x + home.width / 2, home.y + home.height / 2);
     await expect(dialog).toBeHidden();
     await expect(sidebar).toHaveClass(/expanded/);
-    await sidebar.locator('.navigation-capture button').click();
+    await page.locator('[data-action="TopBar.3"]').click();
     await expect(input).toHaveValue('Черновик с кнопки');
     await page.keyboard.press('Escape');
   }
@@ -579,7 +580,7 @@ test('touch Inbox follows the visual keyboard and outside taps preserve the draf
     await expect(page.locator('.zoom-title')).toBeVisible();
     const title = await page.locator('.zoom-title').innerText();
     await page.locator('.navigation-hamburger').tap();
-    await page.locator('.navigation-capture button').tap();
+    await page.locator('[data-action="TopBar.3"]').tap();
     const dialog = page.getByRole('dialog', { name: 'Запись в Inbox' });
     const input = dialog.getByRole('textbox');
     await input.fill('Сохранённый черновик');
@@ -595,12 +596,12 @@ test('touch Inbox follows the visual keyboard and outside taps preserve the draf
     await page.touchscreen.tap(30, 180);
     await expect(dialog).toBeHidden();
     await expect(page.locator('.zoom-title')).toHaveText(title);
-    await page.locator('.navigation-capture button').tap();
+    await page.locator('[data-action="TopBar.3"]').tap();
     await expect(input).toHaveValue('Сохранённый черновик');
     await send.tap();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('status')).toContainText('Записано в Inbox');
-    await page.locator('.navigation-capture button').tap();
+    await page.locator('[data-action="TopBar.3"]').tap();
     await expect(input).toHaveValue('');
   } finally { await context.close(); }
 });
@@ -621,7 +622,7 @@ test('collapsed navigation has one opening button at every width', async ({ page
     await expect(sidebar.locator('input.search')).toBeHidden();
     await page.keyboard.press('Control+f');
     await expect(sidebar.locator('input.search')).toBeFocused();
-    await expect(sidebar.locator('.navigation-capture button')).toBeVisible();
+    await expect(page.locator('[data-action="TopBar.3"]')).toBeVisible();
     await expect(sidebar.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
   }
 });
@@ -635,7 +636,21 @@ test('right navigation keeps one stable toggle after the star and preserves its 
     if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
     const initial = (await toggle.boundingBox())!;
     const star = (await page.locator('.node-favorite').boundingBox())!;
-    expect(star.x + star.width).toBeLessThanOrEqual(initial.x);
+    const capture = page.locator('[data-action="TopBar.3"]');
+    const inbox = (await capture.boundingBox())!;
+    expect(star.x + star.width).toBeLessThanOrEqual(inbox.x);
+    expect(inbox.x + inbox.width).toBeLessThanOrEqual(initial.x);
+    expect(inbox.width).toBe(40);
+    expect(inbox.height).toBe(40);
+    await page.locator('.node-favorite').focus();
+    await page.keyboard.press('Tab');
+    await expect(capture).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(toggle).toBeFocused();
+    await capture.click();
+    await expect(page.getByRole('dialog', { name: 'Запись в Inbox' })).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('Escape');
     expect(initial.x + initial.width).toBeGreaterThanOrEqual(width - 24);
     await expect(page.locator('.navigation-toggle')).toHaveCount(1);
     await toggle.click();
@@ -661,5 +676,32 @@ test('right navigation keeps one stable toggle after the star and preserves its 
       await expect(sidebar).toBeHidden();
     }
     await page.screenshot({ path: `/tmp/listik-right-navigation-${width}.png` });
+  }
+});
+
+
+test('header actions fit a long title at 150 percent text size', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('listik-text-scale', '1.5'));
+  for (const width of [320, 390, 834, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?demo');
+    await page.locator('.row').last().locator('.bullet').click();
+    const title = page.locator('.zoom-title');
+    await title.click();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Очень длинный заголовок встречи с вопросами и следующими шагами');
+    await page.keyboard.press('Escape');
+    const star = page.locator('.node-favorite');
+    const inbox = page.locator('[data-action="TopBar.3"]');
+    const toggle = page.locator('.navigation-toggle');
+    const boxes = await Promise.all([star, inbox, toggle].map(button => button.boundingBox()));
+    for (let i = 0; i < boxes.length; i++) {
+      expect(boxes[i]!.width).toBe(40);
+      expect(boxes[i]!.x + boxes[i]!.width).toBeLessThanOrEqual(width - 8);
+      if (i) expect(boxes[i - 1]!.x + boxes[i - 1]!.width).toBeLessThanOrEqual(boxes[i]!.x);
+    }
+    expect((await title.boundingBox())!.x).toBeLessThan(boxes[0]!.x);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.screenshot({ path: `/tmp/listik-header-inbox-long-${width}.png` });
   }
 });
