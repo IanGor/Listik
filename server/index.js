@@ -415,13 +415,23 @@ async function handleDocument(req, res, url, doc, part, address) {
       docs.set(id, doc);
       return json(res, 201, { created: true });
     }
-    if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
     await doc.serial(async () => {
-      await writeAtomic(join(doc.dir, 'keyslot.json'), JSON.stringify(body.keyslot));
-      if (typeof body.newToken === 'string' && body.newToken.length >= 16) {
-        doc.meta.tokenHash = hash(body.newToken);
-        await doc.saveMeta();
+      // Check again at the point of use: an earlier queued rotation may
+      // already have revoked this request's token.
+      if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
+      const previous = doc.meta.keyslotFile ?? 'keyslot.json';
+      const keyslotFile = `keyslot-${randomUUID()}.json`;
+      await writeAtomic(join(doc.dir, keyslotFile), JSON.stringify(body.keyslot));
+      const meta = { ...doc.meta, keyslotFile };
+      if (typeof body.newToken === 'string' && body.newToken.length >= 16) meta.tokenHash = hash(body.newToken);
+      try {
+        await doc.saveMeta(meta);
+      } catch (e) {
+        await rm(join(doc.dir, keyslotFile), { force: true }).catch(() => {});
+        throw e;
       }
+      doc.meta = meta;
+      await rm(join(doc.dir, previous), { force: true }).catch(() => {});
     });
     return json(res, 200, { updated: true });
   }
@@ -430,8 +440,12 @@ async function handleDocument(req, res, url, doc, part, address) {
   if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
 
   if (part === 'keyslot' && req.method === 'GET') {
+    const bytes = await doc.serial(async () => {
+      if (!doc.authorized(token(req))) refuse(401, 'unauthorized');
+      return readFile(join(doc.dir, doc.meta.keyslotFile ?? 'keyslot.json'));
+    });
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(await readFile(join(doc.dir, 'keyslot.json')));
+    return res.end(bytes);
   }
   if (part === 'ops' && req.method === 'GET') {
     const after = Number(url.searchParams.get('after') ?? 0);

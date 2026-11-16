@@ -57,6 +57,56 @@ const log = (id: string) => readFile(join(dataDir, 'docs', id, 'ops.jsonl'), 'ut
 const ops = async (id: string) => (await call(id, '/ops?after=0')).json() as Promise<{ head: number; batches: { seq: number; body: string }[] }>;
 
 describe('the sync server after a crash', () => {
+  it('keeps the old keyslot and token if rotating credentials fails, even after restart', async () => {
+    await start();
+    const id = newId();
+    await create(id, 1);
+    const dir = join(dataDir, 'docs', id);
+    const newToken = `new-token-of-${id}`;
+    const oldKey = () => call(id, '/keyslot');
+    const newKey = () => call(id, '/keyslot', { headers: { Authorization: `Bearer ${newToken}` } });
+    const rotate = () => call(id, '/keyslot', { method: 'PUT', body: JSON.stringify({ keyslot: { v: 2 }, newToken }) });
+    await mkdir(join(dir, 'meta.json.tmp'));
+    expect((await rotate()).status).toBe(500);
+    expect((await newKey()).status).toBe(401);
+    expect(await (await oldKey()).json()).toEqual({ v: 1 });
+    await stop();
+    await start();
+    expect((await newKey()).status).toBe(401);
+    expect(await (await oldKey()).json()).toEqual({ v: 1 });
+    await rm(join(dir, 'meta.json.tmp'), { recursive: true });
+    expect((await rotate()).status).toBe(200);
+    expect((await oldKey()).status).toBe(401);
+    expect(await (await newKey()).json()).toEqual({ v: 2 });
+    await stop();
+    await start();
+    expect((await oldKey()).status).toBe(401);
+    expect(await (await newKey()).json()).toEqual({ v: 2 });
+    await mkdir(join(dir, 'meta.json.tmp'));
+    expect((await call(id, '/keyslot', {
+      method: 'PUT', headers: { Authorization: `Bearer ${newToken}` }, body: '{"keyslot":{"v":3}}',
+    })).status).toBe(500);
+    expect(await (await newKey()).json()).toEqual({ v: 2 });
+    await rm(join(dir, 'meta.json.tmp'), { recursive: true });
+    expect((await readdir(dir)).filter((name) => /^keyslot.*\.json$/.test(name))).toHaveLength(1);
+  });
+
+  it('only one concurrent credential rotation can use the old token', async () => {
+    await start();
+    const id = newId();
+    await create(id, 0);
+    const attempts = [1, 2].map((v) => ({ keyslot: { v }, newToken: `rotation-${v}-token-of-${id}` }));
+    const responses = await Promise.all(attempts.map((body) => call(id, '/keyslot', { method: 'PUT', body: JSON.stringify(body) })));
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 401]);
+    for (let i = 0; i < attempts.length; i++) {
+      const res = await call(id, '/keyslot', { headers: { Authorization: `Bearer ${attempts[i].newToken}` } });
+      if (responses[i].status === 200) {
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual(attempts[i].keyslot);
+      } else expect(res.status).toBe(401);
+    }
+  });
+
   it('keeps the committed snapshot and sequence when publishing metadata fails, including after restart', async () => {
     await start();
     const id = newId();
