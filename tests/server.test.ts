@@ -1,5 +1,5 @@
 import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import type { Server } from 'node:http';
+import { request as httpRequest, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -35,6 +35,7 @@ async function start(warm = true): Promise<void> {
 function stop(): Promise<void> {
   const s = server;
   server = null;
+  s?.closeAllConnections();
   return new Promise((resolve) => (s ? s.close(() => resolve()) : resolve()));
 }
 
@@ -190,6 +191,77 @@ describe('the address failed attempts count against', () => {
 });
 
 describe('documents that are not there', () => {
+  it.each(['keyslot.json.tmp', 'meta.json.tmp'])('does not publish a failed creation when %s cannot be written', async (blocked) => {
+    await start();
+    const { openDocuments } = await import('../server/index.js');
+    const before = openDocuments();
+    const id = newId();
+    const dir = join(dataDir, 'docs', id);
+    await mkdir(join(dir, blocked), { recursive: true });
+    const put = () => call(id, '/keyslot', { method: 'PUT', body: '{"keyslot":{"v":1}}' });
+    expect((await put()).status).toBe(500);
+    expect(openDocuments()).toBe(before);
+    expect((await call(id, '/ops?after=0')).status).toBe(404);
+    await rm(join(dir, blocked), { recursive: true });
+    expect((await put()).status).toBe(201);
+    expect(await (await call(id, '/keyslot')).json()).toEqual({ v: 1 });
+    await stop();
+    await start();
+    expect(await (await call(id, '/keyslot')).json()).toEqual({ v: 1 });
+    expect((await ops(id)).head).toBe(0);
+  });
+
+  it('releases documents after invalid or disabled creation requests', async () => {
+    await start();
+    const { openDocuments } = await import('../server/index.js');
+    const before = openDocuments();
+    for (let k = 0; k < 30; k++) {
+      expect((await call(newId(), '/keyslot', { method: 'PUT', body: '{}' })).status).toBe(400);
+    }
+    expect(openDocuments()).toBe(before);
+    process.env.LISTIK_ALLOW_CREATE = '0';
+    try {
+      for (let k = 0; k < 5; k++) {
+        expect((await call(newId(), '/keyslot', { method: 'PUT', body: '{"keyslot":{"v":1}}' })).status).toBe(403);
+      }
+      expect(openDocuments()).toBe(before);
+    } finally {
+      process.env.LISTIK_ALLOW_CREATE = '1';
+    }
+  });
+
+  it('keeps one document while a creation body is arriving, and releases an aborted request', async () => {
+    await start();
+    const { openDocuments } = await import('../server/index.js');
+    const before = openDocuments();
+    const id = newId();
+    let send!: ReturnType<typeof httpRequest>;
+    const response = new Promise<number>((resolve, reject) => {
+      send = httpRequest(`${url}/docs/${id}/keyslot`, { method: 'PUT', headers: { Authorization: `Bearer token-of-${id}` } }, (res) => {
+        res.resume();
+        resolve(res.statusCode!);
+      });
+      send.on('error', reject);
+      send.write('{"keyslot":');
+    });
+    void response.catch(() => {}); // teardown may abort it after an assertion failure
+    await vi.waitFor(() => expect(openDocuments()).toBe(before + 1));
+    expect((await call(id, '/ops?after=0')).status).toBe(404);
+    expect(openDocuments()).toBe(before + 1);
+    // The competing creator must share the same lock, even after the probe.
+    expect((await call(id, '/keyslot', { method: 'PUT', body: '{"keyslot":{"v":2}}' })).status).toBe(201);
+    send.end('{"v":1}}');
+    expect(await response).toBe(409);
+    expect(await (await call(id, '/keyslot')).json()).toEqual({ v: 2 });
+
+    const aborted = httpRequest(`${url}/docs/${newId()}/keyslot`, { method: 'PUT' });
+    aborted.on('error', () => {});
+    aborted.write('{');
+    await vi.waitFor(() => expect(openDocuments()).toBe(before + 2));
+    aborted.destroy();
+    await vi.waitFor(() => expect(openDocuments()).toBe(before + 1));
+  });
+
   it('a probe of a random id leaves nothing in memory, and two creations of one id at once: the first wins', async () => {
     vi.resetModules();
     const mod = (await import('../server/index.js')) as { createListikServer(): Server; warmUp(): Promise<void>; openDocuments(): number };

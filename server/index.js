@@ -118,6 +118,7 @@ class Document {
     this.watchers = new Set();
     this.lock = Promise.resolve();
     this.loading = null;
+    this.requests = 0; // requests using this instance, including unfinished bodies
   }
 
   /** Runs `fn` after every earlier write to this document. */
@@ -193,9 +194,10 @@ class Document {
 
   async create(tokenHash, keyslot) {
     await mkdir(this.dir, { recursive: true });
-    this.meta = { tokenHash, head: 0, snapshotSeq: -1, created: Date.now() };
+    const meta = { tokenHash, head: 0, snapshotSeq: -1, created: Date.now() };
     await writeAtomic(join(this.dir, 'keyslot.json'), JSON.stringify(keyslot));
-    await this.saveMeta();
+    await this.saveMeta(meta);
+    this.meta = meta;
   }
 
   authorized(token) {
@@ -379,10 +381,20 @@ async function handle(req, res) {
   const address = addressOf(req);
   if (throttled(address)) throw new HttpError(429, 'too many failed attempts, try later');
   const doc = docFor(id);
+  doc.requests++;
+  try {
+    await handleDocument(req, res, url, doc, part, address);
+  } finally {
+    doc.requests--;
+    // Keep one lock per id while any request could still create the document.
+    // Invalid, refused and aborted creations must not leave empty cache entries.
+    if (!doc.requests && !doc.meta && !doc.watchers.size && docs.get(id) === doc) docs.delete(id);
+  }
+}
+
+async function handleDocument(req, res, url, doc, part, address) {
+  const id = doc.id;
   const exists = await doc.load();
-  const creating = part === 'keyslot' && req.method === 'PUT';
-  // A probe of a document that is not there leaves nothing in memory: random ids no longer pile up.
-  if (!exists && !creating && docs.get(id) === doc && !doc.meta && !doc.watchers.size) docs.delete(id);
   const refuse = (status, message) => {
     noteFailure(address);
     throw new HttpError(status, message);
