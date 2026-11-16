@@ -25,7 +25,7 @@
  *   GET    snapshot           the latest, X-Seq in the header
  *   DELETE                    remove the document (only with LISTIK_ALLOW_DELETE=1)
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, open, readFile, readdir, rename, rm, stat, truncate } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -181,8 +181,8 @@ class Document {
     return true;
   }
 
-  async saveMeta() {
-    await writeAtomic(join(this.dir, 'meta.json'), JSON.stringify(this.meta));
+  async saveMeta(meta = this.meta) {
+    await writeAtomic(join(this.dir, 'meta.json'), JSON.stringify(meta));
   }
 
   /** The log file as the map holds it, in order. */
@@ -240,10 +240,29 @@ class Document {
     return this.serial(async () => {
       if (seq > this.meta.head) throw new HttpError(400, 'snapshot ahead of the log');
       if (seq < this.meta.snapshotSeq) return; // an older snapshot: nothing to do
-      await writeAtomic(join(this.dir, 'snapshot.bin'), bytes);
-      this.meta.snapshotSeq = seq;
-      await this.saveMeta();
+      // Publish the file and its sequence together through one atomic metadata
+      // replacement. Never overwrite the committed file, even at the same seq.
+      const previous = this.meta.snapshotFile ?? 'snapshot.bin';
+      const snapshotFile = `snapshot-${randomUUID()}.bin`;
+      await writeAtomic(join(this.dir, snapshotFile), bytes);
+      const meta = { ...this.meta, snapshotSeq: seq, snapshotFile };
+      try {
+        await this.saveMeta(meta);
+      } catch (e) {
+        await rm(join(this.dir, snapshotFile), { force: true }).catch(() => {});
+        throw e;
+      }
+      this.meta = meta;
+      await rm(join(this.dir, previous), { force: true }).catch(() => {});
       await this.retire();
+    });
+  }
+
+  getSnapshot() {
+    return this.serial(async () => {
+      if (this.meta.snapshotSeq < 0) throw new HttpError(404, 'no snapshot');
+      const bytes = await readFile(join(this.dir, this.meta.snapshotFile ?? 'snapshot.bin'));
+      return { bytes, seq: this.meta.snapshotSeq, head: this.meta.head };
     });
   }
 
@@ -435,9 +454,8 @@ async function handle(req, res) {
     return json(res, 200, { seq: doc.meta.snapshotSeq });
   }
   if (part === 'snapshot' && req.method === 'GET') {
-    if (doc.meta.snapshotSeq < 0) throw new HttpError(404, 'no snapshot');
-    const bytes = await readFile(join(doc.dir, 'snapshot.bin'));
-    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'X-Seq': String(doc.meta.snapshotSeq), 'X-Head': String(doc.meta.head), 'Content-Length': bytes.length });
+    const { bytes, seq, head } = await doc.getSnapshot();
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'X-Seq': String(seq), 'X-Head': String(head), 'Content-Length': bytes.length });
     return res.end(bytes);
   }
   if (!part && req.method === 'DELETE') {

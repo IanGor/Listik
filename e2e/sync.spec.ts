@@ -9,7 +9,7 @@ const rows = (page: Page) => page.locator('.row .text').evaluateAll((els) => els
 const syncOn = (page: Page) => page.locator('.menu-button[title^="Документ. "]');
 
 async function openSyncDialog(page: Page) {
-  await page.locator('.topbar [aria-label="Меню документа"]').click();
+  await page.getByRole('button', { name: 'Меню документа', exact: true }).click();
   await page.getByRole('menuitem', { name: /Синхронизация/ }).click();
   await expect(page.locator('.sync-dialog')).toBeVisible();
 }
@@ -169,7 +169,7 @@ test('the sync state lives in the menu: a dot on its button while changes wait',
 
   const dot = a.locator('.menu-button .sync-dot');
   await expect(dot).toHaveCount(0, { timeout: 15_000 });
-  await a.locator('.topbar [aria-label="Меню документа"]').click();
+  await a.getByRole('button', { name: 'Меню документа', exact: true }).click();
   await expect(a.locator('.menu-note')).toContainText('Синхронизировано');
   await a.keyboard.press('Escape');
 

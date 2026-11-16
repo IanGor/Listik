@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -56,6 +56,62 @@ const log = (id: string) => readFile(join(dataDir, 'docs', id, 'ops.jsonl'), 'ut
 const ops = async (id: string) => (await call(id, '/ops?after=0')).json() as Promise<{ head: number; batches: { seq: number; body: string }[] }>;
 
 describe('the sync server after a crash', () => {
+  it('keeps the committed snapshot and sequence when publishing metadata fails, including after restart', async () => {
+    await start();
+    const id = newId();
+    await create(id, 2);
+    const dir = join(dataDir, 'docs', id);
+    // An existing deployment uses the original fixed filename.
+    await stop();
+    const meta = JSON.parse(await readFile(join(dir, 'meta.json'), 'utf8'));
+    await writeFile(join(dir, 'snapshot.bin'), 'snapshot-1');
+    await writeFile(join(dir, 'meta.json'), JSON.stringify({ ...meta, snapshotSeq: 1 }));
+    await start();
+    const check = async (seq: number) => {
+      const res = await call(id, '/snapshot');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-seq')).toBe(String(seq));
+      expect(await res.text()).toBe(`snapshot-${seq}`);
+    };
+    const put = (seq: number, body = `snapshot-${seq}`) => call(id, '/snapshot', {
+      method: 'PUT', headers: { 'X-Seq': String(seq) }, body,
+    });
+    await check(1);
+    // Force the metadata write to fail after the snapshot file has been saved.
+    await mkdir(join(dir, 'meta.json.tmp'));
+    expect((await put(2)).status).toBe(500);
+    await check(1);
+    await stop();
+    await start();
+    await check(1);
+    await rm(join(dir, 'meta.json.tmp'), { recursive: true });
+    expect((await put(2)).status).toBe(200);
+    await check(2);
+    await stop();
+    await start();
+    await check(2);
+    // Replacing a snapshot at the same sequence must also preserve the old file on failure.
+    await mkdir(join(dir, 'meta.json.tmp'));
+    expect((await put(2, 'uncommitted replacement')).status).toBe(500);
+    await check(2);
+    await rm(join(dir, 'meta.json.tmp'), { recursive: true });
+    expect((await readdir(dir)).filter((name) => /^snapshot.*\.bin$/.test(name))).toHaveLength(1);
+  });
+
+  it('serves matching snapshot bytes and sequence during concurrent uploads', async () => {
+    await start();
+    const id = newId();
+    await create(id, 10);
+    const put = (seq: number) => call(id, '/snapshot', { method: 'PUT', headers: { 'X-Seq': String(seq) }, body: `snapshot-${seq}` });
+    expect((await put(0)).status).toBe(200);
+    await Promise.all(Array.from({ length: 10 }, async (_, i) => {
+      expect((await put(i + 1)).status).toBe(200);
+      const res = await call(id, '/snapshot');
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(`snapshot-${res.headers.get('x-seq')}`);
+    }));
+  });
+
   it('a log line cut short is left out: the document opens, keeps what was acknowledged and takes the next batch', async () => {
     await start();
     const id = newId();
