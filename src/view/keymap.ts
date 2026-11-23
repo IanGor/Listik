@@ -30,7 +30,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
   const mod = e.ctrlKey || e.metaKey;
   if (minimal) {
     if (mod || e.altKey) return;
-    if (e.key === 'Enter' && (e.shiftKey || e.repeat)) { e.preventDefault(); return; }
+    if (e.key === 'Enter' && e.repeat) { e.preventDefault(); return; }
   } else if (formatKeys(e, o, id, el, false)) return;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const collapsed = start === end;
@@ -55,11 +55,14 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
   if (mod && e.shiftKey && !e.altKey && e.code === 'KeyM') return handle(() => o.openMove([id]));
 
   switch (e.key) {
-    // Enter splits; Shift+Enter goes to the note; Ctrl+Enter checks a task (as in Workflowy), or unchecks it.
+    // Enter splits; Shift+Enter adds a line in minimal or goes to the note in legacy mode.
     case 'Enter':
       return handle(() => {
         if (mod) return o.contentOf(id).todo && o.toggleDone([id], here);
-        if (e.shiftKey) return o.setFocus({ id, caret: o.contentOf(id).note.length, note: true });
+        if (e.shiftKey) {
+          if (minimal) return o.run((ctx) => cmd.insertText(ctx, id, start, end, ['\n']), here);
+          return o.setFocus({ id, caret: o.contentOf(id).note.length, note: true });
+        }
         o.run((ctx) => {
           const text = ctx.doc.content(nodeOf(id)).text;
           if (!collapsed) cmd.setText(ctx, id, text.slice(0, start) + text.slice(end));

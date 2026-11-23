@@ -819,6 +819,10 @@ kbd {
   cursor: text;
 }
 
+.minimal-outline .text.trailing-line::after {
+  content: '\200b';
+}
+
 .task-project {
   display: block;
   max-width: 100%;

@@ -170,7 +170,11 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
       const n = o.doc.nodes.has(nodeOf(id)) ? o.contentOf(id) : undefined;
       const perLine = Math.max(10, Math.floor(cols - (indent.at(depth) + BULLET_GAP + 32 + (phone() ? FOLD_COLUMN : 0)) / ch));
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
-      let h = lines(n?.text ?? '') * lh + ROW_PAD;
+      const text = n?.text ?? '';
+      const textLines = props.minimal && text.includes('\n')
+        ? text.split('\n').reduce((sum, line) => sum + lines(line), 0)
+        : lines(text);
+      let h = textLines * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
       if (!props.minimal && n?.note) {
         let shown = 0;

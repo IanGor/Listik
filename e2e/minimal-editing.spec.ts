@@ -44,6 +44,64 @@ test('keyboard editing splits, nests and joins outline rows', async ({ page }) =
   await expect(editor).toHaveCount(0);
 });
 
+test('Shift+Enter replaces a selection with a line break inside the same row', async ({ page }) => {
+  await page.goto('/?db=minimal-line-break&empty');
+  const rows = page.locator('.row');
+  const text = rows.locator('.text');
+  const editor = rows.locator('.text[contenteditable]');
+  await text.tap();
+  await editor.fill('alphaXbeta');
+  await editor.press('Home');
+  for (let i = 0; i < 'alpha'.length; i++) await editor.press('ArrowRight');
+  await editor.press('Shift+ArrowRight');
+  await editor.press('Shift+Enter');
+  await expect(rows).toHaveCount(1);
+  await expect.poll(() => editor.textContent()).toBe('alpha\nbeta');
+
+  await page.keyboard.type('new ');
+  await expect.poll(() => editor.textContent()).toBe('alpha\nnew beta');
+  await editor.press('Escape');
+  await expect.poll(() => text.innerText()).toBe('alpha\nnew beta');
+  await page.reload();
+  await expect(rows).toHaveCount(1);
+  await expect.poll(() => text.innerText()).toBe('alpha\nnew beta');
+});
+
+test('Shift+Enter opens an empty last line and Enter still splits the row', async ({ page }) => {
+  await page.goto('/?db=minimal-last-line&empty');
+  const rows = page.locator('.row');
+  const text = rows.locator('.text');
+  const editor = rows.locator('.text[contenteditable]');
+  await text.tap();
+  await editor.fill('previous');
+  await editor.press('End');
+  await editor.press('Enter');
+  await editor.fill('alpha');
+  await editor.press('End');
+  const singleLineHeight = await editor.evaluate((el) => el.getBoundingClientRect().height);
+  await editor.press('Shift+Enter');
+  await expect(rows).toHaveCount(2);
+  await expect.poll(() => editor.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(singleLineHeight);
+
+  await editor.press('ArrowUp');
+  await expect(text.nth(1)).toBeFocused();
+  await editor.press('ArrowDown');
+  await page.keyboard.type('beta');
+  await expect.poll(() => editor.textContent()).toBe('alpha\nbeta');
+  await editor.press('End');
+  await editor.press('Shift+Enter');
+  await editor.press('Backspace');
+  await expect.poll(() => editor.textContent()).toBe('alpha\nbeta');
+  await editor.press('Enter');
+  await page.keyboard.type('gamma');
+  await expect(rows).toHaveCount(3);
+  await expect.poll(() => text.nth(1).textContent()).toBe('alpha\nbeta');
+  await editor.press('Shift+Enter');
+  await editor.press('Escape');
+  await expect.poll(() => text.last().innerText()).toBe('gamma\n');
+  await expect.poll(() => text.last().evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(singleLineHeight);
+});
+
 test('tapping blank space finishes editing and makes an internal link usable', async ({ page }) => {
   await page.goto('/?db=minimal-editing&empty');
   const rows = page.locator('.row');

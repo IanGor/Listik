@@ -81,26 +81,34 @@ export function lineHeight(el: HTMLElement): number {
 }
 
 /** The caret's rect; null when it has none (e.g. an empty line). */
-function caretRect(): DOMRect | null {
+function caretRect(el: HTMLElement): DOMRect | null {
   const sel = getSelection();
   if (!sel?.rangeCount) return null;
   const r = sel.getRangeAt(0).cloneRange();
   r.collapse(true);
   const rects = r.getClientRects();
-  return rects.length ? rects[0] : null;
+  if (rects.length) return rects[0];
+  // A collapsed range at a final empty line can have no box. Its placeholder
+  // break still has a box at the position where the browser draws the caret.
+  const trailing = el.lastElementChild;
+  const text = el.textContent;
+  if (trailing?.tagName === 'BR' && text?.endsWith('\n') && focusIn(el) === text.length) {
+    return trailing.getBoundingClientRect();
+  }
+  return null;
 }
 
 export function caretOnFirstLine(el: HTMLElement): boolean {
-  const r = caretRect();
+  const r = caretRect(el);
   return !r || r.top - el.getBoundingClientRect().top < lineHeight(el) / 2;
 }
 
 export function caretOnLastLine(el: HTMLElement): boolean {
-  const r = caretRect();
+  const r = caretRect(el);
   return !r || el.getBoundingClientRect().bottom - r.bottom < lineHeight(el) / 2;
 }
 
 /** Horizontal caret position, to keep the column when moving between rows. */
 export function caretX(el: HTMLElement): number {
-  return caretRect()?.left ?? el.getBoundingClientRect().left;
+  return caretRect(el)?.left ?? el.getBoundingClientRect().left;
 }

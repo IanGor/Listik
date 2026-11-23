@@ -325,7 +325,7 @@ export function Row(props: RowProps) {
         <Show
           when={editingText()}
           fallback={
-            <div class="text" onMouseDown={onStaticMouseDown(false)}>
+            <div class="text" classList={{ 'trailing-line': !!props.minimal && !!content()?.text.endsWith('\n') }} onMouseDown={onStaticMouseDown(false)}>
               <Pieces o={o} pieces={pieces()} query={query()} minimal={props.minimal} />
               {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
               <Show when={!props.minimal && content()?.strokes}>
@@ -491,13 +491,19 @@ function placeCaret(el: HTMLElement, f: FocusRequest): void {
  * The focused row's contenteditable. While typing, the DOM is the source of
  * truth: input is copied into the model and never rendered back, so the
  * caret stays put. Only changes made elsewhere (merge, paste, undo) are
- * written into the DOM. Invariant: the element holds a single text node.
+ * written into the DOM. The element holds plain text, plus a placeholder
+ * break when needed to make the final empty line editable.
  */
 function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
   const o = props.o;
   const id = props.id;
   const nid = nodeOf(id);
   let el!: HTMLDivElement;
+  const hasTrailingLine = (t: string) => props.minimal && t.endsWith('\n');
+  const write = (t: string) => {
+    el.textContent = t;
+    if (hasTrailingLine(t)) el.append(document.createElement('br'));
+  };
   // Through a mirror, the original's text (model/mirrors.ts): tracked by both ids.
   const text = () => {
     o.nodes.track(nid);
@@ -506,14 +512,12 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
     return n ? o.doc.content(nid).text : '';
   };
 
-  onMount(() => {
-    el.textContent = text();
-  });
+  onMount(() => write(text()));
 
   createEffect(on(text, (t) => {
     if (el.textContent === t) return;
     const caret = selectionIn(el)?.[0];
-    el.textContent = t;
+    write(t);
     if (caret !== undefined) setCaret(el, Math.min(caret, t.length));
   }, { defer: true }));
 
@@ -524,12 +528,14 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
 
   const onInput = (e: InputEvent) => {
     const t = el.textContent ?? '';
-    if (el.childNodes.length > 1 || el.firstElementChild || t.includes('\n')) {
+    const normalized = hasTrailingLine(t)
+      ? el.childNodes.length === 2 && el.firstChild?.nodeType === Node.TEXT_NODE && el.lastElementChild?.tagName === 'BR'
+      : el.childNodes.length <= 1 && !el.firstElementChild;
+    if (!normalized || (!props.minimal && t.includes('\n'))) {
       const caret = selectionIn(el)?.[0] ?? t.length;
-      el.textContent = t.replace(/\n/g, ' ');
+      write(props.minimal ? t : t.replace(/\n/g, ' '));
       setCaret(el, caret);
     }
-    const write = (t: string) => (el.textContent = t);
     if (props.minimal) return o.type(id, el.textContent ?? '');
     o.type(id, closeLink(e, el, el.textContent ?? '', write, true));
     if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
@@ -557,7 +563,7 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
       onInput={onInput}
       onCompositionEnd={() => { if (!props.minimal) timeCommand(o, id, el, el.textContent ?? '', false); }}
       onPaste={onPaste}
-      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t), true, props.minimal)}
+      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', write, (t) => o.type(id, t), true, props.minimal)}
     />
   );
 }
