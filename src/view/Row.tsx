@@ -199,12 +199,22 @@ export function Row(props: RowProps) {
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
   const notePieces = createMemo(() => decorate(content()?.note ?? '', terms()));
 
+  const selectThrough = (e: MouseEvent) => {
+    if (e.button !== 0 || !e.shiftKey || o.readOnly) return false;
+    const anchor = o.focus()?.id ?? o.selection()?.anchor;
+    if (anchor === undefined || o.rows.indexOf(anchor) < 0) return false;
+    e.preventDefault();
+    o.select({ anchor, head: id, exact: true });
+    return true;
+  };
+
   /** A click in static text: a tag filters, a link leads to its bullet, anything else puts the caret there. */
   const onStaticMouseDown = (note: boolean) => (e: MouseEvent) => {
     if (e.button !== 0) return;
     // A web address opens on its click; the row is not edited.
     if ((e.target as HTMLElement).closest('a.url')) return;
     e.preventDefault();
+    if (props.minimal && selectThrough(e)) return;
     const selection = o.selection();
     if (!props.minimal && selection) return o.select({ anchor: selection.anchor, head: id });
     const target = e.target as HTMLElement;
@@ -289,7 +299,8 @@ export function Row(props: RowProps) {
           class="bullet"
           classList={{ collapsed: folded(), mirror: mirror() }}
           aria-label="Открыть пункт"
-          onClick={() => o.zoomTo(id)}
+          onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
+          onClick={(e) => { if (!e.detail || !selectThrough(e)) o.zoomTo(id); }}
         />
       </Show>
       <Show when={content()?.todo}>
@@ -337,7 +348,7 @@ export function Row(props: RowProps) {
             </div>
           }
         >
-          <Editable o={o} id={id} minimal={props.minimal} />
+          <Editable o={o} id={id} minimal={props.minimal} onMouseDown={props.minimal ? selectThrough : undefined} />
         </Show>
         <Show when={project()}>
           {(p) => <button data-action="Row.2" type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => o.zoomTo(p())} title="Открыть проект">Проект: {projectName()}</button>}
@@ -494,7 +505,7 @@ function placeCaret(el: HTMLElement, f: FocusRequest): void {
  * written into the DOM. The element holds plain text, plus a placeholder
  * break when needed to make the final empty line editable.
  */
-function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
+function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean; onMouseDown?: (e: MouseEvent) => void }) {
   const o = props.o;
   const id = props.id;
   const nid = nodeOf(id);
@@ -559,6 +570,7 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
       ref={el}
       class="text"
       contentEditable="plaintext-only"
+      onMouseDown={props.onMouseDown}
       onKeyDown={(e) => { if (props.minimal || !suggestKey(e)) onEditorKeyDown(e, o, id, el, props.minimal); }}
       onInput={onInput}
       onCompositionEnd={() => { if (!props.minimal) timeCommand(o, id, el, el.textContent ?? '', false); }}

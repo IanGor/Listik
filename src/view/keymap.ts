@@ -41,10 +41,10 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
     e.preventDefault();
     fn();
   };
-  // The bullet itself, with the rows under it: Backspace or Delete then takes it all out.
+  // Select the bullet itself after the text selection reaches its edge.
   const selectBullet = () => {
     el.blur();
-    o.select({ anchor: id, head: id });
+    o.select({ anchor: id, head: id, exact: minimal });
   };
 
   // Ctrl/Cmd+A over the whole text (or in an empty one) selects the bullet; the first one selects the text.
@@ -115,7 +115,10 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       // browser's own), then the whole text, then the bullet itself; from there
       // onSelectionKeys takes in the rows around.
       if (e.shiftKey && !e.altKey) {
-        if (minimal) return;
+        if (minimal) {
+          if (focusIn(el) === (up ? 0 : length)) return handle(selectBullet);
+          return;
+        }
         if (whole) return handle(selectBullet);
         if (focusIn(el) === (up ? 0 : length)) return handle(() => (up ? selectRange(el, length, 0) : selectRange(el, 0, length)));
         return;
@@ -149,10 +152,12 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
  * the key was handled. Commands act on the selection's roots, each as one
  * undo step.
  */
-export function onSelectionKeys(e: KeyboardEvent, o: Outliner): boolean {
+export function onSelectionKeys(e: KeyboardEvent, o: Outliner, minimal = false): boolean {
   const selection = o.selection();
   if (!selection) return false;
   const mod = e.ctrlKey || e.metaKey;
+  const extend = e.shiftKey && !mod && !e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown');
+  if (minimal && e.key !== 'Escape' && !extend) return false;
   const roots = () => o.selectionRoots();
   const handle = (fn: () => void) => {
     e.preventDefault();

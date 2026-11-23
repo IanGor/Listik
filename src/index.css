@@ -3875,7 +3875,7 @@ body.is-dragging * {
 .minimal-outline .toggle { opacity: 1; }
 
 /* Continue the first child's guide through the part of its parent below one line. */
-.minimal-outline .row:has(> .toggle.open)::after {
+.minimal-outline .row:has(> .toggle.open) > .body::before {
   content: '';
   position: absolute;
   inset: max(var(--row-min-height, 0px), calc(1lh + 2 * var(--row-padding-block)))

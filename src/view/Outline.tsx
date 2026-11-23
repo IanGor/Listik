@@ -222,6 +222,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
           e.preventDefault();
           addBullet();
         } else if (!o.readOnly && !e.isComposing && target instanceof Element && !target.closest('input, textarea, .menu')) {
+          if (onSelectionKeys(e, o, true)) return;
           onHistoryKeys(e, o, true);
         }
         return;
@@ -355,9 +356,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
   }, { defer: true }));
 
   createEffect(() => {
-    const f = o.focus();
-    if (!f) return;
-    const i = o.rows.indexOf(f.id);
+    const id = o.focus()?.id ?? (props.minimal ? o.selection()?.head : undefined);
+    if (!id) return;
+    const i = o.rows.indexOf(id);
     if (i >= 0) ensureVisible(i);
   });
 
@@ -487,6 +488,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
               if (!props.minimal || (e.target !== scroller && e.target !== spacer)) return;
               if (emptyEditable()) addBullet();
               else if (o.focus()) o.setFocus(null);
+              else if (o.selection()) o.select(null);
             }}
             onScroll={() => { o.paneScroll = scroller.scrollTop; setScrollTop(scroller.scrollTop); }}
             onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>

@@ -69,6 +69,126 @@ test('expanded branches show guides at each level of nesting', async ({ page }) 
   expect(await readGuides()).toEqual([0, 0]);
 });
 
+test('Shift+arrows select text by line and then extend and shrink through visible rows', async ({ page }) => {
+  const parent = 'first\nother\nthird';
+  await openStoredOutline(page, 'minimal-key-selection', {
+    lines: ['Before', parent, '  Child [+]', '    Hidden', '  Next child', 'After'],
+  });
+  const rows = page.locator('.row');
+  const selected = page.locator('.row.selected .text');
+  const editor = rows.locator('.text[contenteditable]');
+  const selectedText = () => page.evaluate(() => getSelection()?.toString());
+  await rows.nth(1).locator('.text').click();
+  await editor.press('Control+Home');
+  for (const text of ['first\n', 'first\nother\n', parent]) {
+    await page.keyboard.press('Shift+ArrowDown');
+    expect(await selectedText()).toBe(text);
+    await expect(editor).toBeFocused();
+  }
+
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(selected).toHaveText([parent]);
+  await expect(editor).toHaveCount(0);
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(selected).toHaveText([parent, 'Child']);
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(selected).toHaveText([parent, 'Child', 'Next child']);
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(selected).toHaveText([parent, 'Child']);
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(selected).toHaveText([parent]);
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(selected).toHaveText(['Before', parent]);
+  await page.keyboard.press('Delete');
+  await expect(rows.locator('.text')).toHaveText(['Before', parent, 'Child', 'Next child', 'After']);
+  await page.keyboard.press('Escape');
+  await expect(selected).toHaveCount(0);
+
+  await rows.nth(1).locator('.text').click();
+  await editor.press('Control+End');
+  for (const text of ['\nthird', '\nother\nthird', parent]) {
+    await page.keyboard.press('Shift+ArrowUp');
+    expect(await selectedText()).toBe(text);
+    await expect(editor).toBeFocused();
+  }
+  await page.keyboard.press('Shift+ArrowUp');
+  await expect(selected).toHaveText([parent]);
+});
+
+test('Shift+arrows follow soft wrapping before selecting the row', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const wrapped = 'word '.repeat(24).trimEnd();
+  await openStoredOutline(page, 'minimal-wrapped-selection', { lines: [wrapped] });
+  const editor = page.locator('.row .text[contenteditable]');
+  const selected = page.locator('.row.selected .text');
+  await page.locator('.row .text').click();
+  await editor.press('Control+Home');
+  await editor.press('ArrowRight');
+  const focusLine = () => editor.evaluate((el) => {
+    const selection = getSelection()!;
+    const range = document.createRange();
+    range.setStart(selection.focusNode!, selection.focusOffset);
+    const height = parseFloat(getComputedStyle(el).lineHeight);
+    return Math.floor((range.getBoundingClientRect().top - el.getBoundingClientRect().top) / height);
+  });
+  const first = await focusLine();
+  await page.keyboard.press('Shift+ArrowDown');
+  expect(await focusLine()).toBe(first + 1);
+  await page.keyboard.press('Shift+ArrowDown');
+  expect(await focusLine()).toBe(first + 2);
+  await expect(selected).toHaveCount(0);
+
+  await editor.press('Control+End');
+  await editor.press('Shift+ArrowDown');
+  await expect(selected).toHaveText([wrapped]);
+});
+
+test('keyboard selection keeps its moving endpoint in view', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 300 });
+  const lines = Array.from({ length: 50 }, (_, index) => `Item ${index + 1}`);
+  await openStoredOutline(page, 'minimal-selection-scroll', { lines });
+  await page.getByText('Item 1', { exact: true }).click();
+  await page.keyboard.press('Control+End');
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Shift+ArrowDown');
+  await expect(page.locator('.row.selected').getByText('Item 20', { exact: true })).toBeInViewport();
+  await expect(page.locator('.row.selected').getByText('Item 21', { exact: true })).toHaveCount(0);
+});
+
+test('Shift+click selects the exact interval through text or a bullet dot', async ({ page }) => {
+  const parent = 'Parent\nsecond line';
+  await openStoredOutline(page, 'minimal-click-selection', {
+    lines: ['Before', parent, '  Child', '    Grandchild', 'After'],
+  });
+  const rows = page.locator('.row');
+  const selected = page.locator('.row.selected .text');
+  const dot = (index: number) => rows.nth(index).getByRole('button', { name: 'Открыть пункт' });
+  await rows.first().locator('.text').click();
+  await rows.nth(1).locator('.text').click({ modifiers: ['Shift'] });
+  await expect(selected).toHaveText(['Before', parent]);
+  await expect(rows.locator('[contenteditable]')).toHaveCount(0);
+  const style = await rows.nth(1).evaluate((row) => ({
+    fill: getComputedStyle(row, '::after').backgroundColor,
+    guide: getComputedStyle(row.querySelector('.body')!, '::before').width,
+  }));
+  expect(style.fill).not.toBe('rgba(0, 0, 0, 0)');
+  expect(style.guide).toBe('1px');
+
+  await dot(2).click({ modifiers: ['Shift'] });
+  await expect(selected).toHaveText(['Before', parent, 'Child']);
+  await expect(page.locator('.crumb.current')).toHaveAccessibleName('Главная');
+  await page.keyboard.press('Escape');
+  await expect(selected).toHaveCount(0);
+
+  await rows.nth(2).locator('.text').click();
+  await rows.nth(2).locator('.text').click({ modifiers: ['Shift'] });
+  await expect(selected).toHaveText(['Child']);
+  await dot(0).click({ modifiers: ['Shift'] });
+  await expect(selected).toHaveText(['Before', parent, 'Child']);
+  await dot(1).click();
+  await expect(page.locator('.crumb.current')).toHaveText(parent);
+  await expect(selected).toHaveCount(0);
+});
+
 test('tags have a theme-aware fill and stay editable as text', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/?db=minimal-tags&empty');

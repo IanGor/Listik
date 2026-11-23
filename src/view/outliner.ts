@@ -110,6 +110,8 @@ export type PlaceLine = { kind: 'go' } | { kind: 'move'; keys: RowKey[]; label: 
 export interface Selection {
   anchor: RowKey;
   head: RowKey;
+  /** Keep the visible interval bounded by its endpoints. */
+  exact?: boolean;
 }
 
 /** The active search: what was asked and what it found when applied. */
@@ -407,10 +409,10 @@ export class Outliner {
     const s = this.selection();
     if (!s) return;
     const i = this.rows.indexOf(s.head) + step;
-    if (i >= 0 && i < this.rows.length) this.select({ anchor: s.anchor, head: this.rows.ids[i] });
+    if (i >= 0 && i < this.rows.length) this.select({ ...s, head: this.rows.ids[i] });
   }
 
-  /** The selected rows: from anchor to head, widened to whole subtrees. Reactive. */
+  /** The selected rows from anchor to head. Reactive. */
   selectedSet(): ReadonlySet<RowKey> {
     return this.selectionInfo().set;
   }
@@ -448,7 +450,7 @@ export class Outliner {
       let rootEnd = start;
       for (let i = start; i < end; i++) {
         const sub = this.rows.subtreeEnd(i);
-        end = Math.max(end, sub);
+        if (!selection.exact) end = Math.max(end, sub);
         const key = this.rows.ids[i];
         set.add(key);
         if (i >= rootEnd) {
@@ -575,6 +577,7 @@ export class Outliner {
       // The new top first: under the filter that rebuild lists only the paths, and the clear then lists the place.
       this.rows.setTop(target ?? this.doc.root);
       this.setZoomSignal(target);
+      if (this.selection()?.exact) this.select(null);
       if (this.query() || this.filter()) this.setQuery(keepSearch ? this.query() : '', true);
       this.syncRows();
       const cur = this.focus();
@@ -2121,6 +2124,8 @@ export class Outliner {
   refreshView(): void { this.syncRows(); }
 
   private syncRows(): void {
+    const s = this.selection();
+    if (s?.exact && (this.rows.indexOf(s.anchor) < 0 || this.rows.indexOf(s.head) < 0)) this.select(null);
     this.setRowsVersion(this.rows.version);
   }
 
