@@ -60,6 +60,10 @@ test('tags have a theme-aware fill and stay editable as text', async ({ page }) 
 
   const tags = text.locator('.tag');
   await expect(tags).toHaveText(['#работа', '@дом']);
+  for (const tag of await tags.all()) await expect(tag).toHaveCSS('box-shadow', 'none');
+  const first = (await tags.first().boundingBox())!;
+  const second = (await tags.last().boundingBox())!;
+  expect(second.x - (first.x + first.width)).toBeGreaterThanOrEqual(6);
   await expect(tags.first()).toHaveCSS('background-color', 'rgba(20, 20, 19, 0.06)');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(tags.first()).toHaveCSS('background-color', 'rgba(250, 249, 245, 0.08)');

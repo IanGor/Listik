@@ -921,6 +921,11 @@ kbd {
   box-shadow: 0 0 0 2px var(--tag-chip);
 }
 
+/* Keep the full space between adjacent tags visible. */
+.minimal-outline .tag {
+  box-shadow: none;
+}
+
 .tag[data-tag] {
   cursor: pointer;
   transition: background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
