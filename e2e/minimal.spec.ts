@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const menu = 'Меню документа';
 const legacy = 'Вернуться к прежнему интерфейсу';
@@ -91,6 +91,78 @@ test('the current crumb uses the space available beside Home', async ({ page }) 
   await page.getByRole('button', { name: 'Главная', exact: true }).click();
   await expect(row).toContainText(title);
 });
+
+// Read the rendered gutter one pixel row at a time so a gap at a row boundary
+// is detectable even when the styles on both sides look right in isolation.
+async function gutterPixels(page: Page, x: number) {
+  const png = await page.screenshot({ clip: { x, y: 0, width: 18, height: 300 } });
+  return page.evaluate(async (data) => {
+    const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+    const canvas = new OffscreenCanvas(image.width, image.height);
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    const { data: pixels } = context.getImageData(0, 0, image.width, image.height);
+    const stride = image.width * 4;
+    return Array.from({ length: image.height }, (_, y) => pixels.slice(y * stride, (y + 1) * stride).join());
+  }, png.toString('base64'));
+}
+
+for (const touch of [false, true]) {
+  test.describe(touch ? 'touch guides' : 'mouse guides', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: touch, isMobile: touch });
+
+    test('an expanded branch keeps the start of its guide when its parent wraps', async ({ page }) => {
+      await page.goto('/?db=minimal-wrapped-guide&empty');
+      const rows = page.locator('.row');
+      const editor = rows.locator('.text[contenteditable]');
+      const parent = rows.first();
+      const child = rows.nth(1);
+      const parentText = parent.locator('.text');
+      if (touch) await parentText.tap();
+      else await parentText.click();
+      await editor.press('Enter');
+      await editor.fill('Дочерний пункт');
+      await editor.press('Tab');
+      await editor.press('End');
+      await editor.press('Enter');
+      await editor.press('Shift+Tab');
+      await editor.press('Escape');
+      await expect(rows.locator('.text')).toHaveText(['', 'Дочерний пункт', '']);
+      await expect(child).toHaveAttribute('data-depth', '1');
+      await expect(rows.last()).toHaveAttribute('data-depth', '0');
+
+      const empty = (await parent.boundingBox())!;
+      if (touch) expect(empty.height).toBe(30);
+      const x = Math.floor(empty.x);
+      const start = Math.round(empty.y + empty.height);
+      const initial = await gutterPixels(page, x);
+      const blank = initial[start - 2];
+      const guide = initial[start + 4];
+      expect(guide).not.toBe(blank);
+      expect(initial[start - 1]).toBe(blank);
+      expect(initial[start]).toBe(guide);
+
+      if (touch) await parentText.tap();
+      else await parentText.click();
+      await editor.fill('Длинная строка с переносом '.repeat(5).trimEnd());
+      const wrapped = (await parent.boundingBox())!;
+      expect(wrapped.height).toBeGreaterThan(empty.height);
+      const descendant = (await child.boundingBox())!;
+      const end = Math.round(descendant.y + descendant.height);
+      const expanded = await gutterPixels(page, x);
+      expect(expanded[start - 1]).toBe(blank);
+      expect(expanded.slice(start, end).findIndex((pixel) => pixel !== guide)).toBe(-1);
+      expect(expanded[end + 2]).toBe(blank);
+
+      const fold = parent.getByRole('button', { name: 'Свернуть пункт' });
+      if (touch) await fold.tap();
+      else await fold.click();
+      await expect(rows).toHaveCount(2);
+      const collapsed = await gutterPixels(page, x);
+      expect(collapsed.slice(start, Math.round(wrapped.y + wrapped.height)).every((pixel) => pixel === blank)).toBe(true);
+    });
+  });
+}
 
 test.describe('touch', () => {
   test.use({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });

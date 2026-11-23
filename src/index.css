@@ -593,12 +593,13 @@ kbd {
 
 /* Vertical padding must match ROW_PAD in Outline.tsx. */
 .row {
+  --row-padding-block: 2px;
   padding-right: 32px;
   --shift: calc(var(--indent) * min(var(--depth), var(--deep)) + var(--indent-deep) * max(0, var(--depth) - var(--deep)));
   position: relative;
   display: flex;
   gap: 6px;
-  padding-block: 2px;
+  padding-block: var(--row-padding-block);
   padding-left: 0;
 }
 
@@ -618,7 +619,12 @@ kbd {
   cursor: pointer;
 }
 :root.touch-capable .row-actions { width: 32px; height: 30px; }
-:root.touch-capable .row { padding-right: 32px; min-height: 30px; box-sizing: border-box; }
+:root.touch-capable .row {
+  --row-min-height: 30px;
+  padding-right: 32px;
+  min-height: var(--row-min-height);
+  box-sizing: border-box;
+}
 :root.touch-capable:not(.tablet) .row:has(.toggle) .row-actions { right: 32px; }
 :root.touch-capable:not(.tablet) .row:has(.toggle) { padding-right: 64px; }
 .selectionbar {
@@ -3859,4 +3865,16 @@ body.is-dragging * {
 }
 
 .minimal-outline .toggle { opacity: 1; }
+
+/* Continue the first child's guide through the part of its parent below one line. */
+.minimal-outline .row:has(> .toggle.open)::after {
+  content: '';
+  position: absolute;
+  inset: max(var(--row-min-height, 0px), calc(1lh + 2 * var(--row-padding-block)))
+    auto 0 calc(var(--shift) + var(--bullet) / 2 - 0.5px);
+  width: 1px;
+  background: var(--guide);
+  pointer-events: none;
+}
+
 .minimal-outline .scroller[role="button"] { cursor: text; }
