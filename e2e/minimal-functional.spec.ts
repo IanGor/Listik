@@ -359,3 +359,72 @@ test('deleting selected copies keeps the surviving mirror and folded descendants
   await rows.first().getByRole('button', { name: 'Открыть пункт' }).click();
   await expect(text).toHaveText(['Keep first', 'Keep second']);
 });
+
+test('plain arrows enter the visible part of a scrolled outline and then navigate', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 390 });
+  await openStoredOutline(page, 'minimal-arrow-entry', {
+    lines: Array.from({ length: 160 }, (_, i) => `Bullet ${i + 1}`),
+  });
+  const scroller = page.locator('.scroller');
+  const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
+  const editor = page.locator('.row .text[contenteditable]');
+  const fullyVisible = () => scroller.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    return [...el.querySelectorAll('.row')].flatMap((row) => {
+      const rect = row.getBoundingClientRect();
+      return rect.top >= box.top && rect.bottom <= box.bottom ? [row.textContent] : [];
+    });
+  });
+
+  await page.getByText('Bullet 2', { exact: true }).click();
+  await page.keyboard.press('Home');
+  for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ArrowDown');
+  await expect(editor).toHaveText('Bullet 2');
+  expect(await page.evaluate(() => getSelection()?.focusOffset)).toBe(4);
+  await page.keyboard.press('Escape');
+
+  await scroller.evaluate((el) => { el.scrollTop = 2300; });
+  await expect.poll(async () => (await fullyVisible())[0]).toMatch(/^Bullet [5-9]\d$/);
+  const expected = await fullyVisible();
+  const before = await scrollTop();
+  await page.keyboard.press('ArrowDown');
+  await expect(editor).toHaveText(expected[0]!);
+  expect(await scrollTop()).toBe(before);
+  await page.keyboard.press('ArrowDown');
+  await expect(editor).toHaveText(expected[1]!);
+  await page.keyboard.press('Escape');
+
+  await scroller.evaluate((el) => { el.scrollTop = 3500; });
+  await expect.poll(async () => (await fullyVisible()).at(-1)).toMatch(/^Bullet 1\d\d$/);
+  const last = (await fullyVisible()).at(-1)!;
+  const farther = await scrollTop();
+  await page.keyboard.press('ArrowUp');
+  await expect(editor).toHaveText(last);
+  expect(await scrollTop()).toBe(farther);
+});
+
+test('arrows enter a long bullet at a visible line without moving the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 390 });
+  const lines = Array.from({ length: 100 }, (_, i) => `Line ${i + 1}`).join('\n');
+  await openStoredOutline(page, 'minimal-arrow-entry-long', { lines: [lines] });
+  const scroller = page.locator('.scroller');
+  const editor = page.locator('.row .text[contenteditable]');
+  for (const [arrow, top] of [['ArrowDown', 900], ['ArrowUp', 1600]] as const) {
+    const before = await scroller.evaluate((el, at) => {
+      el.scrollTop = at;
+      return el.scrollTop;
+    }, top);
+    expect(before).toBe(top);
+    await page.keyboard.press(arrow);
+    await expect(editor).toBeFocused();
+    expect(await scroller.evaluate((el) => {
+      const caret = getSelection()!.getRangeAt(0).getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      return caret.height > 0 && caret.top >= box.top && caret.bottom <= box.bottom;
+    })).toBe(true);
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBe(before);
+    await page.keyboard.press('Escape');
+  }
+});

@@ -42,6 +42,13 @@ export function setCaret(el: HTMLElement, offset: number): void {
   getSelection()?.collapse(...pointAt(el, offset));
 }
 
+export function caretBoxAt(el: HTMLElement, offset: number): DOMRect {
+  const range = document.createRange();
+  range.setStart(...pointAt(el, offset));
+  range.collapse(true);
+  return range.getBoundingClientRect();
+}
+
 /** Selects from text offset `anchor` to `focus` in `el`; `focus` may come first. */
 export function selectRange(el: HTMLElement, anchor: number, focus: number): void {
   getSelection()?.setBaseAndExtent(...pointAt(el, anchor), ...pointAt(el, focus));

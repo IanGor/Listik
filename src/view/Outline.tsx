@@ -16,6 +16,7 @@ import { keepSpot, reloaded, takeSpot } from './reload';
 import { onGlobalKeys, onHistoryKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { copyBullets } from './outline-clipboard';
+import { caretBoxAt, focusIn, lineHeight, offsetFromPoint } from './caret';
 import { Row } from './Row';
 import { RowMenu } from './RowMenu';
 import { Shortcuts } from './Shortcuts';
@@ -68,6 +69,8 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
   let probe!: HTMLSpanElement;
   let indentProbe!: HTMLSpanElement;
   let spacer!: HTMLDivElement;
+  let lastCaret: { id: RowKey; caret: number } | undefined;
+  let viewportCaret: typeof lastCaret;
 
   const observeHeader = (el: HTMLElement) => {
     const desk = el.closest<HTMLElement>('.desk')!;
@@ -132,6 +135,58 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
     return props.minimal && !o.readOnly && o.rows.length === 0;
   };
   const addBullet = () => o.run((ctx) => appendChild(ctx, o.rows.top));
+  const rememberCaret = () => {
+    const el = document.activeElement;
+    if (!props.minimal || !(el instanceof HTMLElement) || !el.matches('.text[contenteditable]') || !windowEl.contains(el)) return;
+    const id = el.closest<HTMLElement>('.row')?.dataset.id;
+    const caret = focusIn(el);
+    if (id && caret !== null) lastCaret = { id, caret };
+  };
+
+  const enterVisibleRow = (down: boolean) => {
+    const viewport = scroller.getBoundingClientRect();
+    const visible = Array.from(windowEl.querySelectorAll<HTMLElement>(':scope > .row')).flatMap((row) => {
+      const box = row.getBoundingClientRect();
+      return box.bottom > viewport.top && box.top < viewport.bottom ? [{ row, box }] : [];
+    });
+    const inside = (box: DOMRect) => box.top >= viewport.top && box.bottom <= viewport.bottom;
+    const remembered = lastCaret && visible.find(({ row }) => row.dataset.id === lastCaret?.id);
+    const text = remembered?.row.querySelector<HTMLElement>('.text');
+    if (lastCaret && text) {
+      const caret = Math.min(lastCaret.caret, text.textContent?.length ?? 0);
+      const box = caretBoxAt(text, caret);
+      if (inside(box.height ? box : text.getBoundingClientRect())) {
+        viewportCaret = { id: lastCaret.id, caret };
+        o.setFocus(viewportCaret);
+        return true;
+      }
+    }
+    if (!down) visible.reverse();
+    const full = visible.find(({ box }) => inside(box));
+    for (const { row } of full ? [full] : visible) {
+      const id = row.dataset.id;
+      const body = row.querySelector<HTMLElement>('.text');
+      if (!id || !body) continue;
+      if (full) {
+        viewportCaret = { id, caret: down ? 0 : body.textContent?.length ?? 0 };
+        o.setFocus(viewportCaret);
+        return true;
+      }
+      const box = body.getBoundingClientRect();
+      const top = Math.max(box.top, viewport.top);
+      const bottom = Math.min(box.bottom, viewport.bottom);
+      const step = lineHeight(body);
+      const half = Math.min(step / 2, (bottom - top) / 2);
+      for (let y = down ? top + half : bottom - half; y > top && y < bottom; y += down ? step : -step) {
+        const caret = offsetFromPoint(body, box.left + 1, y);
+        if (caret === null || !inside(caretBoxAt(body, caret))) continue;
+        viewportCaret = { id, caret };
+        o.setFocus(viewportCaret);
+        return true;
+      }
+    }
+    return false;
+  };
   const drag = createDrag(o, () => ({ scroller, spacer, windowEl, indentProbe }));
 
   const rowObserver = new ResizeObserver((entries) => {
@@ -224,6 +279,11 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
           addBullet();
         } else if (!o.readOnly && !e.isComposing && target instanceof Element && !target.closest('input, textarea, .menu')) {
           if (onSelectionKeys(e, o, true)) return;
+          if (!o.selection() && !target.closest('[contenteditable]') && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey &&
+              (e.key === 'ArrowUp' || e.key === 'ArrowDown') && enterVisibleRow(e.key === 'ArrowDown')) {
+            e.preventDefault();
+            return;
+          }
           onHistoryKeys(e, o, true);
         }
         return;
@@ -258,6 +318,14 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
     };
     window.addEventListener('keydown', onKeyDown);
     onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+    document.addEventListener('selectionchange', rememberCaret);
+    window.addEventListener('keydown', rememberCaret, true);
+    window.addEventListener('pointerdown', rememberCaret, true);
+    onCleanup(() => {
+      document.removeEventListener('selectionchange', rememberCaret);
+      window.removeEventListener('keydown', rememberCaret, true);
+      window.removeEventListener('pointerdown', rememberCaret, true);
+    });
     const onCopy = (e: ClipboardEvent) => { if (props.minimal && active()) copyBullets(e, o); };
     window.addEventListener('copy', onCopy);
     onCleanup(() => window.removeEventListener('copy', onCopy));
@@ -360,7 +428,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
   }, { defer: true }));
 
   createEffect(() => {
-    const id = o.focus()?.id ?? (props.minimal ? o.selection()?.head : undefined);
+    const focus = o.focus();
+    if (focus && focus === viewportCaret) return;
+    const id = focus?.id ?? (props.minimal ? o.selection()?.head : undefined);
     if (!id) return;
     const i = o.rows.indexOf(id);
     if (i >= 0) ensureVisible(i);
