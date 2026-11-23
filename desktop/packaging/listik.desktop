@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Listik
-Comment=Outliner with live Omarchy themes
-Comment[ru]=Бесконечный список с темами Omarchy
+Comment=Outliner
+Comment[ru]=Бесконечный список
 Exec=listik
 Icon=listik
 Terminal=false

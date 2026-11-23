@@ -54,32 +54,61 @@ test('the built app runs under its Content Security Policy: editing, the compact
   expect(await page.evaluate(() => (window as unknown as { violations: string[] }).violations)).toEqual([]);
 });
 
-test('bundled themes persist and switch offline under the production CSP', async ({ page, context }) => {
-  await page.goto('/?demo');
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.reload();
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
-  await page.getByRole('button', { name: 'Меню документа' }).click();
-  await page.getByRole('menuitem', { name: /^Тема / }).click();
-  await page.getByRole('radio', { name: 'Dracula', exact: true }).check();
-  await page.getByRole('radio', { name: 'Светлая', exact: true }).check();
-  await context.setOffline(true);
-  await page.reload();
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(40, 42, 54)');
-  await page.getByRole('button', { name: 'Меню документа' }).click();
-  await page.getByRole('menuitem', { name: /^Тема / }).click();
-  await expect(page.getByRole('radio', { name: 'Светлая', exact: true })).toBeChecked();
-  await page.getByRole('radio', { name: 'Catppuccin', exact: true }).check();
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(239, 241, 245)');
-  await context.setOffline(false);
-});
+const colors = {
+  light: { canvas: 'rgb(250, 249, 245)', text: 'rgb(20, 20, 19)', chrome: '#faf9f5' },
+  dark: { canvas: 'rgb(38, 38, 36)', text: 'rgb(250, 249, 245)', chrome: '#262624' },
+} as const;
 
-test('first paint resolves the saved palette even before the app bundle loads', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('listik-appearance', JSON.stringify({ version: 1, themeId: 'dracula', mode: 'light' })));
-  await page.route('**/assets/*.js', route => route.abort());
-  await page.goto('/?demo');
-  await expect(page.locator('html')).toHaveAttribute('data-palette', 'dracula');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(40, 42, 54)');
-  await expect(page.locator('meta[name="theme-color"]').first()).toHaveAttribute('content', '#282a36');
-});
+for (const scheme of ['light', 'dark'] as const) {
+  test(`first paint is ${scheme} before the app bundle, despite old theme settings`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.addInitScript(oldMode => {
+      localStorage.setItem('listik-appearance', JSON.stringify({ version: 1, themeId: 'dracula', mode: oldMode }));
+      localStorage.setItem('listik-theme', oldMode);
+      localStorage.setItem('listik-theme-system', oldMode);
+    }, scheme === 'light' ? 'dark' : 'light');
+    await page.route('**/assets/*.js', route => route.abort());
+    await page.goto('/?demo');
+    await expect(page.locator('html')).toHaveCSS('background-color', colors[scheme].canvas);
+    await expect(page.locator('body')).toHaveCSS('color', colors[scheme].text);
+    const themeColor = await page.locator('meta[name="theme-color"]').evaluateAll(nodes =>
+      nodes.find(node => matchMedia(node.getAttribute('media') ?? 'all').matches)?.getAttribute('content'),
+    );
+    expect(themeColor?.toLowerCase()).toBe(colors[scheme].chrome);
+  });
+}
+
+for (const mode of ['minimal', 'legacy'] as const) {
+  test(`the ${mode} interface follows the system live and offline`, async ({ page, context }) => {
+    await page.addInitScript(view => localStorage.setItem('listik-view-mode', view), mode);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/?demo');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await expect(page.getByRole('menuitem', { name: /^Тема/ })).toHaveCount(0);
+    await expect(page.getByRole('menu')).not.toHaveCSS('box-shadow', 'none');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.getByRole('menu')).not.toHaveCSS('box-shadow', 'none');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.keyboard.press('Escape');
+    const row = page.locator('.row .text').first();
+    await row.click();
+    const editor = page.locator('.row .text[contenteditable]');
+    await expect(editor).toBeFocused();
+    await expect(page.locator('body')).toHaveCSS('background-color', colors.light.canvas);
+    await context.setOffline(true);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect(page.locator('body')).toHaveCSS('background-color', colors.dark.canvas);
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveText('Том первый');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.locator('body')).toHaveCSS('color', colors.light.text);
+    await expect(editor).toBeFocused();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.reload();
+    await expect(row).toHaveText('Том первый');
+    await expect(page.locator('body')).toHaveCSS('background-color', colors.dark.canvas);
+  });
+}

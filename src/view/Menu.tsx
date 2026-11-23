@@ -11,8 +11,6 @@ import type { Outliner } from './outliner';
 import { MOD, phone, touch } from './screen';
 import { describeSync, syncState } from './SyncDialog';
 import { TEXT_SCALES, stepTextScale, textScale } from './textsize';
-import { THEMES, preference, openThemePanel, themePanelOpen } from './theme';
-import { ThemePanel } from './ThemePanel';
 import { exportUsage } from './analytics';
 
 /**
@@ -46,7 +44,7 @@ const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour
 
 /**
  * The document menu: export, import, automatic copies into a folder, the
- * theme switch and sync. Its button carries a dot while changes wait for the
+ * text settings and sync. Its button carries a dot while changes wait for the
  * server or the connection is lost.
  */
 export function DocumentMenu(props: { o: Outliner; minimal?: boolean; toggleView?: () => void }) {
@@ -134,11 +132,10 @@ export function DocumentMenu(props: { o: Outliner; minimal?: boolean; toggleView
 
   return (
     <div class="menu-anchor" ref={root}>
-      <Show when={!props.minimal && themePanelOpen()}><ThemePanel /></Show>
       <button ref={trigger} data-action="Menu.1"
         type="button"
         class="icon-button menu-button"
-        title={props.minimal ? 'Меню документа' : o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
+        title={props.minimal ? 'Меню документа' : o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, синхронизация'}
         aria-label="Меню документа"
         aria-haspopup="menu"
         aria-expanded={open()}
@@ -208,9 +205,6 @@ export function DocumentMenu(props: { o: Outliner; minimal?: boolean; toggleView
             </Show>
             <div class="menu-sep" role="separator" />
           </Show>
-          <button data-action="Menu.7" type="button" role="menuitem" aria-haspopup="dialog" onClick={() => { close(); openThemePanel(); }}>
-            Тема <span class="hint">{THEMES.find(t => t.id === preference().themeId)?.name}</span><CHEVRON />
-          </button>
           {/* Steps keep the menu open: the outline behind shows each size at once. */}
           <div class="menu-stepper" role="group" aria-label="Размер текста">
             <span class="menu-stepper-label">Размер текста</span>

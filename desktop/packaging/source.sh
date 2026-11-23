@@ -9,8 +9,8 @@ tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
   --transform="s,^,listik-desktop-$version/," \
   --exclude=node_modules --exclude=dist --exclude=tests --exclude=PKGBUILD \
   --exclude='*.tar.gz' --exclude='*.pkg.tar.*' --exclude=src --exclude=pkg \
-  -czf "packaging/$archive" package.json package-lock.json main.cjs preload.cjs \
-  omarchy.cjs policy.cjs error.html error.js icon.png pack.cjs packaging
+  -czf "packaging/$archive" package.json package-lock.json main.cjs \
+  policy.cjs error.html error.js icon.png pack.cjs packaging
 checksum=$(sha256sum "packaging/$archive" | cut -d' ' -f1)
 sed -i "s/^sha256sums=.*/sha256sums=('$checksum')/" packaging/PKGBUILD
 printf 'Source archive: %s\n' "packaging/$archive"

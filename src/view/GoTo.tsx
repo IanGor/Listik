@@ -4,7 +4,6 @@ import { findPlaces, meansToday, placeOf, type Place } from '../model/places';
 import { searchable } from '../model/tags';
 import type { Outliner } from './outliner';
 import { MOD, phone } from './screen';
-import { openThemePanel } from './theme';
 
 /** Places listed for what is typed, and recent ones before anything is. */
 const PLACES = 8;
@@ -30,7 +29,6 @@ const actions = (o: Outliner): Item[] => {
     ...(o.readOnly || !o.history.canUndo ? [] : [act('Отменить', `${MOD}+Z`, () => o.undo())]),
     ...(o.readOnly || !o.history.canRedo ? [] : [act('Повторить', `${MOD}+Shift+Z`, () => o.redo())]),
     act(o.trashOpen() ? 'Скрыть корзину' : 'Корзина', '', () => o.showTrash()),
-    act('Выбрать тему', '', openThemePanel),
     act('Синхронизация', '', () => o.showSync()),
     act('Жесты и клавиши', '?', () => o.showHelp()),
     ...(o.readOnly ? [] : [act('Создать структуру', 'PARA и календарь', () => o.createStructure())]),

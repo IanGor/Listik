@@ -1,6 +1,5 @@
 /* @refresh reload */
 import { render } from 'solid-js/web'
-import './index.css'
 import App from './App.tsx'
 import { watchPointer, watchTablet } from './view/screen'
 import { followSystemSize } from './view/textsize'

@@ -18,7 +18,7 @@ const assert = require('node:assert/strict');
   let app;
   const failures = [];
   try {
-    app = await _electron.launch({ chromiumSandbox: true, executablePath: require('../node_modules/electron'), args: [join(__dirname, 'smoke.cjs')], env: { ...process.env, LISTIK_TEST_SITE: site, LISTIK_TEST_PROFILE: join(root, 'profile'), LISTIK_TEST_THEME: join(root, 'no-omarchy') } });
+    app = await _electron.launch({ chromiumSandbox: true, executablePath: require('../node_modules/electron'), args: [join(__dirname, 'smoke.cjs')], env: { ...process.env, LISTIK_TEST_SITE: site, LISTIK_TEST_PROFILE: join(root, 'profile') } });
     const page = await app.firstWindow({ timeout: 10000 });
     await page.locator('#note').fill('saved locally');
     await page.evaluate(() => { window.reloadMarker = true; });

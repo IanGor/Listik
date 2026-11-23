@@ -2,7 +2,7 @@
 pkgname=listik
 pkgver=0.1.1
 pkgrel=1
-pkgdesc='Listik desktop with live Omarchy themes'
+pkgdesc='Listik desktop outliner'
 arch=('x86_64' 'aarch64')
 url='https://iangor.github.io/Listik/'
 # The project has no license grant yet; this recipe is for local builds.
@@ -11,7 +11,7 @@ depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils' 'libdrm' 'mesa')
 makedepends=('nodejs>=22.12' 'npm')
 options=('!strip')
 source=("listik-desktop-$pkgver.tar.gz")
-sha256sums=('5849424431aff9b5fb37eb5c31c740fbcf228d999af85503972189e0aa69ac1e')
+sha256sums=('c464cacc6bfa6d2e3e042223dd1a4a02047c36c450796497f478c0fb0cf5bb1f')
 
 build() {
   cd "$srcdir/listik-desktop-$pkgver"

@@ -50,10 +50,18 @@ test.beforeEach(async ({ page }, info) => {
 test('a button lights the instant it is pressed, not on release', async ({ page }) => {
   const crumb = page.locator('.crumb.current');
   const box = (await crumb.boundingBox())!;
+  const pressed = await page.locator('body').evaluate(body => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--surface-2)';
+    body.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  // --surface-2 of the light theme, at once: no transition on the way in.
-  await expect(crumb).toHaveCSS('background-color', 'rgb(229, 229, 229)', { timeout: 100 });
+  // --surface-2 at once: no transition on the way in.
+  await expect(crumb).toHaveCSS('background-color', pressed, { timeout: 100 });
   await page.mouse.up();
 });
 
@@ -1303,7 +1311,7 @@ test.describe('structure and calendar', () => {
     await page.locator('.row').filter({ has: page.locator('.text', { hasText: /^Backlog$/ }) }).locator('.bullet').click();
     await page.screenshot({ path: 'test-results/kanban-light.png', fullPage: true, animations: 'disabled' });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
     await page.screenshot({ path: 'test-results/kanban-dark.png', fullPage: true, animations: 'disabled' });
     // Rename the original project: both card labels follow without reloading.
     await page.locator('.task-project').first().click();
@@ -2466,61 +2474,17 @@ test('the shortcuts panel opens with ? and Ctrl+/ and closes with Esc', async ({
   await expect(panel).toBeHidden();
 });
 
-test.describe('theme', () => {
-  const background = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  const LIGHT = 'rgb(255, 255, 255)';
-  const DARK = 'rgb(28, 28, 30)';
-
-  test('follows auto and preserves explicit mode after system switches and reload', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await page.goto('/?demo');
-    await expect.poll(() => background(page)).toBe(DARK);
-    await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitem', { name: /^Тема / }).click();
-    await page.getByRole('radio', { name: 'Светлая', exact: true }).check();
-    await page.keyboard.press('Escape');
-    await expect.poll(() => background(page)).toBe(LIGHT);
-    await page.emulateMedia({ colorScheme: 'light' });
-    await page.emulateMedia({ colorScheme: 'dark' });
-    await page.reload();
-    await expect.poll(() => background(page)).toBe(LIGHT);
-  });
-
-  test('a pick made under another system theme is dropped at the start', async ({ page }) => {
-    await page.emulateMedia({ colorScheme: 'light' });
-    await page.goto('/?demo');
-    await page.evaluate(() => {
-      localStorage.removeItem('listik-appearance');
-      localStorage.setItem('listik-theme', 'dark');
-      localStorage.setItem('listik-theme-system', 'dark');
-    });
-    await page.reload();
-    await expect.poll(() => background(page)).toBe(LIGHT);
-  });
-
-  test('a system that tells no theme gets the dark one', async ({ page }) => {
-    // A browser without prefers-color-scheme: neither light nor dark matches.
-    await page.addInitScript(() => {
-      const own = window.matchMedia.bind(window);
-      window.matchMedia = (q: string) => (q.includes('prefers-color-scheme') ? { ...own('(max-width: 0px)'), matches: false, media: 'not all', addEventListener() {}, removeEventListener() {} } as unknown as MediaQueryList : own(q));
-    });
-    await page.goto('/?demo');
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    expect(await background(page)).toBe(DARK);
-  });
-});
-
 test.describe('top edge (iPadOS Home Screen app)', () => {
   // iPadOS 26 blurs the top of a Home Screen app unless a sticky or fixed opaque box spans it.
   test('the workspace spans the top edge with an opaque background in both themes', async ({ page }) => {
     const topbar = page.locator('.workspace');
     await expect(topbar).toHaveCSS('position', 'relative');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(245, 245, 245)');
-    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(243, 240, 232)');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
     expect((await topbar.boundingBox())!.width).toBe(page.viewportSize()!.width);
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(topbar).toHaveCSS('background-color', 'rgb(20, 20, 20)');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await expect(topbar).toHaveCSS('background-color', 'rgb(30, 30, 28)');
   });
 });
 
@@ -2627,7 +2591,7 @@ test.describe('phone screen', () => {
   const rightmost = (page: Page) =>
     page.locator('.crumbbar > *').evaluateAll((els) => Math.max(...els.map((e) => e.getBoundingClientRect().right)));
 
-  test('the header fits; the theme switch works from the menu', async ({ page }) => {
+  test('the header and menu fit on narrow phones', async ({ page }) => {
     // A OnePlus 8 held upright, then the narrowest phones.
     for (const width of [412, 320]) {
       await page.setViewportSize({ width, height: 800 });
@@ -2647,9 +2611,7 @@ test.describe('phone screen', () => {
     }
 
     await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitem', { name: /^Тема / }).click();
-    await page.getByRole('radio', { name: 'Тёмная', exact: true }).check();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.getByRole('menuitem', { name: /^Тема/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page.locator('.menu')).toHaveCount(0);
   });
@@ -4785,7 +4747,7 @@ test.describe('sidebar favorites', () => {
     await page.locator('.searchbar .star').click();
     await page.screenshot({ path: '/tmp/listik-favorites.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
     await expect(page.locator('.navigation-sidebar .home-button')).toHaveCount(0);
     await page.screenshot({ path: '/tmp/listik-favorites-dark.png' });
     await star.click();
@@ -4915,12 +4877,12 @@ test.describe('Apple HIG interface', () => {
   test('materials have opaque accessibility fallbacks and high contrast keeps selection visible', async ({ page }) => {
     const session = await page.context().newCDPSession(page);
     await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }, { name: 'prefers-reduced-transparency', value: 'reduce' }] });
-    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(241, 238, 230)');
     await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
     await session.detach();
     await page.emulateMedia({ contrast: 'more', reducedMotion: 'reduce' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('backdrop-filter', 'none');
-    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(243, 243, 243)');
+    await expect(page.locator('.navigation-surface')).toHaveCSS('background-color', 'rgb(241, 238, 230)');
     await expect(page.locator('.row .text').first()).toHaveCSS('color', 'rgb(0, 0, 0)');
     await page.emulateMedia({ forcedColors: 'active' });
     await expect(page.locator('.navigation-surface')).toHaveCSS('box-shadow', 'none');
@@ -5021,7 +4983,7 @@ test.describe('sidebar month calendar', () => {
     await expect(page.locator('.zoom-title')).toContainText('12');
     await page.screenshot({ path: 'test-results/sidebar-calendar-desktop.png' });
     await page.emulateMedia({ colorScheme: 'dark' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
     await expect(calendar.locator('[aria-current="date"]')).toBeVisible();
     await page.screenshot({ path: 'test-results/sidebar-calendar-dark.png' });
   });

@@ -12,7 +12,4 @@ function isExternalURL(value) {
     return !url.username && !url.password && ['https:', 'http:', 'mailto:'].includes(url.protocol);
   } catch { return false; }
 }
-function isTrustedSender(event, contents, site = APP_URL) {
-  return event.sender === contents && event.senderFrame === contents.mainFrame && isAppURL(event.senderFrame?.url, site);
-}
-module.exports = { APP_URL, isAppURL, isExternalURL, isTrustedSender };
+module.exports = { APP_URL, isAppURL, isExternalURL };

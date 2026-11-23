@@ -7,7 +7,6 @@ const assert = require('node:assert/strict');
 const repo = join(__dirname, '../..');
 const site = 'http://127.0.0.1:5271/';
 let preview, sync, electron, browser;
-const palette = (mode, bg, fg) => `mode = "${mode}"\nbackground = "${bg}"\nforeground = "${fg}"\naccent = "#7e9cd8"\n`;
 async function waitServer(url) {
   for (let i = 0; i < 100; i++) {
     try { if ((await fetch(url)).ok) return; } catch {}
@@ -17,22 +16,18 @@ async function waitServer(url) {
 }
 async function main() {
   const root = await mkdtemp(join(tmpdir(), 'listik-desktop-smoke-'));
-  const theme = join(root, 'omarchy');
   const profile = join(root, 'profile');
   const web = join(root, 'site');
   await cp(join(repo, 'dist'), web, { recursive: true });
   const originalHTML = await readFile(join(web, 'index.html'), 'utf8');
   const webVersion = version => writeFile(join(web, 'index.html'), originalHTML.replace('<head>', `<head><meta name="smoke-version" content="${version}">`));
   await webVersion(1);
-  await mkdir(join(theme, 'theme'), { recursive: true });
-  await writeFile(join(theme, 'theme/colors.toml'), palette('dark', '#1f1f28', '#dcd7ba'));
-  const launch = () => _electron.launch({ chromiumSandbox: true, executablePath: require('../node_modules/electron'), args: [join(__dirname, 'smoke.cjs')], env: { ...process.env, LISTIK_TEST_SITE: site, LISTIK_TEST_PROFILE: profile, LISTIK_TEST_THEME: theme }, timeout: 30000 });
+  const launch = () => _electron.launch({ chromiumSandbox: true, executablePath: require('../node_modules/electron'), args: [join(__dirname, 'smoke.cjs')], env: { ...process.env, LISTIK_TEST_SITE: site, LISTIK_TEST_PROFILE: profile }, timeout: 30000 });
   try {
-    // A fresh installation offline must show a local retry page without a bridge.
+    // A fresh installation offline must show a local retry page.
     console.log('Launching Electron'); electron = await launch(); console.log('Electron launched');
     let page = await electron.firstWindow({ timeout: 15000 });
     await expect(page.getByRole('heading', { name: 'Не удалось открыть Listik' })).toBeVisible();
-    assert.equal(await page.evaluate(() => typeof window.listikDesktop), 'undefined');
     const retried = page.waitForEvent('domcontentloaded');
     await electron.evaluate(({ BrowserWindow }) => {
       const wc = BrowserWindow.getAllWindows()[0].webContents;
@@ -47,23 +42,18 @@ async function main() {
     await waitServer('http://127.0.0.1:5272/health');
     await page.getByRole('link', { name: 'Повторить' }).click();
     await expect(page.locator('.row').first()).toBeVisible();
-    assert.deepEqual(await page.evaluate(() => ({ node: typeof window.require, mode: window.listikDesktop.getTheme().palette.mode })), { node: 'undefined', mode: 'dark' });
+    assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
     assert.equal(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences().sandbox), true);
-    await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitem', { name: /^Тема / }).click();
-    await page.getByRole('radio', { name: 'Omarchy', exact: true }).check();
-    await page.getByRole('button', { name: 'Готово' }).click();
-    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(31, 31, 40)');
-    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('1f1f28');
-    await writeFile(join(theme, 'theme/colors.toml'), palette('light', '#faf9f5', '#1f1e1c'));
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('faf9f5');
-    await page.getByRole('button', { name: 'Меню документа' }).click();
-    await page.getByRole('menuitem', { name: /^Тема / }).click();
-    await page.getByRole('radio', { name: 'Dracula', exact: true }).check();
-    await page.getByRole('button', { name: 'Готово' }).click();
-    await expect.poll(() => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase())).toBe('282a36');
-    // Same-origin subframes must not gain the preload bridge.
+    const shellBackground = () => electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBackgroundColor().slice(-6).toLowerCase());
+    assert.equal(await shellBackground(), await electron.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors ? '262624' : 'faf9f5'));
+    await electron.evaluate(({ nativeTheme }) => { nativeTheme.themeSource = 'dark'; });
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+    await expect.poll(shellBackground).toBe('262624');
+    await electron.evaluate(({ nativeTheme }) => { nativeTheme.themeSource = 'light'; });
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
+    await expect.poll(shellBackground).toBe('faf9f5');
+    await electron.evaluate(({ nativeTheme }) => { nativeTheme.themeSource = 'system'; });
+    // Same-origin subframes still cannot load an embedded project page.
     await page.evaluate(() => { const f = document.createElement('iframe'); f.src = '/?db=child&empty'; document.body.append(f); });
     await expect.poll(() => page.frames().length).toBe(2);
     const frame = page.frames().find(f => f !== page.mainFrame());
@@ -71,11 +61,11 @@ async function main() {
     // boundary is preventing a foreign document from ever loading into it.
     await page.waitForTimeout(500);
     assert.notEqual(frame.url(), site + '?db=child&empty', 'child document navigation must be blocked');
-    assert.equal(await frame.evaluate(() => typeof window.listikDesktop), 'undefined');
     await page.evaluate(() => document.querySelector('iframe').remove());
     // Populate a remote encrypted document with the existing browser flow.
-    browser = await chromium.launch({ executablePath: '/usr/bin/chromium' });
+    browser = await chromium.launch();
     const source = await browser.newPage();
+    await source.addInitScript(() => localStorage.setItem('listik-view-mode', 'legacy'));
     await source.goto(site + '?db=source&empty');
     await source.locator('.row .text').click();
     await source.keyboard.type('from server');
@@ -91,6 +81,8 @@ async function main() {
     await source.getByRole('button', { name: 'Меню документа' }).click();
     await source.getByRole('menuitem', { name: /Синхронизация/ }).click();
     const code = await source.locator('.sync-dialog .doc-code').textContent();
+    await page.getByRole('button', { name: 'Меню документа' }).click();
+    await page.getByRole('menuitem', { name: 'Вернуться к прежнему интерфейсу' }).click();
     await page.getByRole('button', { name: 'Меню документа' }).click();
     await page.getByRole('menuitem', { name: /Синхронизация/ }).click();
     await page.getByRole('tab', { name: 'Подключиться к существующему' }).click();
@@ -115,7 +107,7 @@ async function main() {
     preview.kill(); await new Promise(r => preview.once('exit', r)); preview = null;
     electron = await launch(); page = await electron.firstWindow({ timeout: 15000 });
     await expect(page.locator('.row .text').first()).toHaveText('from server', { timeout: 15000 });
-    console.log('PASS Electron: sandbox, isolated bridge, live theme, fresh-profile server sync, persistent profile, next-load web update, offline restart, first-run retry');
+    console.log('PASS Electron: sandbox, blocked subframes, system appearance, fresh-profile server sync, persistent profile, next-load web update, offline restart, first-run retry');
   } finally {
     await browser?.close(); await electron?.close(); preview?.kill(); sync?.kill();
     await rm(root, { recursive: true, force: true });

@@ -3,20 +3,19 @@
   "generatedAt": "2026-10-20T15:30:00+03:00",
   "title": "Design System: Listik",
   "extensions": {
-    "omarchy": { "source": "Electron bridge v1 / colors.toml", "policy": "Always follow Omarchy; no manual switch", "scope": "Color tokens only; preserve typography and layout" },
     "colorMeta": {
-      "primary": { "role": "primary", "displayName": "Коралл Claude", "canonical": "#c96442" },
-      "link": { "role": "primary", "displayName": "Терракотовые чернила", "canonical": "#a9583e" },
-      "bold": { "role": "secondary", "displayName": "Синие чернила", "canonical": "#2f6497" },
-      "italic": { "role": "secondary", "displayName": "Оливковые чернила", "canonical": "#55702f" },
-      "tag": { "role": "secondary", "displayName": "Бирюзовые чернила", "canonical": "#28706a" },
+      "primary": { "role": "primary", "displayName": "Коралл Claude", "canonical": "#9d3e25" },
+      "link": { "role": "primary", "displayName": "Терракотовые чернила", "canonical": "#9d3e25" },
+      "bold": { "role": "secondary", "displayName": "Синие чернила", "canonical": "#244b78" },
+      "italic": { "role": "secondary", "displayName": "Оливковые чернила", "canonical": "#70528a" },
+      "tag": { "role": "secondary", "displayName": "Бирюзовые чернила", "canonical": "#565046" },
       "star": { "role": "secondary", "displayName": "Жёлтая звезда", "canonical": "#a97a00" },
       "canvas": { "role": "neutral", "displayName": "Кремовая бумага", "canonical": "#faf9f5" },
       "canvas-dark": { "role": "neutral", "displayName": "Графит", "canonical": "#262624" },
-      "surface": { "role": "neutral", "displayName": "Подложка", "canonical": "#f2ede4" },
-      "text": { "role": "neutral", "displayName": "Тушь", "canonical": "#1f1e1c" },
-      "muted": { "role": "neutral", "displayName": "Приглушённый", "canonical": "#6c6a64" },
-      "faint": { "role": "neutral", "displayName": "Бледный", "canonical": "#8e8b82" },
+      "surface": { "role": "neutral", "displayName": "Подложка", "canonical": "#f1eee7" },
+      "text": { "role": "neutral", "displayName": "Тушь", "canonical": "#141413" },
+      "muted": { "role": "neutral", "displayName": "Приглушённый", "canonical": "#625d54" },
+      "faint": { "role": "neutral", "displayName": "Бледный", "canonical": "#696359" },
       "hairline": { "role": "neutral", "displayName": "Волосок", "canonical": "#e6dfd8" }
     },
     "typographyMeta": {
@@ -101,7 +100,7 @@
   ],
   "narrative": {
     "northStar": "Бесконечный лист",
-    "overview": "Listik — один лист бумаги, на котором видны только текст и коралловые точки пунктов; всё остальное уходит в тень и появляется, когда нужно: стрелки сворачивания — при наведении на список, панель правки — над клавиатурой телефона, строка быстрой записи — по клавише. Лист тёплый: кремовый холст днём, графитовый ночью, по палитре Claude (`Reference/color_pallete.png`). Плотность и геометрия строк — по Workflowy (`Reference/design and space.png`): шаг строки 30 px, отступ уровня 38 px.\n\nШрифт один — системный моноширинный, и в тексте, и в интерфейсе: лист читается как рукопись, напечатанная на машинке, а моноширинность делает высоту строк предсказуемой (виртуализация на 200 тыс. пунктов опирается на это). Глубина — ступенями светлоты, а не тенями; тень есть только у того, что всплывает над листом (меню, сообщение, строка записи).\n\nПользователь отверг: модальные окна, иконки повсюду, яркие цвета и градиенты, тяжёлые боковые панели (панель-дерево слева сделали и убрали).",
+    "overview": "Listik — один лист бумаги, на котором видны только текст и точки пунктов; всё остальное уходит в тень и появляется, когда нужно: стрелки сворачивания — при наведении на список, панель правки — над клавиатурой телефона, строка быстрой записи — по клавише. Лист тёплый: кремовый холст днём, графитовый ночью, по палитре Anthropic. Плотность и геометрия строк — по Workflowy (`Reference/design and space.png`): шаг строки 30 px, отступ уровня 38 px.\n\nШрифт один — системный моноширинный, и в тексте, и в интерфейсе: лист читается как рукопись, напечатанная на машинке, а моноширинность делает высоту строк предсказуемой (виртуализация на 200 тыс. пунктов опирается на это). Глубина — ступенями светлоты, а не тенями; тень есть только у того, что всплывает над листом (меню, сообщение, строка записи).\n\nПользователь отверг: модальные окна, иконки повсюду, яркие цвета и градиенты, тяжёлые боковые панели (панель-дерево слева сделали и убрали).",
     "keyCharacteristics": [
       "Один шрифт, системный моноширинный, без веб-шрифтов.",
       "Один акцент — коралл; он отмечает состояние, а не украшает.",

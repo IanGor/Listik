@@ -128,7 +128,7 @@ test.describe('adaptive workspace', () => {
     await page.setViewportSize({ width: 834, height: 1194 });
     await expect(page.locator('html')).toHaveClass(/tablet/);
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('html')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
     await page.evaluate(() => document.documentElement.style.setProperty('--font-scale', '1.5'));
     await page.screenshot({ path: '/tmp/listik-responsive-ipad-dark.png' });
     await page.setViewportSize({ width: 320, height: 600 });
@@ -162,7 +162,7 @@ test.describe('adaptive workspace', () => {
     await expect(page.locator('.md-italic')).toHaveCSS('font-style', 'italic');
     for (const theme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: theme });
-      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(page.locator('html')).toHaveCSS('background-color', theme === 'dark' ? 'rgb(38, 38, 36)' : 'rgb(250, 249, 245)');
       const scores = await page.evaluate(() => {
         const rgb = (value: string) => value.match(/[\d.]+/g)!.map(Number);
         const luminance = (values: number[]) => values.slice(0, 3).map((n) => {
@@ -321,7 +321,7 @@ test.describe('compact pinned heading', () => {
         if (!await page.locator('.sketch').count()) expect((await title.boundingBox())!.x).toBeCloseTo(leading, 0);
         await expect(header).toHaveCSS('position', 'sticky');
         await expect(header).toHaveCSS('top', '0px');
-        await expect(header).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+        await expect(header).toHaveCSS('background-color', 'rgb(250, 249, 245)');
         await expect(page.locator('.document-header .crumbbar')).toHaveCSS('backdrop-filter', 'none');
         const button = page.locator('.navigation-toggle');
         const star = page.locator('.node-favorite');
