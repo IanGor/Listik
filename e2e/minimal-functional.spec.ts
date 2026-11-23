@@ -3,13 +3,13 @@ import { expect, test, type Page } from '@playwright/test';
 interface StoredOutline {
   lines: string[];
   task?: string;
-  mirror?: { copy: string; original: string };
+  mirrors?: { copy: string; original: string }[];
 }
 
 /** Load data that could already exist when a user opens the new interface. */
 async function openStoredOutline(page: Page, name: string, outline: StoredOutline) {
   await page.goto('/?demo');
-  await page.evaluate(async ({ name, lines, task, mirror }) => {
+  await page.evaluate(async ({ name, lines, task, mirrors }) => {
     const load = (path: string) => import(/* @vite-ignore */ path);
     const { build } = (await load('/tests/helpers.ts')) as typeof import('../tests/helpers');
     const { openDb, writeSnapshot } = (await load('/src/persist/db.ts')) as typeof import('../src/persist/db');
@@ -18,7 +18,7 @@ async function openStoredOutline(page: Page, name: string, outline: StoredOutlin
 
     const doc = build(lines);
     if (task) doc.apply({ t: 'setTodo', id: task, from: false, to: true });
-    if (mirror) doc.apply({ t: 'setMirror', id: mirror.copy, from: null, to: mirror.original });
+    for (const mirror of mirrors ?? []) doc.apply({ t: 'setMirror', id: mirror.copy, from: null, to: mirror.original });
 
     const db = await openDb(name);
     try {
@@ -99,8 +99,6 @@ test('Shift+arrows select text by line and then extend and shrink through visibl
   await expect(selected).toHaveText([parent]);
   await page.keyboard.press('Shift+ArrowUp');
   await expect(selected).toHaveText(['Before', parent]);
-  await page.keyboard.press('Delete');
-  await expect(rows.locator('.text')).toHaveText(['Before', parent, 'Child', 'Next child', 'After']);
   await page.keyboard.press('Escape');
   await expect(selected).toHaveCount(0);
 
@@ -231,7 +229,7 @@ test('an unresolved link edits its source and leaves Inbox alone', async ({ page
 test('an existing mirror opens its children and edits the shared text', async ({ page }) => {
   await openStoredOutline(page, 'minimal-existing-mirror', {
     lines: ['Источник', '  Общий текст', '    Дочерний пункт', 'Зеркала', '  Копия'],
-    mirror: { copy: 'Копия', original: 'Общий текст' },
+    mirrors: [{ copy: 'Копия', original: 'Общий текст' }],
   });
 
   const rows = page.locator('.row');
@@ -292,4 +290,72 @@ test('reload restores the open branch and its scroll position', async ({ page })
   await page.reload();
   await expect(page.locator('.crumb.current')).toHaveText('Длинная ветка');
   await expect.poll(async () => Math.abs(await scrollTop() - offset)).toBeLessThanOrEqual(2);
+});
+
+test('Backspace and Delete remove selected bullets while keeping unselected descendants', async ({ page }) => {
+  const original = ['Before', 'Parent', 'Child', 'Grandchild', 'Sibling', 'After'];
+  await openStoredOutline(page, 'minimal-delete-selection', {
+    lines: ['Before', 'Parent', '  Child', '    Grandchild', '  Sibling', 'After'],
+  });
+  const rows = page.locator('.row');
+  const text = rows.locator('.text');
+  for (const key of ['Backspace', 'Delete']) {
+    await text.nth(1).click();
+    await text.nth(2).click({ modifiers: ['Shift'] });
+    await expect(page.locator('.row.selected .text')).toHaveText(['Parent', 'Child']);
+    await page.keyboard.press(key);
+    await expect(text).toHaveText(['Before', 'Grandchild', 'Sibling', 'After']);
+    for (const row of await rows.all()) await expect(row).toHaveAttribute('data-depth', '0');
+    await expect(page.locator('.row.selected')).toHaveCount(0);
+
+    await page.keyboard.press('ControlOrMeta+z');
+    await expect(text).toHaveText(original);
+    await expect(rows.nth(3)).toHaveAttribute('data-depth', '2');
+    await expect(rows.nth(4)).toHaveAttribute('data-depth', '1');
+  }
+});
+
+test('vertical arrows end a whole-bullet selection at its moving end', async ({ page }) => {
+  await openStoredOutline(page, 'minimal-end-selection', { lines: ['Above', 'Anchor', 'Below'] });
+  const text = page.locator('.row .text');
+  for (const [key, head] of [['ArrowUp', 0], ['ArrowDown', 2]] as const) {
+    await text.nth(1).click();
+    await text.nth(head).click({ modifiers: ['Shift'] });
+    await expect(page.locator('.row.selected')).toHaveCount(2);
+    await page.keyboard.press(key);
+    await expect(page.locator('.row.selected')).toHaveCount(0);
+    await expect(text.nth(head)).toBeFocused();
+    await expect(text).toHaveText(['Above', 'Anchor', 'Below']);
+  }
+});
+
+test('deleting selected copies keeps the surviving mirror and folded descendants', async ({ page }) => {
+  await openStoredOutline(page, 'minimal-delete-mirrors', {
+    lines: ['Shared [+]', '  Keep first', '  Keep second', 'Selected copy [+]', 'Surviving copy [+]'],
+    task: 'Shared',
+    mirrors: [
+      { copy: 'Selected copy', original: 'Shared' },
+      { copy: 'Surviving copy', original: 'Shared' },
+    ],
+  });
+  const rows = page.locator('.row');
+  const text = rows.locator('.text');
+  await expect(text).toHaveText(['Shared', 'Shared', 'Shared']);
+  await text.nth(1).click();
+  await text.nth(0).click({ modifiers: ['Shift'] });
+  await page.keyboard.press('Delete');
+  await expect(text).toHaveText(['Keep first', 'Keep second', 'Shared']);
+  await expect(rows.nth(0)).toHaveAttribute('data-depth', '0');
+  await expect(rows.nth(1)).toHaveAttribute('data-depth', '0');
+  await expect(rows.last().getByRole('checkbox')).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(text).toHaveText(['Shared', 'Shared', 'Shared']);
+  await text.nth(1).click();
+  await text.nth(1).click({ modifiers: ['Shift'] });
+  await expect(page.locator('.row.selected')).toHaveCount(1);
+  await page.keyboard.press('Backspace');
+  await expect(text).toHaveText(['Shared', 'Shared']);
+  await rows.first().getByRole('button', { name: 'Открыть пункт' }).click();
+  await expect(text).toHaveText(['Keep first', 'Keep second']);
 });

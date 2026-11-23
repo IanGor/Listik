@@ -156,14 +156,26 @@ export function onSelectionKeys(e: KeyboardEvent, o: Outliner, minimal = false):
   const selection = o.selection();
   if (!selection) return false;
   const mod = e.ctrlKey || e.metaKey;
-  const extend = e.shiftKey && !mod && !e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown');
-  if (minimal && e.key !== 'Escape' && !extend) return false;
   const roots = () => o.selectionRoots();
   const handle = (fn: () => void) => {
     e.preventDefault();
     fn();
     return true;
   };
+  if (minimal) {
+    if (e.key === 'Escape') return handle(() => o.select(null));
+    if (mod || e.altKey) return false;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (e.shiftKey) return handle(() => o.extendSelection(e.key === 'ArrowUp' ? -1 : 1));
+      return handle(() => o.setFocus({ id: selection.head, caret: 0 }));
+    }
+    if (!e.shiftKey && (e.key === 'Backspace' || e.key === 'Delete')) return handle(() => {
+      const selected = o.selectedSet();
+      o.select(null);
+      o.run((ctx) => cmd.deleteSelection(ctx, selected));
+    });
+    return false;
+  }
   const copy = () => navigator.clipboard?.writeText(markdownOf(o.doc, roots().map(nodeOf))).catch(() => o.notify('Не удалось скопировать'));
 
   switch (e.key) {

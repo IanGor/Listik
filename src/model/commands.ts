@@ -120,6 +120,11 @@ export function deletionLabel(doc: Doc, id: NodeId): string {
   return doc.isCopy(id) ? 'Удалить эту копию' : 'Удалить';
 }
 
+function moveToTrash(doc: Doc, id: NodeId): void {
+  const n = doc.get(id);
+  doc.apply({ t: 'move', id, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: deletedKey(clock.now(), n.parent!, n.order) } });
+}
+
 function remove(doc: Doc, id: NodeId): void {
   if (!doc.inOutline(id)) return;
   const { roots, deleting } = deletionPlan(doc, id);
@@ -127,8 +132,7 @@ function remove(doc: Doc, id: NodeId): void {
   for (const root of roots) {
     if (!doc.inOutline(root)) continue;
     handOver(doc, root, deleting);
-    const n = doc.get(root);
-    doc.apply({ t: 'move', id: root, from: { parent: n.parent!, order: n.order }, to: { parent: TRASH, order: deletedKey(clock.now(), n.parent!, n.order) } });
+    moveToTrash(doc, root);
   }
 }
 
@@ -656,6 +660,22 @@ export function deleteMany(ctx: Ctx, roots: RowKey[]): Focus | void {
   if (doc.get(doc.root).children.length === 0) return { id: insertNew(doc, doc.root, 0, ''), caret: 0 };
   if (prev) return { id: prev, caret: doc.content(nodeOf(prev)).text.length };
   if (next) return { id: next, caret: 0 };
+}
+
+/** Delete exactly the selected bullets, promoting their physical children in order. */
+export function deleteSelection({ doc, rows }: Ctx, selection: ReadonlySet<RowKey>): void {
+  const ids = new Set([...selection].map(nodeOf));
+  rows.expectMany();
+  for (const id of ids) {
+    const node = doc.get(id);
+    if (node.parent === null || !doc.inOutline(id)) continue;
+    const parent = node.parent;
+    let index = doc.index(id);
+    for (const child of [...node.children]) moveTo(doc, child, parent, index++);
+    // Keep surviving mirrors readable without cascading into unselected copies.
+    handOver(doc, id, ids);
+    moveToTrash(doc, id);
+  }
 }
 
 /**
