@@ -919,6 +919,9 @@ kbd {
   background: var(--tag-chip);
   border-radius: 3px;
   box-shadow: 0 0 0 2px var(--tag-chip);
+}
+
+.tag[data-tag] {
   cursor: pointer;
   transition: background 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
@@ -928,7 +931,7 @@ kbd {
   color: var(--tag-on-strong);
 }
 
-:where(:root.mouse) .tag:hover {
+:where(:root.mouse) .tag[data-tag]:hover {
   --tag-chip: var(--tag-chip-strong);
 }
 

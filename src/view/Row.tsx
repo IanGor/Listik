@@ -43,7 +43,7 @@ export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | nul
         const plain = p.hit ? <mark>{p.text}</mark> : p.text;
         const inner = p.link !== undefined
           ? <span class="link" data-link={p.link}>{plain}</span>
-          : props.minimal ? plain
+          : props.minimal ? (p.tag ? <span class="tag">{plain}</span> : plain)
           : p.url !== undefined
             // Opens in the browser (another tab; the system browser from the installed app).
             ? <a class="url" href={p.url} target="_blank" rel="noopener noreferrer">{plain}</a>

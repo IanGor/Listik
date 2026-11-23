@@ -49,6 +49,25 @@ test('inline formatting and internal links work in a stored outline', async ({ p
   await expect(row.getByText('курсив', { exact: true })).toBeVisible();
 });
 
+test('tags have a theme-aware fill and stay editable as text', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/?db=minimal-tags&empty');
+  const text = page.locator('.row .text');
+  const editor = page.locator('.row .text[contenteditable]');
+  await text.click();
+  await editor.fill('Заметка #работа @дом');
+  await editor.press('Escape');
+
+  const tags = text.locator('.tag');
+  await expect(tags).toHaveText(['#работа', '@дом']);
+  await expect(tags.first()).toHaveCSS('background-color', 'rgba(20, 20, 19, 0.06)');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(tags.first()).toHaveCSS('background-color', 'rgba(250, 249, 245, 0.08)');
+  await tags.first().click();
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveText('Заметка #работа @дом');
+});
+
 test('an unresolved link edits its source and leaves Inbox alone', async ({ page }) => {
   await openStoredOutline(page, 'minimal-unresolved-link', {
     lines: ['📥 Inbox', 'Ссылка на [[Несуществующий пункт]]'],
