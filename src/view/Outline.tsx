@@ -15,6 +15,7 @@ import { GoTo } from './GoTo';
 import { keepSpot, reloaded, takeSpot } from './reload';
 import { onGlobalKeys, onHistoryKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
+import { copyBullets } from './outline-clipboard';
 import { Row } from './Row';
 import { RowMenu } from './RowMenu';
 import { Shortcuts } from './Shortcuts';
@@ -257,6 +258,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
     };
     window.addEventListener('keydown', onKeyDown);
     onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+    const onCopy = (e: ClipboardEvent) => { if (props.minimal && active()) copyBullets(e, o); };
+    window.addEventListener('copy', onCopy);
+    onCleanup(() => window.removeEventListener('copy', onCopy));
   });
 
   const ensureVisible = (i: number) => {

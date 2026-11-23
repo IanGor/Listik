@@ -13,6 +13,7 @@ import { TIME_COMMAND, timeCommandBefore, timeOfDay } from '../model/time';
 import { lineHeight, offsetFromPoint, offsetNear, selectRange, selectionIn, setCaret } from './caret';
 import { onEditorKeyDown, onNoteKeyDown } from './keymap';
 import type { FocusRequest, Outliner } from './outliner';
+import { LINE_TEXT, readBullets } from './outline-clipboard';
 import { suggestKey } from './Suggest';
 import { swipe } from './swipe';
 
@@ -552,11 +553,32 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean; onMouseDo
     if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
   };
 
+  const onCopy = (e: ClipboardEvent) => {
+    if (!props.minimal || !e.clipboardData) return;
+    const range = selectionIn(el);
+    if (!range) return;
+    const text = (el.textContent ?? '').slice(...range);
+    if (!text.includes('\n')) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', text);
+    e.clipboardData.setData(LINE_TEXT, text);
+  };
+
   const onPaste = (e: ClipboardEvent) => {
-    const pasted = e.clipboardData?.getData('text/plain');
-    if (pasted == null) return;
+    const clipboard = e.clipboardData;
+    if (!clipboard) return;
     e.preventDefault();
     const [start, end] = selectionIn(el) ?? [0, 0];
+    if (props.minimal) {
+      const bullets = readBullets(clipboard);
+      if (bullets) {
+        const parent = o.doc.get(nid).parent!;
+        return o.run((ctx) => cmd.placeTrees(ctx, parent, o.doc.index(nid) + 1, bullets));
+      }
+      const lines = clipboard.getData(LINE_TEXT);
+      if (lines) return o.run((ctx) => cmd.insertText(ctx, id, start, end, [lines]));
+    }
+    const pasted = clipboard.getData('text/plain');
     // The legacy editor turns an address pasted over selected words into a link.
     const link = !props.minimal && start < end ? linkOver(el.textContent ?? '', start, end, pasted) : null;
     if (link) o.run((ctx) => cmd.insertText(ctx, id, start, end, [link]));
@@ -574,6 +596,7 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean; onMouseDo
       onKeyDown={(e) => { if (props.minimal || !suggestKey(e)) onEditorKeyDown(e, o, id, el, props.minimal); }}
       onInput={onInput}
       onCompositionEnd={() => { if (!props.minimal) timeCommand(o, id, el, el.textContent ?? '', false); }}
+      onCopy={onCopy}
       onPaste={onPaste}
       onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', write, (t) => o.type(id, t), true, props.minimal)}
     />

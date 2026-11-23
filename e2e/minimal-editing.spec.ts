@@ -246,3 +246,52 @@ test('pasting an indented list preserves its structure', async ({ page }) => {
   await expect(rows.nth(1)).toHaveAttribute('data-depth', '1');
   await expect(rows.nth(2)).toHaveAttribute('data-depth', '0');
 });
+
+test('copied lines paste into the same bullet without splitting it', async ({ page }) => {
+  await page.goto('/?db=minimal-copy-lines&empty');
+  const rows = page.locator('.row');
+  await rows.locator('.text').tap();
+  const editor = rows.locator('.text[contenteditable]');
+  await editor.fill('alpha');
+  await editor.press('End');
+  await editor.press('Shift+Enter');
+  await page.keyboard.type('- beta');
+  await editor.press('Shift+Enter');
+  await editor.press('Shift+Enter');
+  await page.keyboard.type('  gamma');
+  const original = 'alpha\n- beta\n\n  gamma';
+  await expect.poll(() => editor.textContent()).toBe(original);
+  await editor.press('ControlOrMeta+a');
+  await editor.press('ControlOrMeta+c');
+  await editor.press('Control+End');
+  await editor.press('Shift+Enter');
+  await editor.press('ControlOrMeta+v');
+  await expect(rows).toHaveCount(1);
+  await expect.poll(() => editor.textContent()).toBe(original + '\n' + original);
+});
+
+test('copied bullets paste as distinct nodes with their original lines and nesting', async ({ page }) => {
+  await page.goto('/?db=minimal-copy-bullets&empty');
+  const rows = page.locator('.row');
+  const text = rows.locator('.text');
+  const editor = rows.locator('.text[contenteditable]');
+  await text.tap();
+  await pasteText(editor, 'parent\n  child\n  outside selection\ndestination');
+  await text.first().tap();
+  await editor.press('Control+End');
+  await editor.press('Shift+Enter');
+  await page.keyboard.type('- continuation');
+  await editor.press('Control+End');
+  await editor.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(page.locator('.row.selected')).toHaveCount(2);
+  await page.keyboard.press('ControlOrMeta+c');
+  await page.keyboard.press('Escape');
+  await text.last().tap();
+  await editor.press('ControlOrMeta+v');
+  await expect(rows).toHaveCount(6);
+  await expect.poll(() => text.nth(4).textContent()).toBe('parent\n- continuation');
+  await expect(text.nth(3)).toHaveText('destination');
+  await expect(text.nth(5)).toHaveText('child');
+  await expect(rows.nth(5)).toHaveAttribute('data-depth', '1');
+});
