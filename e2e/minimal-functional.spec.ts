@@ -49,6 +49,26 @@ test('inline formatting and internal links work in a stored outline', async ({ p
   await expect(row.getByText('курсив', { exact: true })).toBeVisible();
 });
 
+test('expanded branches show guides at each level of nesting', async ({ page }) => {
+  await openStoredOutline(page, 'minimal-branch-guides', {
+    lines: ['Родитель', '  Дочерний пункт', '    Вложенный пункт', 'Соседняя ветка'],
+  });
+  const rows = page.locator('.row');
+  await expect(rows.locator('.text')).toHaveText(['Родитель', 'Дочерний пункт', 'Вложенный пункт', 'Соседняя ветка']);
+  const readGuides = () => rows.evaluateAll((elements) => elements.map((row) => {
+    const guide = getComputedStyle(row, '::before');
+    return guide.content === 'none' || guide.backgroundImage === 'none' ? 0 : parseFloat(guide.width);
+  }));
+  const [root, child, grandchild, sibling] = await readGuides();
+  expect(root).toBe(0);
+  expect(child).toBeGreaterThan(0);
+  expect(grandchild).toBeGreaterThan(child);
+  expect(sibling).toBe(0);
+  await rows.first().getByRole('button', { name: 'Свернуть пункт' }).click();
+  await expect(rows).toHaveCount(2);
+  expect(await readGuides()).toEqual([0, 0]);
+});
+
 test('tags have a theme-aware fill and stay editable as text', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/?db=minimal-tags&empty');

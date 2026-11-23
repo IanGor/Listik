@@ -3859,5 +3859,4 @@ body.is-dragging * {
 }
 
 .minimal-outline .toggle { opacity: 1; }
-.minimal-outline .row::before { content: none; }
 .minimal-outline .scroller[role="button"] { cursor: text; }
