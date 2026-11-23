@@ -478,7 +478,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
             role={emptyEditable() ? 'button' : undefined} tabIndex={emptyEditable() ? 0 : undefined}
             aria-label={emptyEditable() ? 'Новый пункт' : undefined}
             onClick={(e) => {
-              if ((e.target === scroller || e.target === spacer) && emptyEditable()) addBullet();
+              if (!props.minimal || (e.target !== scroller && e.target !== spacer)) return;
+              if (emptyEditable()) addBullet();
+              else if (o.focus()) o.setFocus(null);
             }}
             onScroll={() => { o.paneScroll = scroller.scrollTop; setScrollTop(scroller.scrollTop); }}
             onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>

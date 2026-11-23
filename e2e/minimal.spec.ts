@@ -76,6 +76,22 @@ test('iPad window controls leave Home accessible after resizing', async ({ page 
   await expect.poll(() => home.boundingBox()).toEqual(fullScreen);
 });
 
+test('the current crumb uses the space available beside Home', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?db=minimal-current-crumb&empty');
+  const row = page.locator('.row').first();
+  const title = 'Подробное название ветки';
+  await row.locator('.text').click();
+  await row.locator('.text[contenteditable]').fill(title);
+  await row.getByRole('button', { name: 'Открыть пункт' }).click();
+
+  const crumb = page.locator('.crumb[aria-current="page"]');
+  await expect(crumb).toHaveText(title);
+  await expect.poll(() => crumb.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1);
+  await page.getByRole('button', { name: 'Главная', exact: true }).click();
+  await expect(row).toContainText(title);
+});
+
 test.describe('touch', () => {
   test.use({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
 

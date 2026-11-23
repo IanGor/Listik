@@ -41,7 +41,7 @@ export function Unlock(props: { opened: Opened; onUnlocked: () => void }) {
             onInput={(e) => setPassphrase(e.currentTarget.value)}
           />
         </label>
-        <label class="check">
+        <label class="remember-device">
           <input data-action="Unlock.2" type="checkbox" checked={remember()} onChange={(e) => setRemember(e.currentTarget.checked)} />
           Запомнить на этом устройстве
         </label>

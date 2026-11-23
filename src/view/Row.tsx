@@ -211,7 +211,7 @@ export function Row(props: RowProps) {
     const tag = target.dataset.tag;
     if (!props.minimal && tag) return o.filterByTag(tag);
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
-    if (link !== undefined) return o.followLink(link, id);
+    if (link !== undefined && (o.followLink(link, id, !props.minimal) || !props.minimal)) return;
     if (!props.minimal) {
       // Shift+click selects the rows from the edited one to here.
       const anchor = o.focus()?.id;
@@ -540,8 +540,8 @@ function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
     if (pasted == null) return;
     e.preventDefault();
     const [start, end] = selectionIn(el) ?? [0, 0];
-    // A web address over selected words: they become its link, [words](address).
-    const link = start < end ? linkOver(el.textContent ?? '', start, end, pasted) : null;
+    // The legacy editor turns an address pasted over selected words into a link.
+    const link = !props.minimal && start < end ? linkOver(el.textContent ?? '', start, end, pasted) : null;
     if (link) o.run((ctx) => cmd.insertText(ctx, id, start, end, [link]));
     // Several lines: an indented list (Markdown, Workflowy, plain) becomes a tree.
     else if (/[\r\n]/.test(pasted)) o.run((ctx) => cmd.insertTrees(ctx, id, start, end, parseIndented(pasted)));

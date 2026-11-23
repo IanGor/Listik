@@ -2323,14 +2323,14 @@ body.is-dragging * {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
-.check {
+.remember-device {
   display: flex;
   gap: 8px;
   align-items: center;
   color: var(--muted);
 }
 
-.check input {
+.remember-device input {
   accent-color: var(--primary);
 }
 
@@ -3830,6 +3830,11 @@ body.is-dragging * {
   padding-block: 4px;
   /* Leave the leading slot for iPadOS window controls in the same row. */
   padding-inline-start: calc(3.5ch + var(--controls-left, 0px));
+}
+
+/* The current crumb is the only title in the new view. */
+.minimal-outline .crumb.current {
+  max-width: 100%;
 }
 
 .minimal-outline .crumbbar button[data-action="ZoomHeader.1"] {

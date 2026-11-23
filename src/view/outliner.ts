@@ -514,24 +514,28 @@ export class Outliner {
    * is in the outline (model/links.ts). A search is cleared, so all of it
    * shows. `from`, the row clicked in, is remembered: its place leads the
    * backlinks there (Backlinks.tsx), the way back. A link to nothing yet
-   * makes its bullet, last in the structure's Inbox (one undo step).
+   * can make its bullet in Inbox when the caller supports that action.
    */
-  followLink(title: string, from?: RowKey): void {
+  followLink(title: string, from?: RowKey, createTarget = true): boolean {
     trackUsage('action.followLink');
     this.settleTitle();
     let id = resolveLink(this.doc, this.text, title);
-    const inbox = id ? null : findInbox(this.doc);
+    const inbox = !id && createTarget ? findInbox(this.doc) : null;
     if (!id && inbox !== null && !this.readOnly) {
       this.run((ctx) => void appendTrees(ctx, inbox, [{ text: title.trim(), children: [] }]), this.keepFocus());
       id = resolveLink(this.doc, this.text, title);
     }
-    if (!id) return this.notify(`Нет пункта «${title.trim()}»`);
+    if (!id) {
+      if (createTarget) this.notify(`Нет пункта «${title.trim()}»`);
+      return false;
+    }
     batch(() => {
       this.setQuery('', true);
       this.setFocus(null);
       this.zoomTo(id);
       this.setCameFrom(from !== undefined && this.doc.has(nodeOf(from)) ? { to: this.doc.origin(id), from: this.contentOf(from).id } : null);
     });
+    return true;
   }
 
   /**
