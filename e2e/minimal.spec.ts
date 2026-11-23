@@ -50,8 +50,84 @@ test('default view, empty branch, keyboard and view preference round trip', asyn
   await expect(rows).toHaveCount(2);
 });
 
+test('minimal header keeps Home and breadcrumbs left and the menu right', async ({ page }) => {
+  await page.goto('/?demo');
+  const open = page.getByRole('button', { name: 'Открыть пункт' }).first();
+  await open.click();
+  await open.click();
+  const breadcrumbs = page.getByRole('navigation', { name: 'Путь' });
+  const path = breadcrumbs.getByRole('button');
+  await expect(path).toHaveCount(3);
+  const trigger = page.getByRole('button', { name: menu });
+
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const [home, ancestor, current] = await Promise.all([path.first().boundingBox(), path.nth(1).boundingBox(), path.last().boundingBox()]);
+    const box = (await trigger.boundingBox())!;
+    expect(home!.x).toBeGreaterThanOrEqual(4);
+    expect(home!.x).toBeLessThanOrEqual(16);
+    expect(ancestor!.x - (home!.x + home!.width)).toBeLessThanOrEqual(24);
+    expect(current!.x).toBeGreaterThan(ancestor!.x);
+    expect(current!.x + current!.width).toBeLessThan(box.x);
+    expect(width - box.x - box.width).toBeGreaterThanOrEqual(4);
+    expect(width - box.x - box.width).toBeLessThanOrEqual(16);
+  }
+
+  await page.setViewportSize({ width: 240, height: 640 });
+  const scrollLeft = () => breadcrumbs.evaluate((el) => el.scrollLeft);
+  await expect.poll(scrollLeft).toBeGreaterThan(0);
+  const end = await scrollLeft();
+  await breadcrumbs.hover();
+  await page.mouse.wheel(0, -300);
+  await expect.poll(scrollLeft).toBeLessThan(end);
+});
+
+test('minimal header menu rests as dots and keeps hover and keyboard focus', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { left: 18, right: 24 } });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/?db=minimal-menu-header&empty');
+  const home = page.getByRole('button', { name: 'Главная', exact: true });
+  const trigger = page.getByRole('button', { name: menu });
+  await expect(trigger.locator('svg circle')).toHaveCount(3);
+  await expect(trigger).toHaveText('');
+  await expect(trigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(trigger).toHaveCSS('border-style', 'none');
+
+  await home.hover();
+  await expect(home).toHaveCSS('background-color', 'rgb(241, 238, 231)');
+  await trigger.hover();
+  await expect(trigger).toHaveCSS('background-color', 'rgb(241, 238, 231)');
+  const radius = await home.evaluate((el) => getComputedStyle(el).borderRadius);
+  await expect(trigger).toHaveCSS('border-radius', radius);
+  const [homeBox, triggerBox] = await Promise.all([home.boundingBox(), trigger.boundingBox()]);
+  expect(triggerBox!.width).toBe(homeBox!.width);
+  expect(triggerBox!.height).toBe(homeBox!.height);
+
+  await page.mouse.move(140, 160);
+  await page.keyboard.press('Tab');
+  await expect(home).toBeFocused();
+  await expect(home).toHaveCSS('outline-style', 'solid');
+  await page.keyboard.press('Tab');
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveCSS('outline-style', 'solid');
+  await expect(trigger).toHaveCSS('outline-width', '2px');
+  await page.keyboard.press('Enter');
+  const popup = page.getByRole('menu');
+  await expect(popup.getByRole('menuitem', { name: legacy })).toBeFocused();
+  const box = (await popup.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(18);
+  expect(box.x + box.width).toBeLessThanOrEqual(320 - 24);
+  await page.keyboard.press('Escape');
+  await expect(popup).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('iPad window controls leave Home accessible after resizing', async ({ page }) => {
   await page.setViewportSize({ width: 1376, height: 1032 });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { left: 18, right: 24 } });
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
     Object.defineProperty(navigator, 'maxTouchPoints', { value: 5 });
@@ -61,12 +137,18 @@ test('iPad window controls leave Home accessible after resizing', async ({ page 
   });
   await page.goto('/?demo');
   const home = page.getByRole('button', { name: 'Главная', exact: true });
+  const trigger = page.getByRole('button', { name: menu });
   const fullScreen = (await home.boundingBox())!;
+  expect(fullScreen.x).toBeGreaterThanOrEqual(18 + 4);
+  expect(fullScreen.x).toBeLessThanOrEqual(18 + 16);
 
   await page.setViewportSize({ width: 600, height: 800 });
-  await expect.poll(async () => (await home.boundingBox())?.x).toBeGreaterThanOrEqual(76);
+  await expect.poll(async () => (await home.boundingBox())?.x).toBeCloseTo(fullScreen.x + 76, 0);
   const windowed = (await home.boundingBox())!;
   expect(windowed.y + windowed.height).toBeLessThanOrEqual(52);
+  const menuBox = (await trigger.boundingBox())!;
+  expect(600 - menuBox.x - menuBox.width).toBeGreaterThanOrEqual(24 + 4);
+  expect(600 - menuBox.x - menuBox.width).toBeLessThanOrEqual(24 + 16);
   await page.getByRole('button', { name: 'Открыть пункт' }).first().click();
   await expect(home).not.toHaveAttribute('aria-current', 'page');
   await home.click();

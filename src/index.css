@@ -3848,10 +3848,16 @@ body.is-dragging * {
 }
 
 .minimal-outline .crumbbar {
+  max-width: none;
   min-height: 48px;
-  padding-block: 4px;
+  padding-block: 2px;
   /* Leave the leading slot for iPadOS window controls in the same row. */
-  padding-inline-start: calc(3.5ch + var(--controls-left, 0px));
+  padding-inline: calc(4px + var(--controls-left, 0px)) 8px;
+}
+
+.minimal-outline .crumbbar .crumbs {
+  margin-inline: 0;
+  padding-inline: 4px;
 }
 
 /* The current crumb is the only title in the new view. */
@@ -3859,11 +3865,31 @@ body.is-dragging * {
   max-width: 100%;
 }
 
-.minimal-outline .crumbbar button[data-action="ZoomHeader.1"] {
+.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button) {
   display: grid;
   place-items: center;
-  min-width: 36px;
-  min-height: 36px;
+  flex: none;
+  width: var(--header-action);
+  height: var(--header-action);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+}
+
+:where(:root.mouse) .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):hover {
+  background: var(--surface);
+}
+
+.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):active {
+  background: var(--surface-2);
+}
+
+.minimal-outline .crumbbar .menu {
+  --menu-available-width: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right) - 16px);
+  min-width: min(320px, var(--menu-available-width));
+  max-width: var(--menu-available-width);
 }
 
 .minimal-outline .bullet {
