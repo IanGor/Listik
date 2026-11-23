@@ -54,7 +54,7 @@ const ADD_HEIGHT = 32;
  * flow normally inside a "window" shifted to the first rendered row's offset,
  * so estimate errors never make rows overlap.
  */
-export function Outline(props: { o: Outliner; secondary?: boolean }) {
+export function Outline(props: { o: Outliner; secondary?: boolean; minimal: boolean; toggleView: () => void }) {
   const o = props.o;
   const split = useContext(SplitContext);
   const active = () => split?.active(o) ?? true;
@@ -125,7 +125,11 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
     return v.total;
   });
   /** A "+" under the list, home or zoomed in, adds a bullet without the keyboard. */
-  const showAdd = () => !o.filter() && !o.readOnly;
+  const showAdd = () => !props.minimal && !o.filter() && !o.readOnly;
+  const emptyEditable = () => {
+    o.rowsVersion();
+    return props.minimal && !o.readOnly && o.rows.length === 0;
+  };
   const addBullet = () => o.run((ctx) => appendChild(ctx, o.rows.top));
   const drag = createDrag(o, () => ({ scroller, spacer, windowEl, indentProbe }));
 
@@ -168,7 +172,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
       const lines = (text: string) => Math.max(1, Math.ceil(text.length / perLine));
       let h = lines(n?.text ?? '') * lh + ROW_PAD;
       // Notes are set smaller (index.css): about NOTE_SCALE of a text line each, NOTE_LINES at most.
-      if (n?.note) {
+      if (!props.minimal && n?.note) {
         let shown = 0;
         for (const line of n.note.split('\n')) shown += lines(line);
         h += Math.min(NOTE_LINES, shown) * lh * NOTE_SCALE;
@@ -207,6 +211,14 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
     // row and the search box handle their own keys.
     const onKeyDown = (e: KeyboardEvent) => {
       if (!active() || e.defaultPrevented) return;
+      if (props.minimal) {
+        if (emptyEditable() && !e.isComposing && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+            e.target === scroller && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          addBullet();
+        }
+        return;
+      }
       // Quick capture to the Inbox: from anywhere, while editing too (by the physical key: any layout).
       if (e.code === 'Space' && (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey) {
         e.preventDefault();
@@ -278,7 +290,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
   const tail = () => Math.max(PAD, Math.round(viewport() / 2));
 
   // A new text size (menu) changes characters per line and line height.
-  createEffect(on([textScale, fontStack], () => updateMetrics(), { defer: true }));
+  createEffect(on([textScale, fontStack, () => props.minimal], () => updateMetrics(), { defer: true }));
 
   // Zooming starts at the top of the new level (zooming out then scrolls to the
   // bullet we left, through the focus effect below).
@@ -298,9 +310,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
   if (o.paneManaged) {
     onMount(() => requestAnimationFrame(() => { scroller.scrollTop = o.paneScroll; setScrollTop(scroller.scrollTop); }));
   } else if (again) {
-    if (same && spot.query) o.setQuery(spot.query, true);
-    o.stayedToday();
-  } else if (!location.hash) o.goToday(true);
+    if (!props.minimal && same && spot.query) o.setQuery(spot.query, true);
+    if (!props.minimal) o.stayedToday();
+  } else if (!props.minimal && !location.hash) o.goToday(true);
   onMount(() => {
     const row = same ? spot.row : null;
     if (row) requestAnimationFrame(() => {
@@ -319,10 +331,10 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
   };
   addEventListener('pagehide', onLeave);
   onCleanup(() => removeEventListener('pagehide', onLeave));
-  const onVisible = () => active() && document.visibilityState === 'visible' && o.resumed();
+  const onVisible = () => !props.minimal && active() && document.visibilityState === 'visible' && o.resumed();
   document.addEventListener('visibilitychange', onVisible);
   onCleanup(() => document.removeEventListener('visibilitychange', onVisible));
-  onCleanup(o.watchMidnight(active));
+  onCleanup(o.watchMidnight(() => !props.minimal && active()));
 
   createEffect(on(o.homeRequests, () => {
     scroller.scrollTop = 0;
@@ -372,12 +384,14 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
   };
   const [hotGuide, setHotGuide] = createSignal<{ key: RowKey; top: number; height: number; left: number } | null>(null);
   const onMouseMove = (e: MouseEvent) => {
+    if (props.minimal) return;
     const g = drag.target() ? null : guideAt(e);
     const cur = hotGuide();
     if (g?.key !== cur?.key || g?.top !== cur?.top) setHotGuide(g);
   };
 
   const onMouseDown = (e: MouseEvent) => {
+    if (props.minimal) return;
     // A click on a guide line folds the bullet whose line it is, kept in sight.
     const g = e.button === 0 ? guideAt(e) : null;
     if (g) {
@@ -395,9 +409,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
   };
 
   return (
-    <div class="outline has-navigation">
-      <Show when={active()}><Shortcuts o={o} /></Show>
-      <Show when={active() && o.opened && !o.readOnly}>
+    <div class="outline" classList={{ 'has-navigation': !props.minimal, 'minimal-outline': props.minimal }}>
+      <Show when={!props.minimal && active()}><Shortcuts o={o} /></Show>
+      <Show when={!props.minimal && active() && o.opened && !o.readOnly}>
         <SyncDialog o={o} />
       </Show>
       <Show when={o.readOnly}>
@@ -409,7 +423,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
           Документ уже открыт в другой вкладке — здесь только просмотр. Закройте ту вкладку, и эта сразу станет редактируемой.
         </div>
       </Show>
-      <Show when={active() && o.toast()}>
+      <Show when={!props.minimal && active() && o.toast()}>
         {(text) => (
           <div class="toast" role="status">
             {text()}
@@ -433,7 +447,8 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
           </div>
         )}
       </Show>
-      <Show when={active()}><QuickCapture o={o} /><GoTo o={o} /></Show>
+      <Show when={!props.minimal && active()}><QuickCapture o={o} /><GoTo o={o} /></Show>
+      <Show when={!props.minimal}>
       <header class="workspace-heading headingbar">
         <div class="zoom-heading">
           <Show when={o.zoom()} keyed fallback={<div class="document-home-title">Главная</div>}>{(id) => <ZoomTitle o={o} id={id} />}</Show>
@@ -445,22 +460,32 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
           aria-expanded={navigationOpen()} aria-controls={navigationId}
           onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
       </header>
+      </Show>
       <div class="workspace">
+        <Show when={!props.minimal}>
         <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} active={active} navigationId={navigationId} />
+        </Show>
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
-        <Show when={o.sketchShown()} keyed>
+        <Show when={!props.minimal && o.sketchShown()} keyed>
           {(id) => <Sketch o={o} id={id} />}
         </Show>
         <div class="main">
           <header ref={observeHeader} class="document-header">
-            <Crumbs o={o} scrolled={scrollTop() > 0} navigation />
+            <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} />
           </header>
-          <div ref={scroller} class="scroller" classList={{ 'on-guide': !!hotGuide() }} onScroll={() => { o.paneScroll = scroller.scrollTop; setScrollTop(scroller.scrollTop); }} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
+          <div ref={scroller} class="scroller" classList={{ 'on-guide': !props.minimal && !!hotGuide() }}
+            role={emptyEditable() ? 'button' : undefined} tabIndex={emptyEditable() ? 0 : undefined}
+            aria-label={emptyEditable() ? 'Новый пункт' : undefined}
+            onClick={(e) => {
+              if ((e.target === scroller || e.target === spacer) && emptyEditable()) addBullet();
+            }}
+            onScroll={() => { o.paneScroll = scroller.scrollTop; setScrollTop(scroller.scrollTop); }}
+            onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => setHotGuide(null)} onInput={revealCaret}>
             <div ref={spacer} class="spacer" style={{ height: `${top() + total() + tail() + (showAdd() ? ADD_HEIGHT : 0) + foot()}px` }}>
               <span ref={probe} class="probe" aria-hidden="true">0000000000</span>
               <span ref={indentProbe} class="probe indent-probe" aria-hidden="true" />
-              <Show when={o.zoom()} keyed>
+              <Show when={!props.minimal && o.zoom()} keyed>
                 {(id) => (
                   <div ref={observeHead} class="zoomhead">
                     <ZoomNote o={o} id={id} />
@@ -469,18 +494,18 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
               </Show>
               <div ref={windowEl} class="window" style={{ transform: `translateY(${top() + v.offsetOf(range()[0])}px)` }}>
                 <For each={ids()}>
-                  {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} />}
+                  {(id, k) => <Row o={o} id={id} depth={o.rows.depths[range()[0] + k()]} observe={observe} grab={drag.start} minimal={props.minimal} />}
                 </For>
               </div>
-              <Show when={drag.target()}>
+              <Show when={!props.minimal && drag.target()}>
                 {(t) => <div class="drop-line" style={{ top: `${t().top}px`, left: `${t().left}px` }} />}
               </Show>
               {/* The guide line under the pointer, lit through its bullet's whole branch: a click folds it. */}
-              <Show when={hotGuide()}>
+              <Show when={!props.minimal && hotGuide()}>
                 {(g) => <div class="guide-hot" style={{ top: `${g().top}px`, height: `${g().height}px`, left: `${g().left}px` }} />}
               </Show>
               {/* A search that finds nothing says so, rather than leaving a blank page. */}
-              <Show when={o.filter()?.count === 0}>
+              <Show when={!props.minimal && o.filter()?.count === 0}>
                 <p class="no-results" role="status" style={{ top: `${top()}px` }}>
                   {o.zoom() ? 'Здесь ничего не найдено' : 'Ничего не найдено'}
                 </p>
@@ -501,7 +526,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
                 </button>
               </Show>
               {/* Under a zoomed-in list (and its "+"): the places that link here, the way back. */}
-              <Show when={o.zoom()} keyed>
+              <Show when={!props.minimal && o.zoom()} keyed>
                 {(id) => (
                   <div ref={observeFoot} class="backlinks-slot" style={{ top: `${top() + total() + (showAdd() ? ADD_HEIGHT : 0)}px` }}>
                     <Backlinks o={o} id={id} />
@@ -513,15 +538,15 @@ export function Outline(props: { o: Outliner; secondary?: boolean }) {
         </div>
         </div>
         {/* Beside the outline, not over it: the caret and the work stay there. Out of the way of a phone's keyboard, unless that keyboard types into its filter. */}
-        <Show when={o.trashOpen()}>
+        <Show when={!props.minimal && o.trashOpen()}>
           <Trash o={o} onTyping={setTrashTyping} />
         </Show>
       </div>
       {/* Its buttons act on the row being edited; not while the keys go to the trash's filter. */}
-      <Show when={active() && !trashTyping()}>
+      <Show when={!props.minimal && active() && !trashTyping()}>
         <EditBar o={o} />
       </Show>
-      <Show when={active()}><SelectionBar o={o} /><Suggest o={o} /><RowMenu o={o} /></Show>
+      <Show when={!props.minimal && active()}><SelectionBar o={o} /><Suggest o={o} /><RowMenu o={o} /></Show>
     </div>
   );
 }

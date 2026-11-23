@@ -1,3 +1,4 @@
+import { legacyStorage } from './legacy';
 import { expect, test, type Page } from '@playwright/test';
 
 const pane = (page: Page, n: number) => page.locator(`[data-pane="${n}"]`);
@@ -206,7 +207,7 @@ test('row menus in the right pane use window coordinates and stay usable', async
 });
 
 test('touch can switch editors between both large-screen panes', async ({ browser, baseURL }) => {
-  const context = await browser.newContext({ baseURL, hasTouch: true, viewport: { width: 1194, height: 834 } });
+  const context = await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180'), baseURL, hasTouch: true, viewport: { width: 1194, height: 834 } });
   const touchPage = await context.newPage();
   try {
     await touchPage.goto('/?demo');

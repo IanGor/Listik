@@ -3854,3 +3854,30 @@ body.is-dragging * {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
 }
+
+.minimal-outline {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--canvas);
+}
+
+.minimal-outline .crumbbar {
+  min-height: 48px;
+  padding-block: 4px;
+}
+
+.minimal-outline .crumbbar button[data-action="ZoomHeader.1"] {
+  display: grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.minimal-outline .bullet {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.minimal-outline .toggle { opacity: 1; }
+.minimal-outline .row::before { content: none; }
+.minimal-outline .scroller[role="button"] { cursor: text; }

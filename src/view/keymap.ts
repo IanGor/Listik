@@ -25,9 +25,13 @@ export function formatSelection(o: Outliner, id: RowKey, el: HTMLElement, note: 
 }
 
 /** Keyboard handling for the row being edited (`el` is its contenteditable). */
-export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTMLElement): void {
-  if (e.isComposing || formatKeys(e, o, id, el, false)) return;
+export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: HTMLElement, minimal = false): void {
+  if (e.isComposing) return;
   const mod = e.ctrlKey || e.metaKey;
+  if (minimal) {
+    if (mod || e.altKey) return;
+    if (e.key === 'Enter' && (e.shiftKey || e.repeat)) { e.preventDefault(); return; }
+  } else if (formatKeys(e, o, id, el, false)) return;
   const [start, end] = selectionIn(el) ?? [0, 0];
   const collapsed = start === end;
   const length = o.contentOf(id).text.length;
@@ -78,7 +82,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       // An empty bullet with a note or bullets inside is selected first, to show
       // what would go; the next Backspace takes it all out. (Not with the
       // on-screen keyboard: it would close with nothing to delete it by.)
-      if (!keyboard() && !o.contentOf(id).text && !o.isCopy(id) && (o.contentOf(id).note || o.contentOf(id).children.length)) {
+      if (!minimal && !keyboard() && !o.contentOf(id).text && !o.isCopy(id) && (o.contentOf(id).note || o.contentOf(id).children.length)) {
         return handle(selectBullet);
       }
       return handle(() => o.mergeUp(id, here));
@@ -108,6 +112,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       // browser's own), then the whole text, then the bullet itself; from there
       // onSelectionKeys takes in the rows around.
       if (e.shiftKey && !e.altKey) {
+        if (minimal) return;
         if (whole) return handle(selectBullet);
         if (focusIn(el) === (up ? 0 : length)) return handle(() => (up ? selectRange(el, length, 0) : selectRange(el, 0, length)));
         return;
@@ -115,12 +120,12 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       if (e.altKey) return;
       if (up ? !caretOnFirstLine(el) : !caretOnLastLine(el)) return;
       // Down from the text goes into its note first, if there is one.
-      if (!up && o.contentOf(id).note) return handle(() => o.setFocus({ id, x: caretX(el), line: 'first', note: true }));
+      if (!minimal && !up && o.contentOf(id).note) return handle(() => o.setFocus({ id, x: caretX(el), line: 'first', note: true }));
       const i = o.rows.indexOf(id) + (up ? -1 : 1);
       if (i < 0 || i >= o.rows.length) return;
       const target = o.rows.ids[i];
       // Up into a row with a note lands on the note's last line.
-      const note = up && o.contentOf(target).note ? ({ note: true } as const) : {};
+      const note = !minimal && up && o.contentOf(target).note ? ({ note: true } as const) : {};
       return handle(() => o.setFocus({ id: target, x: caretX(el), line: up ? 'last' : 'first', ...note }));
     }
 
@@ -133,7 +138,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
       });
   }
 
-  onGlobalKeys(e, o);
+  if (!minimal) onGlobalKeys(e, o);
 }
 
 /**

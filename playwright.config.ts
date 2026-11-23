@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
+import { legacyStorage } from './e2e/legacy';
 
 // Prefer a system Chromium (no browser download); otherwise Playwright's own,
 // installed with `npx playwright install chromium`.
@@ -17,8 +18,9 @@ export default defineConfig({
     launchOptions: chromium ? { executablePath: chromium } : {},
   },
   projects: [
-    { name: 'app', testMatch: /split\.spec\.ts|responsive\.spec\.ts|omarchy\.spec\.ts|outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev } },
-    { name: 'pwa', testMatch: /pwa\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: built } },
+    { name: 'app', testMatch: /split\.spec\.ts|responsive\.spec\.ts|omarchy\.spec\.ts|outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev, storageState: legacyStorage(dev) } },
+    { name: 'pwa', testMatch: /pwa\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: built, storageState: legacyStorage(built) } },
+    { name: 'minimal', testMatch: /minimal\.spec\.ts/, use: { baseURL: dev } },
   ],
   webServer: [
     {

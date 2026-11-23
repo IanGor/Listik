@@ -74,7 +74,7 @@ function mouseScroll(nav: HTMLElement): void {
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
-export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean }) {
+export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean; minimal?: boolean; toggleView?: () => void }) {
   const o = props.o;
   let nav!: HTMLElement;
   const level = createMemo(() => o.levelState());
@@ -123,7 +123,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
   return (
     <div class="crumbbar" classList={{ scrolled: props.scrolled }}>
       {/* Calendar days keep their two horizontal navigation buttons together. */}
-      <Show when={o.zoomDay()}>
+      <Show when={!props.minimal && o.zoomDay()}>
         <div class="day-steps">
           <For each={[-1, 1] as const}>
             {(step) => (
@@ -150,10 +150,16 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           class="crumb"
           classList={{ current: !path().length }}
           aria-current={path().length ? undefined : 'page'}
+          aria-label={props.minimal ? 'Главная' : undefined}
           title={path().length ? 'На главную' : 'Главная'}
           onClick={() => (path().length ? o.zoomTo(null, true) : o.goHome())}
         >
-          Главная
+          <Show when={props.minimal} fallback="Главная">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+              <path d="M9 21v-8h6v8" />
+            </svg>
+          </Show>
         </button>
         <For each={path()}>
           {(p, i) => (
@@ -168,10 +174,11 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
       </nav>
       {/* What a search found: beside the path, the field keeping its room for the query (Apple's search fields
           carry no count). Nothing found has its own words over the list ("Ничего не найдено"). */}
-      <Show when={o.filter()?.count}>
+      <Show when={!props.minimal && o.filter()?.count}>
         {(n) => <span class="count">{n()} {plural(n(), 'пункт', 'пункта', 'пунктов')}</span>}
       </Show>
       {/* The first level here folded, an overview; again, open (`toggleLevel`): once the place's own crumb did it, unseen. */}
+      <Show when={!props.minimal}>
       <button data-action="ZoomHeader.3"
         type="button"
         class="level-toggle"
@@ -187,8 +194,9 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           <path d={collapse() ? 'm7 4 5 5 5-5' : 'm7 8 5-5 5 5'} />
         </svg>
       </button>
+      </Show>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
-      <Show when={path().length}>
+      <Show when={!props.minimal && path().length}>
         <button data-action="ZoomHeader.4"
           type="button"
           class="sketch-toggle"
@@ -205,7 +213,7 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           </svg>
         </button>
       </Show>
-      <Show when={props.navigation}><DocumentMenu o={o} /></Show>
+      <Show when={props.navigation}><DocumentMenu o={o} minimal={props.minimal} toggleView={props.toggleView} /></Show>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { legacyStorage } from './legacy';
 
 test.describe('adaptive workspace', () => {
   test.use({ hasTouch: true });
@@ -420,7 +421,7 @@ test.describe('compact pinned heading', () => {
 
 test('desktop and touch share compact navigation, backlinks, menu and search metrics', async ({ browser, baseURL }) => {
   for (const hasTouch of [false, true]) {
-    const context = await browser.newContext({ baseURL, hasTouch, viewport: { width: 834, height: 1000 } });
+    const context = await browser.newContext({ baseURL, storageState: legacyStorage(baseURL!), hasTouch, viewport: { width: 834, height: 1000 } });
     const page = await context.newPage();
     try {
       await page.goto('/?demo');
@@ -596,7 +597,7 @@ test('header Inbox preserves expanded navigation and desktop capture stays centr
 });
 
 test('touch Inbox follows the visual keyboard and outside taps preserve the draft', async ({ browser, baseURL }) => {
-  const context = await browser.newContext({ baseURL, hasTouch: true, viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ baseURL, storageState: legacyStorage(baseURL!), hasTouch: true, viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
   try {
     await page.goto('/?demo');

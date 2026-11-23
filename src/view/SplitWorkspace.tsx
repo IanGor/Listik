@@ -16,6 +16,7 @@ interface SavedSplit { version: 1; active: 0 | 1; ratio: number; panes: [PaneSta
 export function SplitWorkspace(props: { o: Outliner }) {
   const first = props.o;
   const key = `listik-split:${first.docName ?? location.search}`;
+  const [minimal, setMinimal] = createSignal(readMinimalView());
   const [second, setSecond] = createSignal<Outliner | null>(null);
   const [enabled, setEnabled] = createSignal(false);
   const [active, setActive] = createSignal<0 | 1>(0);
@@ -40,6 +41,18 @@ export function SplitWorkspace(props: { o: Outliner }) {
     setActive(index);
   };
   const current = () => view(active());
+  const toggleView = () => {
+    const next = !minimal();
+    const o = current();
+    o.editTitle(null);
+    o.setFocus(null);
+    o.select(null);
+    o.history.breakTyping();
+    if (next && (o.query() || o.filter())) o.setQuery('', true);
+    setMinimal(next);
+    try { localStorage.setItem('listik-view-mode', next ? 'minimal' : 'legacy'); }
+    catch { /* Optional local view preference. */ }
+  };
   const capture = (o: Outliner): PaneState => ({
     zoom: o.zoom(), query: o.query(), scroll: o.paneScroll,
     folds: o.rows.paneFoldEntries(), mirrors: o.rows.foldEntries(),
@@ -123,6 +136,7 @@ export function SplitWorkspace(props: { o: Outliner }) {
       }
     }
   } catch { /* Ignore invalid local state. */ }
+  if (minimal() && current().query()) current().setQuery('', true);
 
   createEffect(() => {
     enabled(); active(); ratio(); first.zoom(); first.query(); first.rowsVersion();
@@ -157,15 +171,16 @@ export function SplitWorkspace(props: { o: Outliner }) {
     const box = root.getBoundingClientRect();
     setRatio(Math.max(32, Math.min(68, (clientX - box.x) / box.width * 100)));
   };
-  const hidden = (index: 0 | 1) => (!enabled() || !wide()) && active() !== index;
+  const showSplit = () => !minimal() && enabled();
+  const hidden = (index: 0 | 1) => (!showSplit() || !wide()) && active() !== index;
   return <SplitContext.Provider value={{ enabled, wide, toggle, active: o => o === current() }}>
-    <div ref={root} class="split-workspace" classList={{ 'split-enabled': enabled(), 'split-wide': wide() }}>
+    <div ref={root} class="split-workspace" classList={{ 'split-enabled': showSplit(), 'split-wide': wide() }}>
       <section class="split-pane" classList={{ active: active() === 0 }} hidden={hidden(0)} data-pane="0"
         aria-label="Левая область документа" style={{ flex: `${ratio()} 1 0%` }}>
-        <Outline o={first} />
+        <Outline o={first} minimal={minimal()} toggleView={toggleView} />
       </section>
       <Show when={second()} keyed>{peer => <>
-        <div class="split-divider" hidden={!enabled() || !wide()} role="separator" aria-label="Ширина областей" aria-orientation="vertical"
+        <div class="split-divider" hidden={!showSplit() || !wide()} role="separator" aria-label="Ширина областей" aria-orientation="vertical"
           aria-valuemin={32} aria-valuemax={68} aria-valuenow={Math.round(ratio())} tabIndex={0}
           onPointerDown={e => { if (e.button !== 0) return; e.preventDefault(); dragging = true; e.currentTarget.setPointerCapture(e.pointerId); }}
           onPointerMove={e => { if (dragging) moveDivider(e.clientX); }}
@@ -174,9 +189,14 @@ export function SplitWorkspace(props: { o: Outliner }) {
           onKeyDown={e => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return; e.preventDefault(); setRatio(e.key === 'Home' ? 32 : e.key === 'End' ? 68 : Math.max(32, Math.min(68, ratio() + (e.key === 'ArrowLeft' ? -2 : 2)))); }} />
         <section class="split-pane" classList={{ active: active() === 1 }} hidden={hidden(1)} data-pane="1"
           aria-label="Правая область документа" style={{ flex: `${100 - ratio()} 1 0%` }}>
-          <Outline o={peer} secondary />
+          <Outline o={peer} secondary minimal={minimal()} toggleView={toggleView} />
         </section>
       </>}</Show>
     </div>
   </SplitContext.Provider>;
+}
+
+function readMinimalView(): boolean {
+  try { return localStorage.getItem('listik-view-mode') !== 'legacy'; }
+  catch { return true; }
 }

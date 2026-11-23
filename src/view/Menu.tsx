@@ -49,7 +49,7 @@ const time = (t?: number) => (t ? new Date(t).toLocaleTimeString('ru-RU', { hour
  * theme switch and sync. Its button carries a dot while changes wait for the
  * server or the connection is lost.
  */
-export function DocumentMenu(props: { o: Outliner }) {
+export function DocumentMenu(props: { o: Outliner; minimal?: boolean; toggleView?: () => void }) {
   const o = props.o;
   const split = useContext(SplitContext);
   const [open, setOpen] = createSignal(false);
@@ -134,11 +134,11 @@ export function DocumentMenu(props: { o: Outliner }) {
 
   return (
     <div class="menu-anchor" ref={root}>
-      <Show when={themePanelOpen()}><ThemePanel /></Show>
+      <Show when={!props.minimal && themePanelOpen()}><ThemePanel /></Show>
       <button ref={trigger} data-action="Menu.1"
         type="button"
         class="icon-button menu-button"
-        title={o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
+        title={props.minimal ? 'Меню документа' : o.syncing() ? `Документ. ${describeSync(o.syncStatus())}` : 'Документ: экспорт, импорт, тема, синхронизация'}
         aria-label="Меню документа"
         aria-haspopup="menu"
         aria-expanded={open()}
@@ -150,10 +150,19 @@ export function DocumentMenu(props: { o: Outliner }) {
           <circle cx="12" cy="12" r="1.7" />
           <circle cx="19" cy="12" r="1.7" />
         </svg>
-        <Show when={syncAlert()}>{(state) => <span class={`sync-dot sync-${state()}`} />}</Show>
+        <Show when={!props.minimal && syncAlert()}>{(state) => <span class={`sync-dot sync-${state()}`} />}</Show>
       </button>
       <Show when={open()}>
         <div class="menu" role="menu">
+          <Show when={props.toggleView}>
+            <button type="button" role="menuitem" data-action="document.view-mode" onClick={() => {
+              close(); props.toggleView?.(); trigger.focus();
+            }}>
+              {props.minimal ? 'Вернуться к прежнему интерфейсу' : 'Открыть новый интерфейс'}
+            </button>
+            <Show when={!props.minimal}><div class="menu-sep" role="separator" /></Show>
+          </Show>
+          <Show when={!props.minimal}>
           {/* Grouped by what for (UX audit, 29 October 2026): going and writing; undo; the look; the document; files; help. */}
           <button type="button" data-action="document.search" role="menuitem" onClick={() => { close(); o.requestSearch(); }}>Поиск</button>
           {/* Going to a place by its name: on a phone too, the line at the top of the screen as for "Куда…". */}
@@ -349,6 +358,7 @@ export function DocumentMenu(props: { o: Outliner }) {
             <Show when={touch()} fallback={<>Горячие клавиши <span class="hint">?</span></>}>Жесты и клавиши</Show>
             <KEYS />
           </button>
+          </Show>
         </div>
       </Show>
     </div>

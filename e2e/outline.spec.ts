@@ -1,3 +1,4 @@
+import { legacyStorage } from './legacy';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -2568,7 +2569,7 @@ test.describe('text size', () => {
     await menu(page).click();
     await page.getByRole('button', { name: 'Мельче' }).click();
     await expect(page.locator('.step-value')).toHaveText('95%');
-    const other = await browser.newContext();
+    const other = await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') });
     try {
       const second = await other.newPage();
       await second.goto('/?demo');
@@ -4883,7 +4884,7 @@ test.describe('Apple HIG interface', () => {
   });
 
   test('iPad with a fine primary pointer keeps compact controls and capture saves by button', async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 1194, height: 834 }, hasTouch: true });
+    const context = await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180'), viewport: { width: 1194, height: 834 }, hasTouch: true });
     const p = await context.newPage();
     await p.goto('/?demo');
     await p.locator('.row').first().waitFor();

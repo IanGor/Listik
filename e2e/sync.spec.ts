@@ -1,3 +1,4 @@
+import { legacyStorage } from './legacy';
 import { expect, test, type Page } from '@playwright/test';
 
 const SYNC = 'http://127.0.0.1:5182';
@@ -18,7 +19,7 @@ test.describe.configure({ mode: 'serial' });
 
 test('two browsers share one encrypted document through the server', async ({ browser }) => {
   test.setTimeout(120_000);
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await a.goto('/?db=e2e-sync-a&empty');
   await expect(a.locator('.row')).toHaveCount(1);
   await a.locator('.row .text').click();
@@ -53,7 +54,7 @@ test('two browsers share one encrypted document through the server', async ({ br
   expect(stored.batches.every(Boolean)).toBe(true);
 
   // B joins with the code and the passphrase; its own document is replaced.
-  const b = await (await browser.newContext()).newPage();
+  const b = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await b.goto('/?db=e2e-sync-b&empty');
   await expect(b.locator('.row')).toHaveCount(1);
   await openSyncDialog(b);
@@ -105,7 +106,7 @@ test('two browsers share one encrypted document through the server', async ({ br
 
 test('a local copy that does not open with the key is restored from the server', async ({ browser }) => {
   test.setTimeout(120_000);
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await a.goto('/?db=e2e-sync-damaged&empty');
   await a.locator('.row .text').click();
   await a.keyboard.type('с сервера');
@@ -155,7 +156,7 @@ test('a local copy that does not open with the key is restored from the server',
 
 test('the sync state lives in the menu: a dot on its button while changes wait', async ({ browser }) => {
   test.setTimeout(120_000);
-  const context = await browser.newContext({ viewport: { width: 412, height: 915 } });
+  const context = await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180'), viewport: { width: 412, height: 915 } });
   const a = await context.newPage();
   await a.goto('/?db=e2e-sync-phone&empty');
   await expect(a.locator('.row')).toHaveCount(1);
@@ -184,7 +185,7 @@ test('the sync state lives in the menu: a dot on its button while changes wait',
 
 test('a log with a gap opens, and the server gives back what the gap took; so does the button in the sync dialog', async ({ browser }) => {
   test.setTimeout(120_000);
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await a.goto('/?db=e2e-sync-gap&empty');
   await a.locator('.row .text').click();
   await a.keyboard.type('с сервера');
@@ -262,7 +263,7 @@ test('a log with a gap opens, and the server gives back what the gap took; so do
 
 test('a passphrase changed on one device: another is told, takes the new one, and what it typed meanwhile arrives', async ({ browser }) => {
   test.setTimeout(150_000);
-  const a = await (await browser.newContext()).newPage();
+  const a = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await a.goto('/?db=e2e-sync-pass-a&empty');
   await a.locator('.row .text').click();
   await a.keyboard.type('до смены');
@@ -278,7 +279,7 @@ test('a passphrase changed on one device: another is told, takes the new one, an
   const code = (await a.locator('.doc-code').textContent())!.trim();
   await a.keyboard.press('Escape');
 
-  const b = await (await browser.newContext()).newPage();
+  const b = await (await browser.newContext({ storageState: legacyStorage('http://127.0.0.1:5180') })).newPage();
   await b.goto('/?db=e2e-sync-pass-b&empty');
   await openSyncDialog(b);
   await b.getByRole('tab', { name: 'Подключиться к существующему' }).click();

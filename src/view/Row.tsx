@@ -18,6 +18,7 @@ import { swipe } from './swipe';
 
 interface RowProps {
   o: Outliner;
+  minimal?: boolean;
   /** The row's key, fixed for the component's lifetime (model/rows.ts: under a mirror, not the bullet's id). */
   id: RowKey;
   depth: number;
@@ -34,7 +35,7 @@ const inNote = (f: FocusRequest | null) => !!f && 'note' in f && !!f.note;
  * Formatting markers stay in the DOM, hidden, so offsets in the element
  * are offsets in the text (a click puts the caret where it belongs).
  */
-export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | null }) {
+export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | null; minimal?: boolean }) {
   return (
     <For each={props.pieces}>
       {(p) => {
@@ -42,6 +43,7 @@ export function Pieces(props: { o: Outliner; pieces: Piece[]; query: Query | nul
         const plain = p.hit ? <mark>{p.text}</mark> : p.text;
         const inner = p.link !== undefined
           ? <span class="link" data-link={p.link}>{plain}</span>
+          : props.minimal ? plain
           : p.url !== undefined
             // Opens in the browser (another tab; the system browser from the installed app).
             ? <a class="url" href={p.url} target="_blank" rel="noopener noreferrer">{plain}</a>
@@ -70,20 +72,19 @@ export function Row(props: RowProps) {
   const id = props.id;
   const nid = nodeOf(id);
   let el!: HTMLDivElement;
-  let bullet!: HTMLSpanElement;
   onMount(() => onCleanup(props.observe(el)));
   // After a drag or swipe takes over, the browser must not scroll or move
   // the caret. This needs its own non-passive touch listener.
   onMount(() => {
     const hold = (e: TouchEvent) => {
-      if ((o.dragged().size || el.classList.contains('swiping')) && e.cancelable) e.preventDefault();
+      if (!props.minimal && (o.dragged().size || el.classList.contains('swiping')) && e.cancelable) e.preventDefault();
     };
     el.addEventListener('touchmove', hold, { passive: false });
     onCleanup(() => el.removeEventListener('touchmove', hold));
   });
   /** A finger on the row's text, not the row being edited, nor what has a press of its own: held, it picks the row up (drag.ts). */
   const onRowPointerDown = (e: PointerEvent) => {
-    if (e.pointerType !== 'touch' || o.readOnly || focused()) return;
+    if (props.minimal || e.pointerType !== 'touch' || o.readOnly || focused()) return;
     if ((e.target as Element).closest('.bullet, .check, .toggle, button, a, [contenteditable]')) return;
     props.grab(e, id, 'row');
   };
@@ -94,13 +95,16 @@ export function Row(props: RowProps) {
    * press in the text being edited is left to the browser (it selects words).
    */
   const onContextMenu = (e: MouseEvent) => {
+    if (props.minimal) return;
     if (el.classList.contains('holding') || o.dragged().size) return e.preventDefault();
     if (!document.documentElement.classList.contains('mouse') && (e.target as Element).closest('[contenteditable]')) return;
     e.preventDefault();
     o.openRowMenu(id, e.clientX, e.clientY);
   };
   // A finger sideways across any row: left deletes, right toggles its checkbox (swipe.ts).
-  onMount(() => onCleanup(swipe(o, el, id)));
+  createEffect(() => {
+    if (!props.minimal) onCleanup(swipe(o, el, id));
+  });
   o.nodes.acquire(nid);
   onCleanup(() => o.nodes.release(nid));
 
@@ -129,7 +133,7 @@ export function Row(props: RowProps) {
   const orphan = () => !!node()?.mirrorOf && !o.doc.nodes.has(node()!.mirrorOf!);
   const focused = () => !o.readOnly && o.focus()?.id === id;
   const editingText = () => focused() && !inNote(o.focus());
-  const editingNote = () => focused() && inNote(o.focus());
+  const editingNote = () => !props.minimal && focused() && inNote(o.focus());
   // A mirror's children are its original's, shown under it (model/rows.ts).
   const folded = () => {
     o.rowsVersion();
@@ -149,7 +153,7 @@ export function Row(props: RowProps) {
    * without opening it (Outliner.pendingFor). The task's own signal is held
    * while it shows, so its text follows edits made elsewhere.
    */
-  const pending = createMemo(() => (content() ? o.pendingFor(id) : null), undefined, {
+  const pending = createMemo(() => (!props.minimal && content() ? o.pendingFor(id) : null), undefined, {
     equals: (a, b) => a?.task === b?.task && a?.more === b?.more,
   });
   createEffect(on(() => pending()?.task ?? null, (task) => {
@@ -165,6 +169,7 @@ export function Row(props: RowProps) {
     return t ? plainText(o.doc.content(t.id).text).trim() || 'Задача без текста' : '';
   };
   const projectPath = createMemo(() => {
+    if (props.minimal) return [];
     o.rowsVersion();
     if (!content()?.todo) return [];
     const board = findKanban(o.doc);
@@ -189,7 +194,7 @@ export function Row(props: RowProps) {
     o.nodes.track(p);
     return splitTags(plainText(o.doc.get(p).text)).filter((part) => !part.tag).map((part) => part.text).join('').trim() || 'Проект без названия';
   };
-  const query = () => o.highlightFor(nid);
+  const query = () => props.minimal ? null : o.highlightFor(nid);
   const terms = () => query()?.terms ?? [];
   const pieces = createMemo(() => decorate(content()?.text ?? '', terms()));
   const notePieces = createMemo(() => decorate(content()?.note ?? '', terms()));
@@ -200,17 +205,20 @@ export function Row(props: RowProps) {
     // A web address opens on its click; the row is not edited.
     if ((e.target as HTMLElement).closest('a.url')) return;
     e.preventDefault();
-    if (o.selection()) { o.select({ anchor: o.selection()!.anchor, head: id }); return; }
+    const selection = o.selection();
+    if (!props.minimal && selection) return o.select({ anchor: selection.anchor, head: id });
     const target = e.target as HTMLElement;
     const tag = target.dataset.tag;
-    if (tag) return o.filterByTag(tag);
+    if (!props.minimal && tag) return o.filterByTag(tag);
     const link = target.closest<HTMLElement>('[data-link]')?.dataset.link;
     if (link !== undefined) return o.followLink(link, id);
-    // Shift+click selects the rows from the edited (or already selected) one to here.
-    const anchor = o.selection()?.anchor ?? o.focus()?.id;
-    if (e.shiftKey && anchor) {
-      (document.activeElement as HTMLElement | null)?.blur();
-      return o.select({ anchor, head: id });
+    if (!props.minimal) {
+      // Shift+click selects the rows from the edited one to here.
+      const anchor = o.focus()?.id;
+      if (e.shiftKey && anchor) {
+        (document.activeElement as HTMLElement | null)?.blur();
+        return o.select({ anchor, head: id });
+      }
     }
     if (o.readOnly) return;
     const text = (note ? content()?.note : content()?.text) ?? '';
@@ -265,8 +273,7 @@ export function Row(props: RowProps) {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 2.5 8 6l-3.5 3.5" /></svg>
         </button>
       </Show>
-      <span
-        ref={bullet}
+      <Show when={props.minimal} fallback={<span
         class="bullet"
         classList={{ collapsed: folded(), mirror: mirror() }}
         title={mirror() ? 'Зеркало: этот пункт есть и в других местах, правка меняет все копии' : undefined}
@@ -276,22 +283,36 @@ export function Row(props: RowProps) {
         onContextMenu={(e) => e.preventDefault()}
         // The bullet always leads in, a task's too: its checkbox is beside it.
         onPointerDown={(e) => !o.readOnly ? props.grab(e, id) : e.button === 0 && o.zoomTo(id)}
-      />
+      />}>
+        <button
+          type="button"
+          class="bullet"
+          classList={{ collapsed: folded(), mirror: mirror() }}
+          aria-label="Открыть пункт"
+          onClick={() => o.zoomTo(id)}
+        />
+      </Show>
       <Show when={content()?.todo}>
         <span
           class="check"
           classList={{ checked: !!content()?.done }}
           role="checkbox"
+          tabIndex={props.minimal && !o.readOnly ? 0 : undefined}
           aria-checked={!!content()?.done}
           aria-label={content()?.done ? 'Снять отметку' : 'Отметить выполненной'}
           aria-disabled={o.readOnly || undefined}
           onMouseDown={(e) => e.preventDefault()}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={(e) => { if (!props.minimal) e.preventDefault(); }}
           onClick={() => !o.readOnly && o.pressCheck(id)}
+          onKeyDown={(e) => {
+            if (!props.minimal || o.readOnly || (e.key !== ' ' && e.key !== 'Enter')) return;
+            e.preventDefault();
+            if (!e.repeat) o.pressCheck(id);
+          }}
         />
       </Show>
       <div class="body">
-        <Show when={(o.rowsVersion(), o.rows.retainedEditor(id))}>
+        <Show when={!props.minimal && (o.rowsVersion(), o.rows.retainedEditor(id))}>
           <button data-action="Row.1" type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => {
             const focus = o.caretNow();
             const today = findToday(o.doc);
@@ -305,9 +326,9 @@ export function Row(props: RowProps) {
           when={editingText()}
           fallback={
             <div class="text" onMouseDown={onStaticMouseDown(false)}>
-              <Pieces o={o} pieces={pieces()} query={query()} />
+              <Pieces o={o} pieces={pieces()} query={query()} minimal={props.minimal} />
               {/* The bullet has a sketch: it shows beside its list once zoomed in (Sketch.tsx). */}
-              <Show when={content()?.strokes}>
+              <Show when={!props.minimal && content()?.strokes}>
                 <svg class="sketch-mark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-label="Скетч">
                   <path d="M3 17c3-6 5-9 7-9s0 8 3 8 4-7 8-9" />
                   <path d="M3 21h18" />
@@ -316,7 +337,7 @@ export function Row(props: RowProps) {
             </div>
           }
         >
-          <Editable o={o} id={id} />
+          <Editable o={o} id={id} minimal={props.minimal} />
         </Show>
         <Show when={project()}>
           {(p) => <button data-action="Row.2" type="button" class="task-project" onMouseDown={(e) => e.preventDefault()} onClick={() => o.zoomTo(p())} title="Открыть проект">Проект: {projectName()}</button>}
@@ -344,7 +365,7 @@ export function Row(props: RowProps) {
         <Show
           when={editingNote()}
           fallback={
-            <Show when={content()?.note}>
+            <Show when={!props.minimal && content()?.note}>
               {/* Its first lines only (NOTE_LINES), all of them while the row is edited. */}
               <div class="note" classList={{ clamped: !focused() }} onMouseDown={onStaticMouseDown(true)}>
                 <Pieces o={o} pieces={notePieces()} query={query()} />
@@ -355,10 +376,12 @@ export function Row(props: RowProps) {
           <NoteEditable o={o} id={id} />
         </Show>
       </div>
+      <Show when={!props.minimal}>
       <button type="button" data-action="Row.4" class="row-actions" aria-label="Действия с пунктом" aria-haspopup="menu" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.preventDefault()} onClick={(e) => {
         const rect = e.currentTarget.getBoundingClientRect();
         o.openRowMenu(id, rect.right - 12, rect.bottom);
       }}><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg></button>
+      </Show>
     </div>
   );
 }
@@ -407,7 +430,7 @@ const closeLink = (e: InputEvent, el: HTMLElement, text: string, write: (t: stri
  * makes the mirror (`Outliner.mirrorTitled`).
  */
 function beforeInput(
-  e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void, mirror = false,
+  e: InputEvent, o: Outliner, id: RowKey, el: HTMLElement, read: () => string, write: (t: string) => void, save: (t: string) => void, mirror = false, minimal = false,
 ): void {
   if (e.inputType === 'historyUndo') {
     e.preventDefault();
@@ -417,7 +440,7 @@ function beforeInput(
     e.preventDefault();
     return o.redo();
   }
-  if (e.isComposing || !e.cancelable) return;
+  if (minimal || e.isComposing || !e.cancelable) return;
   const sel = selectionIn(el);
   if (!sel || sel[0] !== sel[1]) return;
   const caret = sel[0];
@@ -470,7 +493,7 @@ function placeCaret(el: HTMLElement, f: FocusRequest): void {
  * caret stays put. Only changes made elsewhere (merge, paste, undo) are
  * written into the DOM. Invariant: the element holds a single text node.
  */
-function Editable(props: { o: Outliner; id: RowKey }) {
+function Editable(props: { o: Outliner; id: RowKey; minimal?: boolean }) {
   const o = props.o;
   const id = props.id;
   const nid = nodeOf(id);
@@ -507,6 +530,7 @@ function Editable(props: { o: Outliner; id: RowKey }) {
       setCaret(el, caret);
     }
     const write = (t: string) => (el.textContent = t);
+    if (props.minimal) return o.type(id, el.textContent ?? '');
     o.type(id, closeLink(e, el, el.textContent ?? '', write, true));
     if (!e.isComposing) timeCommand(o, id, el, el.textContent ?? '', false);
   };
@@ -529,11 +553,11 @@ function Editable(props: { o: Outliner; id: RowKey }) {
       ref={el}
       class="text"
       contentEditable="plaintext-only"
-      onKeyDown={(e) => suggestKey(e) || onEditorKeyDown(e, o, id, el)}
+      onKeyDown={(e) => { if (props.minimal || !suggestKey(e)) onEditorKeyDown(e, o, id, el, props.minimal); }}
       onInput={onInput}
-      onCompositionEnd={() => timeCommand(o, id, el, el.textContent ?? '', false)}
+      onCompositionEnd={() => { if (!props.minimal) timeCommand(o, id, el, el.textContent ?? '', false); }}
       onPaste={onPaste}
-      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t), true)}
+      onBeforeInput={(e) => beforeInput(e, o, id, el, () => el.textContent ?? '', (t) => (el.textContent = t), (t) => o.type(id, t), true, props.minimal)}
     />
   );
 }
