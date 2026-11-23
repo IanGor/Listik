@@ -67,7 +67,7 @@ export function onEditorKeyDown(e: KeyboardEvent, o: Outliner, id: RowKey, el: H
           const text = ctx.doc.content(nodeOf(id)).text;
           if (!collapsed) cmd.setText(ctx, id, text.slice(0, start) + text.slice(end));
           return cmd.split(ctx, id, start);
-        });
+        }, minimal ? here : undefined);
       });
 
     case 'Tab':
@@ -243,11 +243,19 @@ export function onGlobalKeys(e: KeyboardEvent, o: Outliner): void {
   } else if (e.code === 'Slash') {
     e.preventDefault();
     o.showHelp();
-  } else if (e.code === 'KeyZ') {
+  } else {
+    onHistoryKeys(e, o);
+  }
+}
+
+/** Undo and redo by physical key, including Ctrl+Y for keyboards without Cmd. */
+export function onHistoryKeys(e: KeyboardEvent, o: Outliner, minimal = false): void {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (e.code === 'KeyZ') {
     e.preventDefault();
     if (e.shiftKey) o.redo();
     else o.undo();
-  } else if (e.code === 'KeyY') {
+  } else if (e.code === 'KeyY' && (!minimal || (e.ctrlKey && !e.metaKey && !e.shiftKey))) {
     e.preventDefault();
     o.redo();
   }

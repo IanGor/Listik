@@ -81,6 +81,7 @@ const ITALIC: Item = { label: 'Курсив', icon: ['M10 5h8', 'M6 19h8', 'M15 
 const TIME: Item = { label: 'Время', icon: ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'M12 7v5l3 2'], run: (o, h) => o.insert(h, timeOfDay()) };
 const UNDO: Item = { label: 'Отменить', icon: ['M9 14L4 9l5-5', 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11'], run: (o) => o.undo() };
 const REDO: Item = { label: 'Повторить', icon: ['M15 14l5-5-5-5', 'M20 9H9.5a5.5 5.5 0 0 0 0 11H13'], run: (o) => o.redo() };
+const HISTORY_MAIN: Action[][] = [[UNDO, REDO]];
 
 /**
  * What the keyboard does on a computer (keymap.ts), for a touch screen. The
@@ -172,7 +173,7 @@ export const barInWords = (): string =>
  *
  * In the zoom title (or its note) the bar is one flat set (TITLE_MAIN).
  */
-export function EditBar(props: { o: Outliner }) {
+export function EditBar(props: { o: Outliner; minimal?: boolean }) {
   const o = props.o;
 
   /** The zoom title or its note is being edited, not a row. */
@@ -221,7 +222,7 @@ export function EditBar(props: { o: Outliner }) {
     return f ? 'note' in f && !!f.note : !!o.titleEdit()?.note;
   };
 
-  const groups = () => (inTitle() ? TITLE_MAIN : ROW_MAIN);
+  const groups = () => (props.minimal ? HISTORY_MAIN : inTitle() ? TITLE_MAIN : ROW_MAIN);
 
   const button = (a: Action | Item, onClick: () => void, cls?: string) => (
     <button data-action={`editbar.${a.label}`} type="button" tabIndex={0} class={cls} title={a.label} aria-label={a.label} onClick={onClick}>
@@ -247,7 +248,7 @@ export function EditBar(props: { o: Outliner }) {
   };
 
   return (
-    <Show when={touchCapable() && keyboard() && !o.readOnly && (o.focus() || inTitle())}>
+    <Show when={touchCapable() && keyboard() && !o.readOnly && (o.focus() || (!props.minimal && inTitle()))}>
       <div class="editbar" role="toolbar" aria-label="Правка пункта" onMouseDown={(e) => e.preventDefault()}>
         <div ref={(el) => scrolling(el, 'main')} class="editbar-set editbar-main" inert={shown() !== 'main'}>
           <For each={groups()}>
@@ -261,7 +262,7 @@ export function EditBar(props: { o: Outliner }) {
             )}
           </For>
         </div>
-        <For each={SETS}>
+        <For each={props.minimal ? [] : SETS}>
           {(set) => (
             <div
               ref={(el) => scrolling(el, set.name)}

@@ -13,7 +13,7 @@ import { indentation } from './indent';
 import { EditBar } from './EditBar';
 import { GoTo } from './GoTo';
 import { keepSpot, reloaded, takeSpot } from './reload';
-import { onGlobalKeys, onSelectionKeys } from './keymap';
+import { onGlobalKeys, onHistoryKeys, onSelectionKeys } from './keymap';
 import type { Outliner } from './outliner';
 import { Row } from './Row';
 import { RowMenu } from './RowMenu';
@@ -215,11 +215,14 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
     // row and the search box handle their own keys.
     const onKeyDown = (e: KeyboardEvent) => {
       if (!active() || e.defaultPrevented) return;
+      const target = e.target as HTMLElement;
       if (props.minimal) {
         if (emptyEditable() && !e.isComposing && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-            e.target === scroller && (e.key === 'Enter' || e.key === ' ')) {
+            target === scroller && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           addBullet();
+        } else if (!o.readOnly && !e.isComposing && target instanceof Element && !target.closest('input, textarea, .menu')) {
+          onHistoryKeys(e, o, true);
         }
         return;
       }
@@ -238,7 +241,6 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
         if (o.stepDay(e.key === 'ArrowLeft' ? -1 : 1)) e.preventDefault();
         return;
       }
-      const target = e.target as HTMLElement;
       if (target.isContentEditable || target.tagName === 'INPUT' || target.closest('.selectionbar, .row-menu, .menu')) return;
       if (!target.closest('.navigation-sidebar') && onSelectionKeys(e, o)) return;
       if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -549,8 +551,8 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
         </Show>
       </div>
       {/* Its buttons act on the row being edited; not while the keys go to the trash's filter. */}
-      <Show when={!props.minimal && active() && !trashTyping()}>
-        <EditBar o={o} />
+      <Show when={active() && !trashTyping()}>
+        <EditBar o={o} minimal={props.minimal} />
       </Show>
       <Show when={!props.minimal && active()}><SelectionBar o={o} /><Suggest o={o} /><RowMenu o={o} /></Show>
     </div>

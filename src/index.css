@@ -3843,6 +3843,10 @@ body.is-dragging * {
   background: var(--canvas);
 }
 
+.minimal-outline:has(> .editbar) {
+  padding-bottom: 0;
+}
+
 .minimal-outline .crumbbar {
   min-height: 48px;
   padding-block: 4px;

@@ -102,6 +102,111 @@ test('Shift+Enter opens an empty last line and Enter still splits the row', asyn
   await expect.poll(() => text.last().evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(singleLineHeight);
 });
 
+test.describe('hardware keyboard', () => {
+  test.use({ viewport: { width: 1024, height: 768 }, hasTouch: false, isMobile: false });
+
+  test('history shortcuts undo and redo typing, line breaks and row splits', async ({ page }) => {
+    await page.goto('/?db=minimal-history&empty');
+    const rows = page.locator('.row');
+    const text = rows.locator('.text');
+    const editor = rows.locator('.text[contenteditable]');
+    await text.click();
+    await page.keyboard.type('alpha');
+    await page.keyboard.press('Control+z');
+    await expect(editor).toBeEmpty();
+    await page.keyboard.press('Meta+Shift+z');
+    await expect(editor).toHaveText('alpha');
+
+    await page.keyboard.press('Shift+Enter');
+    await expect.poll(() => editor.textContent()).toBe('alpha\n');
+    await page.keyboard.press('Meta+z');
+    await expect.poll(() => editor.textContent()).toBe('alpha');
+    await page.keyboard.press('Control+y');
+    await expect.poll(() => editor.textContent()).toBe('alpha\n');
+
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(text).toHaveText(['a', 'lpha']);
+    await expect(text.last()).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(editor).toHaveCount(0);
+    await page.keyboard.press('Control+z');
+    await expect(rows).toHaveCount(1);
+    await expect(editor).toBeFocused();
+    await expect.poll(() => editor.textContent()).toBe('alpha\n');
+    expect(await page.evaluate(() => getSelection()?.focusOffset)).toBe(1);
+    await page.keyboard.press('Control+Shift+z');
+    await expect(text).toHaveText(['a', 'lpha']);
+    await expect(text.last()).toBeFocused();
+    await expect(page.getByRole('toolbar', { name: 'Правка пункта' })).toBeHidden();
+  });
+});
+
+test.describe('tablet software keyboard', () => {
+  test.use({ viewport: { width: 834, height: 1194 }, hasTouch: true, isMobile: true });
+
+  test('the history toolbar follows the keyboard and its taps keep focus', async ({ page }) => {
+    await page.goto('/?db=minimal-history-toolbar&empty');
+    const text = page.locator('.row .text');
+    const editor = page.locator('.row .text[contenteditable]');
+    const toolbar = page.getByRole('toolbar', { name: 'Правка пункта' });
+    await text.tap();
+    await page.keyboard.type('alpha');
+    await page.keyboard.press('Shift+Enter');
+    await expect(toolbar).toBeHidden();
+
+    const layoutHeight = await page.evaluate(() => innerHeight);
+    const setVisualViewport = (height: number, offsetTop: number) => page.evaluate(({ height, offsetTop }) => {
+      const viewport = window.visualViewport!;
+      Object.defineProperties(viewport, {
+        height: { configurable: true, value: height },
+        offsetTop: { configurable: true, value: offsetTop },
+      });
+      viewport.dispatchEvent(new Event('resize'));
+    }, { height, offsetTop });
+    await setVisualViewport(780, 20);
+    expect(await page.evaluate(() => innerHeight)).toBe(layoutHeight);
+    await expect(toolbar).toBeVisible();
+    const box = (await toolbar.boundingBox())!;
+    expect(box.y + box.height).toBeCloseTo(800, 0);
+    await expect(toolbar.getByRole('button')).toHaveCount(2);
+
+    await toolbar.getByRole('button', { name: 'Отменить' }).tap();
+    await expect.poll(() => editor.textContent()).toBe('alpha');
+    await expect(editor).toBeFocused();
+    await toolbar.getByRole('button', { name: 'Повторить' }).tap();
+    await expect.poll(() => editor.textContent()).toBe('alpha\n');
+    await expect(editor).toBeFocused();
+
+    await setVisualViewport(layoutHeight, 0);
+    await expect(toolbar).toBeHidden();
+    await expect(editor).toBeFocused();
+    await page.keyboard.type('beta');
+    await expect.poll(() => editor.textContent()).toBe('alpha\nbeta');
+  });
+});
+
+test('the history toolbar also follows a phone layout resize', async ({ page }) => {
+  await page.goto('/?db=minimal-history-phone&empty');
+  await page.locator('.row .text').tap();
+  const editor = page.locator('.row .text[contenteditable]');
+  const toolbar = page.getByRole('toolbar', { name: 'Правка пункта' });
+  await expect(toolbar).toBeHidden();
+
+  const viewport = page.viewportSize()!;
+  const openHeight = 540;
+  await page.setViewportSize({ ...viewport, height: openHeight });
+  await expect(toolbar).toBeVisible();
+  const box = (await toolbar.boundingBox())!;
+  expect(box.y + box.height).toBeCloseTo(openHeight, 0);
+
+  await page.setViewportSize(viewport);
+  await expect(toolbar).toBeHidden();
+  await expect(editor).toBeFocused();
+});
+
 test('tapping blank space finishes editing and makes an internal link usable', async ({ page }) => {
   await page.goto('/?db=minimal-editing&empty');
   const rows = page.locator('.row');
