@@ -3828,6 +3828,8 @@ body.is-dragging * {
 .minimal-outline .crumbbar {
   min-height: 48px;
   padding-block: 4px;
+  /* Leave the leading slot for iPadOS window controls in the same row. */
+  padding-inline-start: calc(3.5ch + var(--controls-left, 0px));
 }
 
 .minimal-outline .crumbbar button[data-action="ZoomHeader.1"] {

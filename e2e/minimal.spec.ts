@@ -50,6 +50,32 @@ test('default view, empty branch, keyboard and view preference round trip', asyn
   await expect(rows).toHaveCount(2);
 });
 
+test('iPad window controls leave Home accessible after resizing', async ({ page }) => {
+  await page.setViewportSize({ width: 1376, height: 1032 });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel' });
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 5 });
+    Object.defineProperty(navigator, 'standalone', { value: true });
+    Object.defineProperty(screen, 'width', { value: 1376 });
+    Object.defineProperty(screen, 'height', { value: 1032 });
+  });
+  await page.goto('/?demo');
+  const home = page.getByRole('button', { name: 'Главная', exact: true });
+  const fullScreen = (await home.boundingBox())!;
+
+  await page.setViewportSize({ width: 600, height: 800 });
+  await expect.poll(async () => (await home.boundingBox())?.x).toBeGreaterThanOrEqual(76);
+  const windowed = (await home.boundingBox())!;
+  expect(windowed.y + windowed.height).toBeLessThanOrEqual(52);
+  await page.getByRole('button', { name: 'Открыть пункт' }).first().click();
+  await expect(home).not.toHaveAttribute('aria-current', 'page');
+  await home.click();
+  await expect(home).toHaveAttribute('aria-current', 'page');
+
+  await page.setViewportSize({ width: 1376, height: 1032 });
+  await expect.poll(() => home.boundingBox()).toEqual(fullScreen);
+});
+
 test.describe('touch', () => {
   test.use({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
 
