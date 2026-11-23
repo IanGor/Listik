@@ -3840,7 +3840,7 @@ body.is-dragging * {
 }
 
 .minimal-outline .bullet {
-  padding: 0;
+  padding: 0 0 0 var(--bullet-reach, 0px);
   border: 0;
   background: transparent;
 }

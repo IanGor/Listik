@@ -79,6 +79,33 @@ test('iPad window controls leave Home accessible after resizing', async ({ page 
 test.describe('touch', () => {
   test.use({ viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true });
 
+  test('the bullet and its collapsed halo clear the first symbol on a phone', async ({ page }) => {
+    await page.goto('/?db=e2e-mobile-bullet&empty');
+    const row = page.locator('.row').first();
+    await row.locator('.text').tap();
+    const editor = page.locator('.row .text[contenteditable]');
+    await editor.fill('📥 Inbox');
+    await editor.press('End');
+    await editor.press('Enter');
+    await editor.fill('Вложенный пункт');
+    await editor.press('Tab');
+
+    const bullet = row.getByRole('button', { name: 'Открыть пункт' });
+    const text = row.locator('.text');
+    const expectGap = async (pseudo: '::before' | '::after') => {
+      const bulletRight = await bullet.evaluate((element, part) => {
+        const style = getComputedStyle(element, part);
+        return element.getBoundingClientRect().left + parseFloat(style.left) + parseFloat(style.width) / 2;
+      }, pseudo);
+      expect((await text.boundingBox())!.x - bulletRight).toBeGreaterThanOrEqual(4);
+    };
+
+    await expectGap('::after');
+    await row.getByRole('button', { name: 'Свернуть пункт' }).tap();
+    await expect(bullet).toHaveClass(/collapsed/);
+    await expectGap('::before');
+  });
+
   test('a tap in an empty branch creates and focuses one row', async ({ page }) => {
     await page.goto('/?demo');
     await page.locator('.row .bullet').last().tap();
