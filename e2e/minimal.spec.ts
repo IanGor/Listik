@@ -59,22 +59,19 @@ test('minimal header keeps Home and breadcrumbs left and the menu right', async 
   const path = breadcrumbs.getByRole('button');
   await expect(path).toHaveCount(3);
   const navToggle = page.getByRole('button', { name: /дерево навигации/i });
-  const levelToggle = page.getByRole('button', { name: /Свернуть первый уровень|Развернуть первый уровень/i });
   const trigger = page.getByRole('button', { name: menu });
 
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 844 });
-    const [toggleBox, navBox, current, levelBox, box] = await Promise.all([
+    const [toggleBox, navBox, current, box] = await Promise.all([
       navToggle.boundingBox(),
       breadcrumbs.boundingBox(),
       path.last().boundingBox(),
-      levelToggle.boundingBox(),
       trigger.boundingBox(),
     ]);
     expect(toggleBox!.x).toBeGreaterThanOrEqual(4);
     expect(navBox!.x).toBeGreaterThanOrEqual(toggleBox!.x + toggleBox!.width);
-    expect(current!.x + current!.width).toBeLessThanOrEqual(levelBox!.x + 1);
-    expect(levelBox!.x + levelBox!.width).toBeLessThanOrEqual(box!.x + 1);
+    expect(current!.x + current!.width).toBeLessThanOrEqual(box!.x + 1);
     expect(width - box!.x - box!.width).toBeGreaterThanOrEqual(4);
     expect(width - box!.x - box!.width).toBeLessThanOrEqual(16);
   }

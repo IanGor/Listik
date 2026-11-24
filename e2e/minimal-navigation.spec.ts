@@ -77,6 +77,10 @@ test.describe('minimal navigation tree and editor level toggle', () => {
     // Unfold first level in editor.
     await levelToggle.click();
     await expect(rows).toHaveCount(6);
+
+    // Leaf-only branch hides the level toggle so the header stays uncluttered.
+    await nav.locator('.minimal-nav-row', { hasText: 'Часть первая' }).click();
+    await expect(levelToggle).toHaveCount(0);
   });
 
   test('narrow screen starts closed, opens as overlay drawer and closes on navigation or Escape', async ({ page }) => {
