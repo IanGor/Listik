@@ -7,8 +7,8 @@ test.describe('minimal navigation tree and editor level toggle', () => {
 
     const nav = page.locator('.minimal-nav');
     const items = nav.locator('.minimal-nav-row');
-    const locateBtn = nav.locator('[data-action="minimal.nav.locate"]');
-    const collapseAllBtn = nav.locator('[data-action="minimal.nav.collapseAll"]');
+    const locateBtn = page.locator('[data-action="minimal.nav.locate"]');
+    const collapseAllBtn = page.locator('[data-action="minimal.nav.collapseAll"]');
 
     await expect(nav).toBeVisible();
     // Demo doc: "Том первый" (has child branch "Часть первая" + leaf "Часть вторая") and leaf "Том второй".

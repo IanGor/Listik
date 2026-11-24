@@ -3881,25 +3881,35 @@ body.is-dragging * {
   caret-color: var(--primary);
 }
 
-/* Full-width opaque fixed band at y = 0 so iPadOS 26/27 WebKit suppresses the
-   Liquid Glass scroll-edge blur across both the nav tree and editor headers. */
-.minimal-outline::before {
-  content: '';
-  position: fixed;
-  inset: 0 0 auto 0;
-  height: calc(env(safe-area-inset-top) + 48px);
+/* Single full-width sticky opaque header directly under .minimal-outline,
+   matching legacy .topbar (b2dcd47) so iPadOS 26/27 suppresses top-edge blur. */
+.minimal-outline .minimal-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  width: 100%;
+  min-height: 48px;
   background: var(--canvas);
-  pointer-events: none;
-  z-index: 1;
+  border-bottom: 1px solid var(--hairline);
 }
 
-.minimal-outline > * {
-  position: relative;
-  z-index: 2;
+.minimal-outline .minimal-topbar > .minimal-nav-header {
+  width: 280px;
+  min-width: 220px;
+  max-width: 340px;
+  padding-left: calc(14px + var(--controls-left, 0px));
+  border-right: 1px solid var(--hairline);
+  border-bottom: 0;
 }
 
-.minimal-outline .document-header {
-  border-radius: 0;
+.minimal-outline .minimal-topbar-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 
 .minimal-outline:has(> .editbar) {
@@ -3916,12 +3926,12 @@ body.is-dragging * {
   background: var(--canvas);
 }
 
-.minimal-outline .workspace:has(> .minimal-nav.open:not(.overlay)) .crumbbar {
+.minimal-outline .minimal-topbar:has(> .minimal-nav-header) .crumbbar {
   padding-inline: 4px 6px;
 }
 
-.minimal-outline .workspace:has(> .minimal-nav.open:not(.overlay)) .minimal-nav-header {
-  padding-left: calc(14px + var(--controls-left, 0px));
+.minimal-outline .crumbbar.scrolled {
+  box-shadow: none;
 }
 
 .minimal-outline .crumbbar .crumbs {
@@ -4051,18 +4061,18 @@ body.is-dragging * {
 }
 
 .minimal-outline .minimal-nav.overlay {
-  position: absolute;
-  inset: 0 auto 0 0;
-  z-index: 30;
+  position: fixed;
+  inset: env(safe-area-inset-top) auto env(safe-area-inset-bottom) 0;
+  z-index: 40;
   width: min(300px, 84vw);
   max-width: none;
   box-shadow: var(--shadow-pop);
 }
 
 .minimal-outline .minimal-nav-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 25;
+  z-index: 35;
   background: light-dark(rgb(25 24 21 / .22), rgb(0 0 0 / .48));
 }
 

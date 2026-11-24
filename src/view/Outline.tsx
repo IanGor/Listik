@@ -2,7 +2,7 @@ import { useContext } from 'solid-js';
 import { SplitContext } from './split-context';
 import { watchWindowControls } from './window-controls';
 import { Sidebar } from './Sidebar';
-import { MinimalNavTree } from './MinimalNavTree';
+import { createMinimalNav, MinimalNavHeader, MinimalNavTree } from './MinimalNavTree';
 import { SelectionBar } from './SelectionBar';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
@@ -89,6 +89,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
     if (!minimalOverlay()) writeMinimalNavPref(value);
   };
   const toggleMinimalNav = () => setMinimalNav(!minimalNavOpen());
+  const minimalNav = createMinimalNav(o);
   let scroller!: HTMLDivElement;
   let windowEl!: HTMLDivElement;
   let probe!: HTMLSpanElement;
@@ -98,8 +99,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
   let viewportCaret: typeof lastCaret;
 
   const observeHeader = (el: HTMLElement) => {
-    const desk = el.closest<HTMLElement>('.desk')!;
-    const observer = new ResizeObserver(() => desk.style.setProperty('--document-header-height', `${el.getBoundingClientRect().height}px`));
+    const observer = new ResizeObserver(() => el.closest<HTMLElement>('.desk')?.style.setProperty('--document-header-height', `${el.getBoundingClientRect().height}px`));
     observer.observe(el);
     onCleanup(() => observer.disconnect());
   };
@@ -567,12 +567,22 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
           onMouseDown={(e) => e.preventDefault()} onClick={() => setNavigationRequests((n) => n + 1)}><NavigationIcon /></button>
       </header>
       </Show>
+      <Show when={props.minimal}>
+        <header class="minimal-topbar">
+          <Show when={minimalNavOpen() && !minimalOverlay()}>
+            <MinimalNavHeader nav={minimalNav} onClose={() => setMinimalNav(false)} />
+          </Show>
+          <div class="minimal-topbar-main">
+            <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} navOpen={minimalNavOpen()} onToggleNav={toggleMinimalNav} navId={navigationId} />
+          </div>
+        </header>
+      </Show>
       <div class="workspace">
         <Show when={!props.minimal}>
         <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} active={active} navigationId={navigationId} />
         </Show>
         <Show when={props.minimal}>
-          <MinimalNavTree o={o} open={minimalNavOpen} overlay={minimalOverlay} onClose={() => setMinimalNav(false)} navId={navigationId} />
+          <MinimalNavTree nav={minimalNav} open={minimalNavOpen} overlay={minimalOverlay} onClose={() => setMinimalNav(false)} navId={navigationId} />
         </Show>
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
@@ -580,9 +590,11 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
           {(id) => <Sketch o={o} id={id} />}
         </Show>
         <div class="main">
-          <header ref={observeHeader} class="document-header">
-            <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} navOpen={minimalNavOpen()} onToggleNav={toggleMinimalNav} navId={navigationId} />
-          </header>
+          <Show when={!props.minimal}>
+            <header ref={observeHeader} class="document-header">
+              <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} />
+            </header>
+          </Show>
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !props.minimal && !!hotGuide() }}
             role={emptyEditable() ? 'button' : undefined} tabIndex={emptyEditable() ? 0 : undefined}
             aria-label={emptyEditable() ? 'Новый пункт' : undefined}
