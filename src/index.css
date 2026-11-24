@@ -3881,6 +3881,27 @@ body.is-dragging * {
   caret-color: var(--primary);
 }
 
+/* Full-width opaque fixed band at y = 0 so iPadOS 26/27 WebKit suppresses the
+   Liquid Glass scroll-edge blur across both the nav tree and editor headers. */
+.minimal-outline::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: calc(env(safe-area-inset-top) + 48px);
+  background: var(--canvas);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.minimal-outline > * {
+  position: relative;
+  z-index: 2;
+}
+
+.minimal-outline .document-header {
+  border-radius: 0;
+}
+
 .minimal-outline:has(> .editbar) {
   padding-bottom: 0;
 }
@@ -4009,7 +4030,7 @@ body.is-dragging * {
 
 .minimal-outline .workspace {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .minimal-outline .minimal-nav {
@@ -4047,11 +4068,15 @@ body.is-dragging * {
 
 .minimal-outline .minimal-nav-header {
   flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 48px;
   padding: 2px 8px 2px 14px;
+  background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
 }
 
