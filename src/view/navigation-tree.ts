@@ -11,21 +11,38 @@ export interface NavigationRow {
   siblings: number;
 }
 
+export interface NavigationOptions {
+  /** Include only nodes that have children (like folders in a file explorer). */
+  branchesOnly?: boolean;
+}
+
 /** Read-only projection: folds never touch the document or the editor's rows. */
-export function navigationRows(doc: Doc, expanded: ReadonlySet<RowKey>): NavigationRow[] {
+export function navigationRows(doc: Doc, expanded: ReadonlySet<RowKey>, options?: NavigationOptions): NavigationRow[] {
+  const branchesOnly = !!options?.branchesOnly;
+  const isBranch = (id: string, hosts: ReadonlySet<string>): boolean => {
+    const host = doc.host(id);
+    return !!host?.children.length && !hosts.has(host.id);
+  };
+  const filterChildren = (ids: readonly string[], hosts: ReadonlySet<string>): readonly string[] =>
+    branchesOnly ? ids.filter((id) => isBranch(id, hosts)) : ids;
+
   const out: NavigationRow[] = [];
-  const stack = [{ children: doc.get(doc.root).children, index: 0, depth: 0, parent: null as RowKey | null, hosts: new Set([doc.root]) }];
+  const rootHosts = new Set([doc.root]);
+  const stack = [{ children: filterChildren(doc.get(doc.root).children, rootHosts), index: 0, depth: 0, parent: null as RowKey | null, hosts: rootHosts }];
   while (stack.length) {
     const frame = stack[stack.length - 1];
     if (frame.index === frame.children.length) { stack.pop(); continue; }
     const id = frame.children[frame.index++];
     const key = frame.parent ? `${frame.parent}/${id}` : id;
     const host = doc.host(id);
-    const children = !!host?.children.length && !frame.hosts.has(host.id);
+    const hasKids = !!host?.children.length && !frame.hosts.has(host.id);
+    const nextHosts = hasKids ? new Set([...frame.hosts, host!.id]) : frame.hosts;
+    const childList = hasKids ? filterChildren(host!.children, nextHosts) : [];
+    const children = childList.length > 0;
     out.push({ key, id, depth: frame.depth, parent: frame.parent, children, position: frame.index, siblings: frame.children.length });
     if (children && expanded.has(key)) stack.push({
-      children: host!.children, index: 0, depth: frame.depth + 1, parent: key,
-      hosts: new Set([...frame.hosts, host!.id]),
+      children: childList, index: 0, depth: frame.depth + 1, parent: key,
+      hosts: nextHosts,
     });
   }
   return out;

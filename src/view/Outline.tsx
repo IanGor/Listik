@@ -2,6 +2,7 @@ import { useContext } from 'solid-js';
 import { SplitContext } from './split-context';
 import { watchWindowControls } from './window-controls';
 import { Sidebar } from './Sidebar';
+import { MinimalNavTree } from './MinimalNavTree';
 import { SelectionBar } from './SelectionBar';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { appendChild } from '../model/commands';
@@ -56,6 +57,16 @@ const ADD_HEIGHT = 32;
  * flow normally inside a "window" shifted to the first rendered row's offset,
  * so estimate errors never make rows overlap.
  */
+const MINIMAL_NAV_KEY = 'listik-minimal-nav-open';
+function readMinimalNavPref(): boolean {
+  try { return localStorage.getItem(MINIMAL_NAV_KEY) !== 'false'; }
+  catch { return true; }
+}
+function writeMinimalNavPref(value: boolean): void {
+  try { localStorage.setItem(MINIMAL_NAV_KEY, String(value)); }
+  catch { /* Optional local view preference. */ }
+}
+
 export function Outline(props: { o: Outliner; secondary?: boolean; minimal: boolean; toggleView: () => void }) {
   const o = props.o;
   const split = useContext(SplitContext);
@@ -64,6 +75,20 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
   if (!props.secondary) onCleanup(watchWindowControls());
   const [navigationRequests, setNavigationRequests] = createSignal(0);
   const [navigationOpen, setNavigationOpen] = createSignal(false);
+  const navMedia = matchMedia('(max-width: 1023px)');
+  const [minimalOverlay, setMinimalOverlay] = createSignal(navMedia.matches);
+  const [minimalNavOpen, setMinimalNavOpen] = createSignal(!navMedia.matches && readMinimalNavPref());
+  const onNavMedia = (e: MediaQueryListEvent) => {
+    setMinimalOverlay(e.matches);
+    setMinimalNavOpen(e.matches ? false : readMinimalNavPref());
+  };
+  navMedia.addEventListener('change', onNavMedia);
+  onCleanup(() => navMedia.removeEventListener('change', onNavMedia));
+  const setMinimalNav = (value: boolean) => {
+    setMinimalNavOpen(value);
+    if (!minimalOverlay()) writeMinimalNavPref(value);
+  };
+  const toggleMinimalNav = () => setMinimalNav(!minimalNavOpen());
   let scroller!: HTMLDivElement;
   let windowEl!: HTMLDivElement;
   let probe!: HTMLSpanElement;
@@ -546,6 +571,9 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
         <Show when={!props.minimal}>
         <Sidebar o={o} requests={navigationRequests} onOpenChange={setNavigationOpen} active={active} navigationId={navigationId} />
         </Show>
+        <Show when={props.minimal}>
+          <MinimalNavTree o={o} open={minimalNavOpen} overlay={minimalOverlay} onClose={() => setMinimalNav(false)} navId={navigationId} />
+        </Show>
         {/* The list and, zoomed in, the bullet's sketch: left of it, or above it on an upright screen. */}
         <div class="desk">
         <Show when={!props.minimal && o.sketchShown()} keyed>
@@ -553,7 +581,7 @@ export function Outline(props: { o: Outliner; secondary?: boolean; minimal: bool
         </Show>
         <div class="main">
           <header ref={observeHeader} class="document-header">
-            <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} />
+            <Crumbs o={o} scrolled={scrollTop() > 0} navigation minimal={props.minimal} toggleView={props.toggleView} navOpen={minimalNavOpen()} onToggleNav={toggleMinimalNav} navId={navigationId} />
           </header>
           <div ref={scroller} class="scroller" classList={{ 'on-guide': !props.minimal && !!hotGuide() }}
             role={emptyEditable() ? 'button' : undefined} tabIndex={emptyEditable() ? 0 : undefined}

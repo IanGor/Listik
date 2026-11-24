@@ -20,7 +20,7 @@ export default defineConfig({
   projects: [
     { name: 'app', testMatch: /split\.spec\.ts|responsive\.spec\.ts|outline\.spec\.ts|sync\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: dev, storageState: legacyStorage(dev) } },
     { name: 'pwa', testMatch: /pwa\.spec\.ts|textsize\.spec\.ts/, use: { baseURL: built, storageState: legacyStorage(built) } },
-    { name: 'minimal', testMatch: /minimal(?:-(?:editing|functional|opening))?\.spec\.ts$/, use: { baseURL: dev } },
+    { name: 'minimal', testMatch: /minimal(?:-(?:editing|functional|opening|navigation))?\.spec\.ts$/, use: { baseURL: dev } },
     { name: 'minimal-pwa', testMatch: /minimal-pwa\.spec\.ts$/, use: { baseURL: built } },
   ],
   webServer: [

@@ -46,4 +46,55 @@ describe('read-only navigation tree', () => {
     run(() => deleteNode(ctx, 'A'));
     expect(navigationRows(doc, open).map((r) => r.id)).toEqual(['C']);
   });
+
+  it('filters leaves and hides chevrons on leaf-only folders in branchesOnly mode', () => {
+    const { doc } = setup([
+      'Inbox',
+      '  Task 1',
+      '  Task 2',
+      'Projects',
+      '  Listik',
+      '    Nav',
+      '      Item',
+      '  EmptyIdea',
+      'LooseLeaf',
+    ]);
+    const collapsed = navigationRows(doc, new Set(), { branchesOnly: true });
+    expect(collapsed.map((r) => [r.key, r.children])).toEqual([
+      ['Inbox', false],
+      ['Projects', true],
+    ]);
+
+    const open = new Set(['Projects', 'Projects/Listik', 'Inbox']);
+    const expanded = navigationRows(doc, open, { branchesOnly: true });
+    expect(expanded.map((r) => [r.key, r.depth, r.children])).toEqual([
+      ['Inbox', 0, false],
+      ['Projects', 0, true],
+      ['Projects/Listik', 1, true],
+      ['Projects/Listik/Nav', 2, false],
+    ]);
+
+    // Selecting a leaf highlights its nearest visible parent branch.
+    expect(navigationSelection(expanded, doc, 'EmptyIdea')).toBe('Projects');
+    expect(navigationSelection(expanded, doc, 'Task 1')).toBe('Inbox');
+    expect(navigationSelection(expanded, doc, 'LooseLeaf')).toBe(null);
+
+    // Revealing into an empty set expands only the active path.
+    expect([...revealNavigation(doc, 'Nav', new Set())]).toEqual(['Projects', 'Projects/Listik']);
+  });
+
+  it('handles mirrors and prevents cycles in branchesOnly mode', () => {
+    const { doc, run } = setup(['A', '  B', '    Leaf', '  Loop', 'Copy']);
+    run(() => {
+      doc.apply({ t: 'setMirror', id: 'Copy', from: null, to: 'A' });
+      doc.apply({ t: 'setMirror', id: 'Loop', from: null, to: 'A' });
+    });
+    const rows = navigationRows(doc, new Set(['A', 'Copy']), { branchesOnly: true });
+    expect(rows.map((r) => [r.key, r.children])).toEqual([
+      ['A', true],
+      ['A/B', false],
+      ['Copy', true],
+      ['Copy/B', false],
+    ]);
+  });
 });

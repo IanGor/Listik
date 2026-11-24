@@ -58,19 +58,25 @@ test('minimal header keeps Home and breadcrumbs left and the menu right', async 
   const breadcrumbs = page.getByRole('navigation', { name: 'Путь' });
   const path = breadcrumbs.getByRole('button');
   await expect(path).toHaveCount(3);
+  const navToggle = page.getByRole('button', { name: /дерево навигации/i });
+  const levelToggle = page.getByRole('button', { name: /Свернуть первый уровень|Развернуть первый уровень/i });
   const trigger = page.getByRole('button', { name: menu });
 
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 844 });
-    const [home, ancestor, current] = await Promise.all([path.first().boundingBox(), path.nth(1).boundingBox(), path.last().boundingBox()]);
-    const box = (await trigger.boundingBox())!;
-    expect(home!.x).toBeGreaterThanOrEqual(4);
-    expect(home!.x).toBeLessThanOrEqual(16);
-    expect(ancestor!.x - (home!.x + home!.width)).toBeLessThanOrEqual(24);
-    expect(current!.x).toBeGreaterThan(ancestor!.x);
-    expect(current!.x + current!.width).toBeLessThan(box.x);
-    expect(width - box.x - box.width).toBeGreaterThanOrEqual(4);
-    expect(width - box.x - box.width).toBeLessThanOrEqual(16);
+    const [toggleBox, navBox, current, levelBox, box] = await Promise.all([
+      navToggle.boundingBox(),
+      breadcrumbs.boundingBox(),
+      path.last().boundingBox(),
+      levelToggle.boundingBox(),
+      trigger.boundingBox(),
+    ]);
+    expect(toggleBox!.x).toBeGreaterThanOrEqual(4);
+    expect(navBox!.x).toBeGreaterThanOrEqual(toggleBox!.x + toggleBox!.width);
+    expect(current!.x + current!.width).toBeLessThanOrEqual(levelBox!.x + 1);
+    expect(levelBox!.x + levelBox!.width).toBeLessThanOrEqual(box!.x + 1);
+    expect(width - box!.x - box!.width).toBeGreaterThanOrEqual(4);
+    expect(width - box!.x - box!.width).toBeLessThanOrEqual(16);
   }
 
   await page.setViewportSize({ width: 240, height: 640 });
@@ -105,7 +111,11 @@ test('minimal header menu rests as dots and keeps hover and keyboard focus', asy
   expect(triggerBox!.width).toBe(homeBox!.width);
   expect(triggerBox!.height).toBe(homeBox!.height);
 
+  const navToggle = page.getByRole('button', { name: /дерево навигации/i });
   await page.mouse.move(140, 160);
+  await page.keyboard.press('Tab');
+  await expect(navToggle).toBeFocused();
+  await expect(navToggle).toHaveCSS('outline-style', 'solid');
   await page.keyboard.press('Tab');
   await expect(home).toBeFocused();
   await expect(home).toHaveCSS('outline-style', 'solid');
@@ -136,11 +146,15 @@ test('iPad window controls leave Home accessible after resizing', async ({ page 
     Object.defineProperty(screen, 'height', { value: 1032 });
   });
   await page.goto('/?demo');
+  // Close the persistent desktop nav tree so Home sits in the leading header slot on full screen too.
+  await page.getByRole('button', { name: /Скрыть дерево навигации/i }).click();
+  const navToggle = page.getByRole('button', { name: /Открыть дерево навигации/i });
   const home = page.getByRole('button', { name: 'Главная', exact: true });
   const trigger = page.getByRole('button', { name: menu });
+  const fullScreenToggle = (await navToggle.boundingBox())!;
   const fullScreen = (await home.boundingBox())!;
-  expect(fullScreen.x).toBeGreaterThanOrEqual(18 + 4);
-  expect(fullScreen.x).toBeLessThanOrEqual(18 + 16);
+  expect(fullScreenToggle.x).toBeGreaterThanOrEqual(18 + 4);
+  expect(fullScreenToggle.x).toBeLessThanOrEqual(18 + 16);
 
   await page.setViewportSize({ width: 600, height: 800 });
   await expect.poll(async () => (await home.boundingBox())?.x).toBeCloseTo(fullScreen.x + 76, 0);

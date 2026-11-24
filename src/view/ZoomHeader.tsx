@@ -1,5 +1,6 @@
 import { DocumentMenu } from './Menu';
 import { Star } from './SearchBar';
+import { NavigationIcon } from './TopBar';
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from 'solid-js';
 import { prependChild } from '../model/commands';
 import { calendarName } from '../model/calendar';
@@ -74,7 +75,16 @@ function mouseScroll(nav: HTMLElement): void {
 /** The narrowest the place's own crumb gets before the path scrolls instead, px (~8 characters). */
 const CURRENT_MIN = 72;
 
-export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boolean; minimal?: boolean; toggleView?: () => void }) {
+export function Crumbs(props: {
+  o: Outliner;
+  scrolled: boolean;
+  navigation?: boolean;
+  minimal?: boolean;
+  toggleView?: () => void;
+  navOpen?: boolean;
+  onToggleNav?: () => void;
+  navId?: string;
+}) {
   const o = props.o;
   let nav!: HTMLElement;
   const level = createMemo(() => o.levelState());
@@ -143,6 +153,21 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           </For>
         </div>
       </Show>
+      <Show when={props.minimal && props.onToggleNav}>
+        <button
+          data-action="minimal.nav.toggle"
+          type="button"
+          class="minimal-nav-toggle"
+          title={props.navOpen ? 'Скрыть дерево' : 'Открыть дерево'}
+          aria-label={props.navOpen ? 'Скрыть дерево навигации' : 'Открыть дерево навигации'}
+          aria-expanded={!!props.navOpen}
+          aria-controls={props.navId}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => props.onToggleNav?.()}
+        >
+          <NavigationIcon />
+        </button>
+      </Show>
       <nav ref={nav} class="crumbs" aria-label="Путь" onScroll={clip}>
         {/* Home. A crumb only leads somewhere: folding the level is the button at the bar's end (UX audit, 29 October 2026). */}
         <button data-action="ZoomHeader.1"
@@ -178,7 +203,6 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
         {(n) => <span class="count">{n()} {plural(n(), 'пункт', 'пункта', 'пунктов')}</span>}
       </Show>
       {/* The first level here folded, an overview; again, open (`toggleLevel`): once the place's own crumb did it, unseen. */}
-      <Show when={!props.minimal}>
       <button data-action="ZoomHeader.3"
         type="button"
         class="level-toggle"
@@ -194,7 +218,6 @@ export function Crumbs(props: { o: Outliner; scrolled: boolean; navigation?: boo
           <path d={collapse() ? 'm7 4 5 5 5-5' : 'm7 8 5-5 5 5'} />
         </svg>
       </button>
-      </Show>
       {/* Zoomed in: the bullet's sketch beside the list (Sketch.tsx), opened or put away: an icon, coral when the bullet has a sketch. */}
       <Show when={!props.minimal && path().length}>
         <button data-action="ZoomHeader.4"

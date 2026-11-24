@@ -3888,15 +3888,30 @@ body.is-dragging * {
 .minimal-outline .crumbbar {
   max-width: none;
   min-height: 48px;
+  gap: 2px;
   padding-block: 2px;
   /* Leave the leading slot for iPadOS window controls in the same row. */
-  padding-inline: calc(4px + var(--controls-left, 0px)) 8px;
+  padding-inline: calc(4px + var(--controls-left, 0px)) 6px;
   background: var(--canvas);
+}
+
+.minimal-outline .workspace:has(> .minimal-nav.open:not(.overlay)) .crumbbar {
+  padding-inline: 4px 6px;
+}
+
+.minimal-outline .workspace:has(> .minimal-nav.open:not(.overlay)) .minimal-nav-header {
+  padding-left: calc(14px + var(--controls-left, 0px));
 }
 
 .minimal-outline .crumbbar .crumbs {
   margin-inline: 0;
-  padding-inline: 4px;
+  padding-inline: 0;
+}
+
+@media (max-width: 480px) {
+  .minimal-outline .crumbbar {
+    --header-action: 36px;
+  }
 }
 
 /* The current crumb is the only title in the new view. */
@@ -3905,7 +3920,7 @@ body.is-dragging * {
   font-weight: 600;
 }
 
-.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button) {
+.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .minimal-nav-toggle, .level-toggle, .menu-button) {
   display: grid;
   place-items: center;
   flex: none;
@@ -3919,13 +3934,23 @@ body.is-dragging * {
   color: var(--muted);
 }
 
-:where(:root.mouse) .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):hover {
+:where(:root.mouse) .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .minimal-nav-toggle, .level-toggle, .menu-button):hover:not(:disabled) {
   background: var(--surface);
   color: var(--text);
 }
 
-.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):active {
+.minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .minimal-nav-toggle, .level-toggle, .menu-button):active:not(:disabled) {
   background: var(--surface-2);
+}
+
+.minimal-outline .crumbbar .minimal-nav-toggle[aria-expanded="true"] {
+  background: var(--chip);
+  color: var(--primary);
+}
+
+.minimal-outline .crumbbar .level-toggle:disabled {
+  opacity: 0.34;
+  cursor: default;
 }
 
 .minimal-outline .crumbbar .menu {
@@ -3979,3 +4004,241 @@ body.is-dragging * {
 }
 
 .minimal-outline .scroller[role="button"] { cursor: text; }
+
+/* --- Minimal Navigation Tree (Explorer-style branches sidebar) ---------- */
+
+.minimal-outline .workspace {
+  position: relative;
+  overflow: hidden;
+}
+
+.minimal-outline .minimal-nav {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  width: 280px;
+  min-width: 220px;
+  max-width: 340px;
+  min-height: 0;
+  background: var(--canvas);
+  border-right: 1px solid var(--hairline);
+  font-family: var(--font-ui);
+}
+
+.minimal-outline .minimal-nav.open {
+  display: flex;
+}
+
+.minimal-outline .minimal-nav.overlay {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 30;
+  width: min(300px, 84vw);
+  max-width: none;
+  box-shadow: var(--shadow-pop);
+}
+
+.minimal-outline .minimal-nav-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: light-dark(rgb(25 24 21 / .22), rgb(0 0 0 / .48));
+}
+
+.minimal-outline .minimal-nav-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 2px 8px 2px 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.minimal-outline .minimal-nav-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  user-select: none;
+}
+
+.minimal-outline .minimal-nav-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.minimal-outline .minimal-nav-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--hairline);
+}
+
+.minimal-outline .minimal-nav-btn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+:where(:root.mouse) .minimal-outline .minimal-nav-btn:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.minimal-outline .minimal-nav-btn:active:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.minimal-outline .minimal-nav-btn:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.minimal-outline .minimal-nav-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px 32px 8px;
+}
+
+.minimal-outline .minimal-nav-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  padding-right: 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+}
+
+.minimal-outline .minimal-nav-home {
+  padding-left: 6px;
+}
+
+:where(:root.mouse) .minimal-outline .minimal-nav-row:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.minimal-outline .minimal-nav-row.active {
+  background: var(--chip);
+  color: var(--text);
+  font-weight: 600;
+}
+
+@keyframes minimalNavLocate {
+  0% { box-shadow: 0 0 0 0 var(--ring); }
+  45% { box-shadow: 0 0 0 3px var(--ring); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.minimal-outline .minimal-nav-row.located {
+  animation: minimalNavLocate 560ms ease-out;
+}
+
+.minimal-outline .minimal-nav-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--guide);
+  pointer-events: none;
+}
+
+.minimal-outline .minimal-nav-chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+:where(:root.mouse) .minimal-outline .minimal-nav-chev:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.minimal-outline .minimal-nav-chev svg {
+  transition: transform 120ms ease;
+}
+
+.minimal-outline .minimal-nav-chev.open svg {
+  transform: rotate(90deg);
+}
+
+.minimal-outline .minimal-nav-spacer {
+  flex: none;
+  width: 20px;
+}
+
+.minimal-outline .minimal-nav-home-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+}
+
+.minimal-outline .minimal-nav-dot-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 20px;
+}
+
+.minimal-outline .minimal-nav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  opacity: 0.78;
+}
+
+.minimal-outline .minimal-nav-row.active .minimal-nav-dot {
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--halo);
+}
+
+.minimal-outline .minimal-nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minimal-outline .minimal-nav-count {
+  flex: none;
+  margin-left: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  opacity: 0.85;
+}
