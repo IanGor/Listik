@@ -3838,9 +3838,47 @@ body.is-dragging * {
   grid-template-rows: minmax(0, 3fr) minmax(0, 1fr);
 }
 
+/* ========================================================================
+ * Minimal interface — Swiss Editorial theme & isolated design tokens.
+ * Legacy interface keeps the :root tokens above untouched.
+ * ======================================================================== */
+:root:has(.minimal-outline),
+.minimal-outline {
+  --canvas: light-dark(#faf8f4, #191816);
+  --surface: light-dark(#f1ede4, #23211e);
+  --surface-2: light-dark(#e7e1d5, #2d2a26);
+  --material-solid: light-dark(#f1ede4, #23211e);
+  --material: light-dark(rgb(241 237 228 / .94), rgb(35 33 30 / .96));
+  --popover-solid: light-dark(#fdfcf9, #24221f);
+  --popover: light-dark(rgb(253 252 249 / .97), rgb(36 34 31 / .97));
+  --material-border: light-dark(rgb(25 24 21 / .10), rgb(242 239 233 / .12));
+  --text: light-dark(#191815, #f2efe9);
+  --muted: light-dark(#625c53, #a69f93);
+  --faint: light-dark(#6c665c, #8c8579);
+  --hairline: light-dark(rgb(25 24 21 / .09), rgb(242 239 233 / .10));
+  --guide: light-dark(#e4ded2, #302d28);
+  --halo: light-dark(rgb(29 92 76 / .15), rgb(88 179 152 / .22));
+  --primary: light-dark(#1d5c4c, #58b398);
+  --link: light-dark(#185143, #73c7ae);
+  --on-primary: light-dark(#faf8f4, #191816);
+  --bold: light-dark(#1e3a5f, #92b8e8);
+  --italic: light-dark(#7a3e58, #dba0bc);
+  --tag: light-dark(#544e45, #c4bcb0);
+  --tag-chip: light-dark(rgb(25 24 21 / .055), rgb(242 239 233 / .075));
+  --tag-chip-strong: light-dark(rgb(25 24 21 / .10), rgb(242 239 233 / .13));
+  --chip: light-dark(rgb(29 92 76 / .10), rgb(88 179 152 / .15));
+  --ring: light-dark(rgb(29 92 76 / .24), rgb(88 179 152 / .32));
+  --selection: light-dark(rgb(29 92 76 / .18), rgb(88 179 152 / .24));
+  --shadow-pop: 0 10px 28px light-dark(rgb(25 24 21 / .09), rgb(0 0 0 / .45));
+  --line-height: 1.62;
+}
+
 .minimal-outline {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   background: var(--canvas);
+  color: var(--text);
+  line-height: var(--line-height);
+  caret-color: var(--primary);
 }
 
 .minimal-outline:has(> .editbar) {
@@ -3853,6 +3891,7 @@ body.is-dragging * {
   padding-block: 2px;
   /* Leave the leading slot for iPadOS window controls in the same row. */
   padding-inline: calc(4px + var(--controls-left, 0px)) 8px;
+  background: var(--canvas);
 }
 
 .minimal-outline .crumbbar .crumbs {
@@ -3863,6 +3902,7 @@ body.is-dragging * {
 /* The current crumb is the only title in the new view. */
 .minimal-outline .crumb.current {
   max-width: 100%;
+  font-weight: 600;
 }
 
 .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button) {
@@ -3876,10 +3916,12 @@ body.is-dragging * {
   border: 0;
   border-radius: 6px;
   background: none;
+  color: var(--muted);
 }
 
 :where(:root.mouse) .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):hover {
   background: var(--surface);
+  color: var(--text);
 }
 
 .minimal-outline .crumbbar :is(button[data-action="ZoomHeader.1"], .menu-button):active {
@@ -3896,6 +3938,31 @@ body.is-dragging * {
   padding: 0 0 0 var(--bullet-reach, 0px);
   border: 0;
   background: transparent;
+}
+
+.minimal-outline .bullet::after {
+  background: var(--primary);
+}
+
+/* Quiet paper editing: caret marks focus without a background box or underline. */
+.minimal-outline .text[contenteditable] {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.minimal-outline .row.selected::after {
+  border-radius: 4px;
+}
+
+.minimal-outline .tag {
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.minimal-outline .url,
+.minimal-outline .link {
+  text-underline-offset: 2.5px;
 }
 
 .minimal-outline .toggle { opacity: 1; }

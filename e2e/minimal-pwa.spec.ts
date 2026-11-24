@@ -8,7 +8,7 @@ test('the new interface preserves edits offline and follows the system appearanc
   const editor = page.locator('.row .text[contenteditable]');
   await editor.fill('Доступно без сети');
   await editor.press('Escape');
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 248, 244)');
 
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
@@ -17,7 +17,7 @@ test('the new interface preserves edits offline and follows the system appearanc
 
   await context.setOffline(true);
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(38, 38, 36)');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(25, 24, 22)');
   await page.reload();
   await expect(row).toHaveText('Доступно без сети');
   await row.click();

@@ -96,9 +96,9 @@ test('minimal header menu rests as dots and keeps hover and keyboard focus', asy
   await expect(trigger).toHaveCSS('border-style', 'none');
 
   await home.hover();
-  await expect(home).toHaveCSS('background-color', 'rgb(241, 238, 231)');
+  await expect(home).toHaveCSS('background-color', 'rgb(241, 237, 228)');
   await trigger.hover();
-  await expect(trigger).toHaveCSS('background-color', 'rgb(241, 238, 231)');
+  await expect(trigger).toHaveCSS('background-color', 'rgb(241, 237, 228)');
   const radius = await home.evaluate((el) => getComputedStyle(el).borderRadius);
   await expect(trigger).toHaveCSS('border-radius', radius);
   const [homeBox, triggerBox] = await Promise.all([home.boundingBox(), trigger.boundingBox()]);
@@ -285,4 +285,27 @@ test.describe('touch', () => {
     await expect(page.locator('.row .text[contenteditable]')).toBeFocused();
     await expect(page.locator('.editbar, .row-menu, .navigation-sidebar')).toHaveCount(0);
   });
+});
+
+test('Swiss Editorial keeps quiet editing focus and isolates tokens from legacy', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/?db=minimal-swiss-theme&empty');
+  const row = page.locator('.row').first();
+  await row.locator('.text').click();
+  const editor = row.locator('.text[contenteditable]');
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(editor).toHaveCSS('box-shadow', 'none');
+  await expect(editor).toHaveCSS('border-bottom-style', 'none');
+  const bulletColor = await row.locator('.bullet').evaluate((el) => getComputedStyle(el, '::after').backgroundColor);
+  expect(bulletColor).toBe('rgb(29, 92, 76)');
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(25, 24, 22)');
+  await expect.poll(() => row.locator('.bullet').evaluate((el) => getComputedStyle(el, '::after').backgroundColor)).toBe('rgb(88, 179, 152)');
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.getByRole('button', { name: menu }).click();
+  await page.getByRole('menuitem', { name: legacy }).click();
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 245)');
 });

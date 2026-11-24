@@ -202,9 +202,9 @@ test('tags have a theme-aware fill and stay editable as text', async ({ page }) 
   const first = (await tags.first().boundingBox())!;
   const second = (await tags.last().boundingBox())!;
   expect(second.x - (first.x + first.width)).toBeGreaterThanOrEqual(6);
-  await expect(tags.first()).toHaveCSS('background-color', 'rgba(20, 20, 19, 0.06)');
+  await expect(tags.first()).toHaveCSS('background-color', 'rgba(25, 24, 21, 0.055)');
   await page.emulateMedia({ colorScheme: 'dark' });
-  await expect(tags.first()).toHaveCSS('background-color', 'rgba(250, 249, 245, 0.08)');
+  await expect(tags.first()).toHaveCSS('background-color', 'rgba(242, 239, 233, 0.075)');
   await tags.first().click();
   await expect(editor).toBeFocused();
   await expect(editor).toHaveText('Заметка #работа @дом');
