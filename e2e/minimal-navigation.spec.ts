@@ -7,10 +7,13 @@ test.describe('minimal navigation tree and editor level toggle', () => {
 
     const nav = page.locator('.minimal-nav');
     const items = nav.locator('.minimal-nav-row');
-    const locateBtn = page.locator('[data-action="minimal.nav.locate"]');
-    const collapseAllBtn = page.locator('[data-action="minimal.nav.collapseAll"]');
+    const locateBtn = nav.locator('[data-action="minimal.nav.locate"]');
+    const collapseAllBtn = nav.locator('[data-action="minimal.nav.collapseAll"]');
 
     await expect(nav).toBeVisible();
+    // No redundant close button or "Дерево" heading inside the sidebar.
+    await expect(nav.locator('[data-action="minimal.nav.close"]')).toHaveCount(0);
+    await expect(nav.locator('.minimal-nav-title')).toHaveCount(0);
     // Demo doc: "Том первый" (has child branch "Часть первая" + leaf "Часть вторая") and leaf "Том второй".
     // Only "Главная" and "Том первый" should be visible when collapsed.
     await expect(items.locator('.minimal-nav-label')).toHaveText(['Главная', 'Том первый']);
@@ -42,14 +45,18 @@ test.describe('minimal navigation tree and editor level toggle', () => {
     await expect(items.nth(2)).toHaveClass(/active/);
     await expect(collapseAllBtn).toBeEnabled();
 
-    // Hide and reopen tree via header toggle; preference persists across reload.
+    // Hide and reopen tree via header toggle; topbar buttons stay in place and preference persists across reload.
     const navToggle = page.locator('[data-action="minimal.nav.toggle"]');
+    const openBox = (await navToggle.boundingBox())!;
     await navToggle.click();
     await expect(nav).toBeHidden();
+    const closedBox = (await navToggle.boundingBox())!;
+    expect(closedBox.x).toBe(openBox.x);
     await page.reload();
     await expect(nav).toBeHidden();
     await navToggle.click();
     await expect(nav).toBeVisible();
+    expect((await navToggle.boundingBox())!.x).toBe(openBox.x);
   });
 
   test('editor level toggle folds and unfolds first level independently of tree', async ({ page }) => {

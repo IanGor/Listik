@@ -143,9 +143,7 @@ test('iPad window controls leave Home accessible after resizing', async ({ page 
     Object.defineProperty(screen, 'height', { value: 1032 });
   });
   await page.goto('/?demo');
-  // Close the persistent desktop nav tree so Home sits in the leading header slot on full screen too.
-  await page.getByRole('button', { name: /Скрыть дерево навигации/i }).click();
-  const navToggle = page.getByRole('button', { name: /Открыть дерево навигации/i });
+  const navToggle = page.getByRole('button', { name: /дерево навигации/i });
   const home = page.getByRole('button', { name: 'Главная', exact: true });
   const trigger = page.getByRole('button', { name: menu });
   const fullScreenToggle = (await navToggle.boundingBox())!;

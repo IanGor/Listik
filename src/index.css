@@ -3886,30 +3886,14 @@ body.is-dragging * {
 .minimal-outline .minimal-topbar {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 45;
   display: flex;
   flex: none;
-  align-items: stretch;
+  align-items: center;
   width: 100%;
   min-height: 48px;
   background: var(--canvas);
   border-bottom: 1px solid var(--hairline);
-}
-
-.minimal-outline .minimal-topbar > .minimal-nav-header {
-  width: 280px;
-  min-width: 220px;
-  max-width: 340px;
-  padding-left: calc(14px + var(--controls-left, 0px));
-  border-right: 1px solid var(--hairline);
-  border-bottom: 0;
-}
-
-.minimal-outline .minimal-topbar-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
 }
 
 .minimal-outline:has(> .editbar) {
@@ -3924,10 +3908,6 @@ body.is-dragging * {
   /* Leave the leading slot for iPadOS window controls in the same row. */
   padding-inline: calc(4px + var(--controls-left, 0px)) 6px;
   background: var(--canvas);
-}
-
-.minimal-outline .minimal-topbar:has(> .minimal-nav-header) .crumbbar {
-  padding-inline: 4px 6px;
 }
 
 .minimal-outline .crumbbar.scrolled {
@@ -4062,7 +4042,7 @@ body.is-dragging * {
 
 .minimal-outline .minimal-nav.overlay {
   position: fixed;
-  inset: env(safe-area-inset-top) auto env(safe-area-inset-bottom) 0;
+  inset: calc(env(safe-area-inset-top) + 48px) auto env(safe-area-inset-bottom) 0;
   z-index: 40;
   width: min(300px, 84vw);
   max-width: none;
@@ -4071,53 +4051,31 @@ body.is-dragging * {
 
 .minimal-outline .minimal-nav-backdrop {
   position: fixed;
-  inset: 0;
+  inset: calc(env(safe-area-inset-top) + 48px) 0 0 0;
   z-index: 35;
   background: light-dark(rgb(25 24 21 / .22), rgb(0 0 0 / .48));
 }
 
-.minimal-outline .minimal-nav-header {
-  flex: none;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.minimal-outline .minimal-nav-root-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 48px;
-  padding: 2px 8px 2px 14px;
-  background: var(--canvas);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.minimal-outline .minimal-nav-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--faint);
-  user-select: none;
+  gap: 4px;
+  margin-bottom: 2px;
 }
 
 .minimal-outline .minimal-nav-actions {
   display: inline-flex;
   align-items: center;
+  flex: none;
   gap: 2px;
-}
-
-.minimal-outline .minimal-nav-sep {
-  width: 1px;
-  height: 16px;
-  margin: 0 3px;
-  background: var(--hairline);
 }
 
 .minimal-outline .minimal-nav-btn {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -4163,6 +4121,8 @@ body.is-dragging * {
 }
 
 .minimal-outline .minimal-nav-home {
+  flex: 1;
+  min-width: 0;
   padding-left: 6px;
 }
 

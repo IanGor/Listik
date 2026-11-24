@@ -5,25 +5,15 @@ import type { RowKey } from '../model/rows';
 import { navigationRows, navigationSelection, revealNavigation, type NavigationRow } from './navigation-tree';
 import type { Outliner } from './outliner';
 
-export interface MinimalNavController {
+export function MinimalNavTree(props: {
   o: Outliner;
-  rows: Accessor<NavigationRow[]>;
-  expanded: Accessor<Set<RowKey>>;
-  selectedKey: Accessor<RowKey | null>;
-  locatedKey: Accessor<RowKey | null>;
-  canLocate: Accessor<boolean>;
-  hasExpanded: Accessor<boolean>;
-  go: (id: string | null, key?: RowKey, after?: () => void) => void;
-  toggleBranch: (key: RowKey, e: MouseEvent) => void;
-  collapseAll: () => void;
-  locateCurrent: () => void;
-  labelOf: (id: string) => string;
-  countOf: (id: string) => number;
-  setListEl: (el: HTMLDivElement) => void;
-}
-
-export function createMinimalNav(o: Outliner): MinimalNavController {
-  let listEl: HTMLDivElement | undefined;
+  open: Accessor<boolean>;
+  overlay: Accessor<boolean>;
+  onClose: () => void;
+  navId: string;
+}) {
+  const o = props.o;
+  let listEl!: HTMLDivElement;
 
   const [docVersion, setDocVersion] = createSignal(0);
   const [expanded, setExpanded] = createSignal<Set<RowKey>>(new Set());
@@ -67,13 +57,13 @@ export function createMinimalNav(o: Outliner): MinimalNavController {
 
   const hasExpanded = () => expanded().size > 0;
 
-  const go = (id: string | null, key?: RowKey, after?: () => void) => {
+  const go = (id: string | null, key?: RowKey) => {
     setPreferredKey(key);
     o.editTitle(null);
     o.setFocus(null);
     o.select(null);
     o.zoomTo(id, true);
-    after?.();
+    if (props.overlay()) props.onClose();
   };
 
   const toggleBranch = (key: RowKey, e: MouseEvent) => {
@@ -123,88 +113,6 @@ export function createMinimalNav(o: Outliner): MinimalNavController {
     return o.doc.host(id)?.children.length ?? 0;
   };
 
-  return {
-    o,
-    rows,
-    expanded,
-    selectedKey,
-    locatedKey,
-    canLocate,
-    hasExpanded,
-    go,
-    toggleBranch,
-    collapseAll,
-    locateCurrent,
-    labelOf,
-    countOf,
-    setListEl: (el) => { listEl = el; },
-  };
-}
-
-export function MinimalNavHeader(props: { nav: MinimalNavController; onClose: () => void }) {
-  return (
-    <div class="minimal-nav-header">
-      <span class="minimal-nav-title">Дерево</span>
-      <div class="minimal-nav-actions">
-        <button
-          type="button"
-          class="minimal-nav-btn"
-          data-action="minimal.nav.locate"
-          title="Показать текущую ветку"
-          aria-label="Показать текущую ветку"
-          disabled={!props.nav.canLocate()}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => props.nav.locateCurrent()}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="5" />
-            <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
-            <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="minimal-nav-btn"
-          data-action="minimal.nav.collapseAll"
-          title="Свернуть всё в дереве"
-          aria-label="Свернуть всё в дереве"
-          disabled={!props.nav.hasExpanded()}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => props.nav.collapseAll()}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M7 5l5 5 5-5" />
-            <path d="M7 19l5-5 5 5" />
-          </svg>
-        </button>
-        <span class="minimal-nav-sep" aria-hidden="true" />
-        <button
-          type="button"
-          class="minimal-nav-btn"
-          data-action="minimal.nav.close"
-          title="Скрыть дерево"
-          aria-label="Скрыть дерево"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => props.onClose()}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function MinimalNavTree(props: {
-  nav: MinimalNavController;
-  open: Accessor<boolean>;
-  overlay: Accessor<boolean>;
-  onClose: () => void;
-  navId: string;
-}) {
-  const nav = props.nav;
-
   onMount(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || !props.open() || !props.overlay()) return;
@@ -215,12 +123,6 @@ export function MinimalNavTree(props: {
     document.addEventListener('keydown', onKeyDown);
     onCleanup(() => document.removeEventListener('keydown', onKeyDown));
   });
-
-  const navigate = (id: string | null, key?: RowKey) => {
-    nav.go(id, key, () => {
-      if (props.overlay()) props.onClose();
-    });
-  };
 
   return (
     <>
@@ -234,30 +136,62 @@ export function MinimalNavTree(props: {
         inert={!props.open()}
         aria-label="Дерево навигации"
       >
-        <Show when={props.overlay()}>
-          <MinimalNavHeader nav={nav} onClose={props.onClose} />
-        </Show>
-        <div ref={(el) => nav.setListEl(el)} class="minimal-nav-list" role="tree" aria-label="Ветки документа">
-          <div
-            role="treeitem"
-            aria-level={1}
-            aria-current={nav.o.zoom() === null ? 'page' : undefined}
-            class="minimal-nav-row minimal-nav-home"
-            classList={{ active: nav.o.zoom() === null }}
-            onClick={() => navigate(null)}
-          >
-            <span class="minimal-nav-home-icon" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
-                <path d="M9 21v-8h6v8" />
-              </svg>
-            </span>
-            <span class="minimal-nav-label">Главная</span>
+        <div ref={listEl} class="minimal-nav-list" role="tree" aria-label="Ветки документа">
+          <div class="minimal-nav-root-bar">
+            <div
+              role="treeitem"
+              aria-level={1}
+              aria-current={o.zoom() === null ? 'page' : undefined}
+              class="minimal-nav-row minimal-nav-home"
+              classList={{ active: o.zoom() === null }}
+              onClick={() => go(null)}
+            >
+              <span class="minimal-nav-home-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" />
+                  <path d="M9 21v-8h6v8" />
+                </svg>
+              </span>
+              <span class="minimal-nav-label">Главная</span>
+            </div>
+            <div class="minimal-nav-actions">
+              <button
+                type="button"
+                class="minimal-nav-btn"
+                data-action="minimal.nav.locate"
+                title="Показать текущую ветку"
+                aria-label="Показать текущую ветку"
+                disabled={!canLocate()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={locateCurrent}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="5" />
+                  <circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none" />
+                  <path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                class="minimal-nav-btn"
+                data-action="minimal.nav.collapseAll"
+                title="Свернуть всё в дереве"
+                aria-label="Свернуть всё в дереве"
+                disabled={!hasExpanded()}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={collapseAll}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M7 5l5 5 5-5" />
+                  <path d="M7 19l5-5 5 5" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <For each={nav.rows()}>
+          <For each={rows()}>
             {(row) => {
-              const isOpen = () => nav.expanded().has(row.key);
-              const isActive = () => nav.selectedKey() === row.key;
+              const isOpen = () => expanded().has(row.key);
+              const isActive = () => selectedKey() === row.key;
               const guides = () => Array.from({ length: row.depth }, (_, i) => i);
               return (
                 <div
@@ -268,9 +202,9 @@ export function MinimalNavTree(props: {
                   data-nav-key={row.key}
                   data-nav-id={row.id}
                   class="minimal-nav-row"
-                  classList={{ active: isActive(), located: nav.locatedKey() === row.key }}
+                  classList={{ active: isActive(), located: locatedKey() === row.key }}
                   style={{ 'padding-left': `${6 + row.depth * 16}px` }}
-                  onClick={() => navigate(row.id, row.key)}
+                  onClick={() => go(row.id, row.key)}
                 >
                   <For each={guides()}>
                     {(g) => (
@@ -291,7 +225,7 @@ export function MinimalNavTree(props: {
                       classList={{ open: isOpen() }}
                       aria-label={isOpen() ? 'Свернуть ветку' : 'Развернуть ветку'}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={(e) => nav.toggleBranch(row.key, e)}
+                      onClick={(e) => toggleBranch(row.key, e)}
                     >
                       <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M4.2 2.5 7.8 6l-3.6 3.5" />
@@ -301,8 +235,8 @@ export function MinimalNavTree(props: {
                   <span class="minimal-nav-dot-slot" aria-hidden="true">
                     <span class="minimal-nav-dot" />
                   </span>
-                  <span class="minimal-nav-label" title={nav.labelOf(row.id)}>{nav.labelOf(row.id)}</span>
-                  <span class="minimal-nav-count" aria-hidden="true">{nav.countOf(row.id)}</span>
+                  <span class="minimal-nav-label" title={labelOf(row.id)}>{labelOf(row.id)}</span>
+                  <span class="minimal-nav-count" aria-hidden="true">{countOf(row.id)}</span>
                 </div>
               );
             }}
